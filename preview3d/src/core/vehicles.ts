@@ -67,6 +67,8 @@ export interface VehicleProfile {
   /** Channels 5 and 6 take their ramp time from channel 4 on the same side. */
   channel4LeadsRamps: boolean;
   orGroups: OrGroup[];
+  /** Travel times that differ from Tesla's per-channel figures: id -> [open s, close s]. */
+  closureSeconds?: Record<string, [number, number]>;
   /** Model years covered, for VIN matching. `to` is open-ended when omitted. */
   years: { from: number; to?: number };
   /** What tells this variant apart from others of the same model year. */
@@ -384,6 +386,8 @@ export const CYBERTRUCK_2024 = profile({
   hint: 'Cybertruck',
   years: { from: 2024 },
   channel4LeadsRamps: false,
+  // The frunk (liftgate channel), timed on the event's truck: 10 s up, 4 s down.
+  closureSeconds: { liftgate: [10, 4] },
   orGroups: [],
   rows: [
     ...sides('OuterMainBeam', 'front'),

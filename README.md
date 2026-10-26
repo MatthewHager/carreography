@@ -151,9 +151,8 @@ The 3D viewer is prebuilt in `preview3d/dist/`. To change it you need Node.js:
 
 ## Things to check
 
-- **Cybertruck frunk timing.** Tesla doesn't publish how long the frunk takes to open; the shows
-  assume 14 s (the Model Y liftgate's time). Time it, and if it differs set
-  `LIFTGATE_OPEN_S["cybertruck"]` in `lightshow/motors.py` and rebuild. Also check each Model Y's
+- **Cybertruck frunk timing.** Tesla doesn't publish it; timed on the truck it opens in about 10 s
+  and closes in 4 s, which the shows use (`LIFTGATE_OPEN_S` in `lightshow/motors.py`). Also check each Model Y's
   liftgate opens fully (owners report part-way opening when its height setting has been lowered).
 - **Windows stay open during the shows** (the music plays through the cabin speakers, so the crowd
   hears it through the windows). They're left fully down at the end - close them afterwards.

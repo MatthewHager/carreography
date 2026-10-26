@@ -131,7 +131,7 @@ give no stopwatch times, and nothing at all for the Cybertruck frunk):
 
 | closure | travel (approx.) | commands per show | notes |
 |---|---|---|---|
-| liftgate (Cybertruck: frunk) | open 14 s, close 4 s | 6 | dances only once fully open |
+| liftgate (Cybertruck: frunk) | open 14 s (frunk 10 s, timed on the truck), close 4 s | 6 | dances only once fully open |
 | each window | 4 s | 6 | can dance from any position |
 | each mirror | 2 s | 20 | no dance |
 | charge port | 2 s | 3 | Dance = rainbow LED; closes itself 2 min after opening |
@@ -143,9 +143,9 @@ validator checks only the file format and the 4-hour maximum - not these limits 
 creators routinely reverse mirrors at 45-90 % of their travel, and Tesla's own 5-car example starts a
 liftgate dancing 12.8 s after Open and uses four charge-port commands; these shows are stricter.
 
-**Time the Cybertruck frunk at the parking-lot test.** The shows assume 14 s. If it differs, set
-`LIFTGATE_OPEN_S["cybertruck"]` in `lightshow/motors.py` (and, for the preview, the liftgate entry
-`closure(6, true, 14, 4)` in `preview3d/src/core/channels.ts`, then rebuild the viewer). Owners
+**The Cybertruck's frunk** isn't in Tesla's documentation; timed on the event's truck it opens in
+about 10 s and closes in 4 s (`LIFTGATE_OPEN_S` in `lightshow/motors.py`, `closureSeconds` on the
+Cybertruck profile in `preview3d/src/core/vehicles.ts`, `TRUCK_FRUNK_OPEN` in `tools/closure_audit.py`). Owners
 report liftgates that open only part way on some older cars until the liftgate's opening height is
 reset to its default; check each Model Y opens fully.
 

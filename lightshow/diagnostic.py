@@ -18,7 +18,7 @@ A voice announces each test, then the cars do it:
   motors        mirrors fold and unfold; the charge port opens and closes; the windows open and
                 dance (they stay down, as for the shows); the liftgates and the Cybertruck's frunk
                 open and close while the voice counts the seconds - time the frunk here
-                (motors.py assumes 14 s to open)
+                (motors.py: Model Y liftgate 14 s, Cybertruck frunk 10 s to open)
 
 The voice comes from macOS's `say`. The audio and its timings are kept in songs/00_diagnostic.wav and
 songs/00_diagnostic.json, so the show rebuilds anywhere; they are only regenerated (macOS) when the
@@ -82,7 +82,7 @@ SCRIPT = [
     ("lids_close", "Closing. Counting the seconds.", 7.0),
     ("done", "Diagnostic complete. If every test looked right, the cars are ready for the show.", 0.0),
 ]
-COUNTS = {"lids_open": int(LIFTGATE_OPEN_S["cybertruck"]) + 2, "lids_close": int(LIFTGATE_CLOSE_S) + 2}
+COUNTS = {"lids_open": int(max(LIFTGATE_OPEN_S.values())) + 2, "lids_close": int(LIFTGATE_CLOSE_S) + 2}
 NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
            "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen"]
 

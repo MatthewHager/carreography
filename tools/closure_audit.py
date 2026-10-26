@@ -9,7 +9,7 @@ From Tesla's light-show README (vendor/light-show/README.md, "Closures channels"
   - except windows, a closure ignores Dance unless it is already fully open
   - dancing more than ~30 s per show risks thermal limits (the closure stops until it cools)
   - the charge port closes itself 2 minutes after opening
-  - approximate travel: liftgate open 14 s / close 4 s, windows 4 s, mirrors 2 s, charge port 2 s
+  - approximate travel: liftgate open 14 s (Cybertruck frunk 10 s) / close 4 s, windows 4 s, mirrors 2 s, charge port 2 s
   - Idle lets an Open or Close in progress finish; Stop halts immediately
 
 Flags printed per closure:
@@ -34,6 +34,7 @@ CLOSURES = {40: "liftgate", 34: "L mirror", 35: "R mirror", 36: "L front window"
 LIMIT = {"liftgate": 6, "charge port": 3}
 TRAVEL_OPEN = {"liftgate": 14.0, "charge port": 2.0}
 TRAVEL_CLOSE = {"liftgate": 4.0, "charge port": 2.0}
+TRUCK_FRUNK_OPEN = 10.0          # the Cybertruck's frunk, timed on the truck
 
 
 def kind(ch):
@@ -45,11 +46,13 @@ def limit(ch):
     return {"mirror": 20, "window": 6}.get(kind(ch), LIMIT.get(kind(ch), 6))
 
 
-def travel(ch, direction):
+def travel(ch, direction, truck=False):
     k = kind(ch)
     base = {"mirror": 2.0, "window": 4.0}.get(k)
     if base:
         return base
+    if truck and k == "liftgate" and direction == "open":
+        return TRUCK_FRUNK_OPEN
     return (TRAVEL_OPEN if direction == "open" else TRAVEL_CLOSE)[k]
 
 
@@ -72,6 +75,7 @@ def commands(col, step):
 def audit(path):
     frames, step_ms = read_fseq(path)
     step = step_ms / 1000
+    truck = "Cybertruck" in str(path)
     report = []
     if frames.shape[1] <= 45:
         return report
@@ -90,12 +94,12 @@ def audit(path):
         reversals = []
         for a, b, c in cmds:
             if c == "dance" and kind(ch) != "window":
-                if last_open is None or a - last_open < travel(ch, "open") - 0.05:
+                if last_open is None or a - last_open < travel(ch, "open", truck) - 0.05:
                     flags.append(f"DANCE NOT OPEN at {a:.1f}s ({(a - last_open) if last_open is not None else 0:.1f}s after Open)")
             if c in ("open", "close") and last_move is not None:
                 prev_c, prev_t = last_move
                 if prev_c != c and prev_c in ("open", "close"):
-                    need = travel(ch, prev_c)
+                    need = travel(ch, prev_c, truck)
                     if a - prev_t < need - 0.05:
                         reversals.append(f"{a:.1f}s {c} {100 * (a - prev_t) / need:.0f}%")
             if c == "open":

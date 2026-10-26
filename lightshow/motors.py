@@ -1,7 +1,7 @@
 """The motor choreographer: closures as their own slow instruments, a side stage to the lights.
 
 Lights flash in 20 ms; the motors move in seconds (mirrors 2 s, windows 4 s, frunk and liftgates
-14 s up / 4 s down, charge port 2 s), and Tesla counts their commands per show *per closure*
+14 s up / 4 s down - the Cybertruck's frunk 10 s up - charge port 2 s), and Tesla counts their commands per show *per closure*
 (liftgate 6, each window 6, each mirror 20, charge port 3). So they get their own choreography,
 planned from the form map and the crescendos rather than from the light cues, with its own moves:
 
@@ -22,7 +22,7 @@ import numpy as np
 
 from . import channels as C
 
-LIFTGATE_OPEN_S = {"modely": 14.0, "cybertruck": 14.0}  # frunk time unpublished; assume the liftgate's
+LIFTGATE_OPEN_S = {"modely": 14.0, "cybertruck": 10.0}  # Cybertruck frunk: timed on the truck, Oct 2026
 LIFTGATE_CLOSE_S = 4.0
 WINDOW_S, PORT_S, MIRROR_S = 4.0, 2.0, 2.0
 

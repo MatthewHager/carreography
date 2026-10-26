@@ -56,7 +56,7 @@ export function simulate(show: FseqFile, vehicle: VehicleProfile): Simulation {
     const def = CHANNELS_BY_ID.get(pc.id)!;
 
     if (pc.kind === 'closure') {
-      closures.set(pc.id, simulateClosure(show, pc.id, byteAt));
+      closures.set(pc.id, simulateClosure(show, pc.id, byteAt, vehicle.closureSeconds?.[pc.id]));
       continue;
     }
 
@@ -113,10 +113,11 @@ function simulateClosure(
   show: FseqFile,
   id: string,
   byteAt: (frame: number, index: number) => number,
+  seconds?: [number, number],
 ): ClosureTrack & { rest: Float32Array } {
   const { frameCount, stepTimeMs } = show;
   const def = channel(id);
-  const info = def.closure!;
+  const info = seconds ? { ...def.closure!, openSeconds: seconds[0], closeSeconds: seconds[1] } : def.closure!;
   const position = new Float32Array(frameCount);
   const rest = new Float32Array(frameCount);
   const dancing = new Uint8Array(frameCount);
