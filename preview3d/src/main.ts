@@ -22,8 +22,11 @@ interface ShowEntry {
 type ShowList = Record<string, ShowEntry>;
 
 const params = new URLSearchParams(location.search);
-/** The project root, relative to this page (dist/index.html -> ../../). */
-const ROOT = (params.get('root') ?? '../../').replace(/\/?$/, '/');
+/** The project root, relative to this page (dist/index.html -> ../../); a published copy that keeps
+ *  everything beside the page says so with <meta name="show-root" content="./">. */
+const ROOT = (
+  params.get('root') ?? document.querySelector('meta[name="show-root"]')?.getAttribute('content') ?? '../../'
+).replace(/\/?$/, '/');
 const PAINT: Record<CarKind, string> = { modely: '#e9eaec', cybertruck: '#b9bcc0' };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -232,6 +235,17 @@ yBodySelect.addEventListener('change', async () => {
   void reSimulate();
 });
 
+/** A show file's bytes. A published copy (claude.ai pages serve no binary types) keeps each one
+ *  gzipped and base64-encoded as `<name>.fseq.gz.b64.txt`. */
+async function fetchShowFile(path: string): Promise<Uint8Array> {
+  const res = await fetch(ROOT + path, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  if (!path.endsWith('.gz.b64.txt')) return new Uint8Array(await res.arrayBuffer());
+  const packed = Uint8Array.from(atob((await res.text()).trim()), (ch) => ch.charCodeAt(0));
+  const stream = new Blob([packed]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
 // --- cars ---------------------------------------------------------------------------
 
 let assets: { modelS?: TeslaAsset; cybertruck?: TeslaAsset } = {};
@@ -306,9 +320,7 @@ async function loadShow(name: string): Promise<void> {
   fseqCache = new Map();
   const files = await Promise.all(
     show.cars.map(async (c) => {
-      const res = await fetch(ROOT + c.fseq, { cache: 'no-cache' });
-      if (!res.ok) throw new Error(`${c.fseq}: HTTP ${res.status}`);
-      const f = readFseq(new Uint8Array(await res.arrayBuffer()));
+      const f = readFseq(await fetchShowFile(c.fseq));
       fseqCache.set(c.fseq, f);
       return f;
     }),
