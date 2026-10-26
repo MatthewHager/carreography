@@ -17,7 +17,7 @@ A voice announces each test, then the cars do it:
   interior      red, green, blue
   motors        mirrors fold and unfold; the charge port opens and closes; the windows open and
                 dance (they stay down, as for the shows); the liftgates and the Cybertruck's frunk
-                open and close while the voice counts the seconds - time the frunk here
+                open, dance for 5 s and close while the voice counts the seconds - time the frunk here
                 (motors.py: Model Y liftgate 14 s, Cybertruck frunk 10 s to open)
 
 The voice comes from macOS's `say`. The audio and its timings are kept in songs/00_diagnostic.wav and
@@ -79,6 +79,7 @@ SCRIPT = [
     ("windows", "Windows open, then dance. They stay open for the shows.", 10.0),
     ("lids_open", "The liftgates and the Cybertruck's frunk open now. Counting the seconds. "
                   "Note when each one stops.", 17.0),
+    ("lids_dance", "Now the liftgates and the frunk dance for five seconds.", 6.0),
     ("lids_close", "Closing. Counting the seconds.", 7.0),
     ("done", "Diagnostic complete. If every test looked right, the cars are ready for the show.", 0.0),
 ]
@@ -249,6 +250,9 @@ def _actions(cars, step):
     elif key == "lids_open":
         for c in cars:
             c.closure(C.LIFTGATE, t, t + HOLD, C.CLOSURE_OPEN)
+    elif key == "lids_dance":
+        for c in cars:
+            c.closure(C.LIFTGATE, t, t + 5.0, C.CLOSURE_DANCE)
     elif key == "lids_close":
         for c in cars:
             c.closure(C.LIFTGATE, t, t + HOLD, C.CLOSURE_CLOSE)
