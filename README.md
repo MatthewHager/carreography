@@ -47,15 +47,31 @@ After `python3 build.py --assemble`, there's one folder per car:
 | `usb/Car2_Cybertruck_Center/LightShow` | the **Cybertruck** in the middle |
 | `usb/Car3_ModelY_Right/LightShow` | the Model Y on the crowd's **right** |
 
-1. Format a USB drive per car as **exFAT** (or FAT32) and copy that car's `LightShow` folder to the
-   root of the drive (the folder itself, not its contents).
-2. Plug it into one of the car's USB data ports.
-3. In each car: **Toybox → Light Show**, pick the same show, and **Schedule** the same start time on all
-   three cars so they play in sync. (Each car plays its own part of the show.)
-4. Keep people clear of the liftgates, frunk, mirrors and windows - they move during the shows.
+**Make the drives (Mac):** plug in a USB drive (1 GB or bigger) and run
 
-Before the event: do a parking-lot run of at least one song, check the left/right Model Ys are in
-the right places, and time the Cybertruck's frunk (see *Things to check* below).
+```
+python3 make_usb.py
+```
+
+It asks which car, erases the drive (exFAT), names it after the car (`CAR1 LEFT Y`, `CAR2 TRUCK`,
+`CAR3 RIGHT Y`), copies that car's folder, checks every file and ejects it. Label each drive - the
+two Model Y drives are different. `python3 make_usb.py 2` goes straight to the Cybertruck's;
+`--list` shows which drives it sees. Without a Mac: format the drive exFAT and copy the car's
+`LightShow` folder (the folder itself) to the top level of the drive.
+
+Then, in the cars:
+
+1. Plug each drive into its car's front USB port.
+2. **Toybox → Light Show**, pick the same show, and **Schedule** the same start time on all three cars
+   so they play in sync. (Each car plays its own part of the show.)
+3. Keep people clear of the liftgates, frunk, mirrors and windows - they move during the shows.
+
+**Run `00_diagnostic` first** (it's first in the list). A voice announces each test and the cars do
+it: each car flashes alone (is every drive in the right car?), a left-to-right sweep, beeps and tones
+the lights must match (are the cars in sync?), every lamp channel by name, the two light-bar tests
+(which tells you how your Model Ys' bars are driven - see *Things to check*), a fade, the interiors,
+then the mirrors, charge port, windows and the liftgates and frunk while the voice counts the
+seconds (time the frunk). It lasts 4 minutes; the windows stay down afterwards, like the shows.
 
 ## Change a show and rebuild
 
@@ -117,7 +133,8 @@ performer, and the motor choreography. Sources and credits are in [docs/SOURCES.
 
 ```
 build.py            the one command: build / assemble / try a song
-setlist.json        the 12 songs: recording, trim, options
+make_usb.py         makes a car's USB drive (macOS)
+setlist.json        the diagnostic + 12 songs: recording, trim, options
 songs/              the recordings
 lightshow/          the generator (analysis, choreographer, moves, beat layer, motors, FSEQ writer)
 output/<song>/      generated shows: <car>/LightShow/<song>.fseq per car, moves.txt, pulse.txt
@@ -144,8 +161,8 @@ The 3D viewer is prebuilt in `preview3d/dist/`. To change it you need Node.js:
   Model Y's bar, and owners report two different ways: as 60 separate LEDs on the Cybertruck's bar
   channels, or as one lamp on channel 6 (an on-car test in Tesla's light-show issue #183 found the
   60 LED channels did nothing on its car). The shows send both, carrying the same picture, so the bar
-  lights either way - as left/right halves (what the preview shows) or all at once. Check it at the
-  parking-lot run. If you need the older Model Y's lights instead, change `layout="YCY"` to `"yCy"`
+  lights either way - as left/right halves (what the preview shows) or all at once. The diagnostic's
+  light-bar tests A and B show which way your cars read it. If you need the older Model Y's lights instead, change `layout="YCY"` to `"yCy"`
   in `build.py` (lower-case `y` = 2020-24 Model Y) and rebuild.
 - **Headlight ramps.** Some lamps fade instead of switching (Tesla's 0.5/1/2 s ramps). Newer Model Y
   projector headlights may switch instantly instead; the shows still work either way.

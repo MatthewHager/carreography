@@ -115,6 +115,8 @@ def build_one(song, use_liftgate=True, layout="YCY"):
 
     name = song["name"]
     out_dir = OUTPUT / name
+    if song.get("style") == "diagnostic":
+        return build_diagnostic(song, layout)
     wav = prepare_audio(song)
 
     stems = None
@@ -160,6 +162,24 @@ def build_one(song, use_liftgate=True, layout="YCY"):
         write_fseq(show_dir / f"{name}.fseq", car.frames, C.STEP_MS, media_filename=f"{name}.wav")
         counts = {k: v for k, v in sorted(car.closure_counts.items())}
         print(f"  {car.name}: closure commands {counts}")
+
+
+def build_diagnostic(song, layout="YCY"):
+    """The voiced test show (lightshow/diagnostic.py): no analysis, the voice track is the clock."""
+    from lightshow import channels as C
+    from lightshow import diagnostic
+    from lightshow.fseq import write_fseq
+
+    name = song["name"]
+    src = SONGS / song["file"]
+    timing = diagnostic.ensure_audio(src, src.with_suffix(".json"))
+    prepare_audio(song)
+    for car in diagnostic.choreograph(timing, layout):
+        show_dir = OUTPUT / name / car.name / "LightShow"
+        show_dir.mkdir(parents=True, exist_ok=True)
+        write_fseq(show_dir / f"{name}.fseq", car.frames, C.STEP_MS, media_filename=f"{name}.wav")
+        print(f"  {car.name}: closure commands {dict(sorted(car.closure_counts.items()))}")
+    print(f"{name}: {timing['duration']:.0f} s, {len(timing['steps'])} tests")
 
 
 # --- the set list ------------------------------------------------------------------------------
