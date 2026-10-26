@@ -358,9 +358,10 @@ export const MODEL_Y_2025 = profile({
   orGroups: juniperOrGroups(),
   rows: [
     ...y2025Front(true),
-    ...commonRear(NON_NA).map(([id, group, extra]): Row =>
-      /Tail$/.test(id) ? [id, group, { ...extra, maybe: 'Assumed to drive the rear light bar (unverified)' }] : [id, group, extra],
-    ),
+    // Tested on the car: no rear fog on North American cars; "Brake" is the rear bar.
+    ...commonRear(NON_NA)
+      .filter(([id]) => id !== 'rearFog')
+      .map(([id, group, extra]): Row => (id === 'brakeLights' ? [id, group, { ...extra, label: 'Rear light bar (Brake)' }] : [id, group, extra])),
     ...commonClosures('Only with a power liftgate'),
     ...centerDisplay(),
     ...accentLights,

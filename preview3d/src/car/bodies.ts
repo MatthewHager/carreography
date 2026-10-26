@@ -193,13 +193,14 @@ function buildFamily(b: Builder, style: BodyStyle, spec: FamilySpec): BuiltBody 
   tailLights(b, b.car, { ...spec.tail, x: spec.tail.x - GROWTH - 0.012 });
   rearLowLights(b, { ...spec.rearLow, x: spec.rearLow.x - GROWTH });
   if (style.rearLightBar && spec.rearBar) {
-    // Assumed to follow the tail lights (undocumented).
+    // On-car tests (Nghtmare7509/tesla-lightshow-juniper): the "Brake" channel lights the
+    // whole rear bar, on/off; the "Tail" channels light the brake lamps.
     lightBar(b, {
       x: spec.tail.x - GROWTH - 0.014,
       y: spec.rearBar.y,
       halfLength: spec.rearBar.halfLength,
-      leftIds: ['leftTail'],
-      rightIds: ['rightTail'],
+      leftIds: ['brakeLights'],
+      rightIds: ['brakeLights'],
       color: COLORS.red,
       lens: COLORS.lensRear,
     });

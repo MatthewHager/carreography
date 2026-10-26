@@ -9,7 +9,8 @@ A voice announces each test, then the cars do it:
                 announcement also opens with a short tone that all three cars flash with, so sync is
                 checked all the way through
   tones         the lights stay on exactly as long as each of three tones (start and end both line up)
-  lamp check    every front lamp channel alone, on all three cars, named as Tesla documents it -
+  lamp check    every front lamp channel alone, on all three cars, named as Tesla documents it (the
+                voice says which ones a Cybertruck doesn't have, so its dark moments aren't a fault) -
                 this also shows what each channel does on a 2025+ Model Y, which Tesla never documented
   light bar     test A lights the bar through its 60 LED channels only (a sweep), test B through
                 channel 6 only (the whole bar): whichever lights a Model Y's bar is the one it reads
@@ -60,17 +61,17 @@ SCRIPT = [
     ("lamps", "Lamp check. Each lamp channel lights for two seconds on all three cars. Note what lights up.", 0.0),
     ("ch_outer", "Outer main beams.", 2.0),
     ("ch_inner", "Inner main beams.", 2.0),
-    ("ch_sig", "Signature lights.", 2.0),
-    ("ch_4", "Channel four.", 2.0),
-    ("ch_5", "Channel five.", 2.0),
-    ("ch_6", "Channel six.", 2.0),
+    ("ch_sig", "Signature lights. Not on the Cybertruck.", 2.0),
+    ("ch_4", "Channel four. Not on the Cybertruck.", 2.0),
+    ("ch_5", "Channel five. Not on the Cybertruck.", 2.0),
+    ("ch_6", "Channel six. Not on the Cybertruck.", 2.0),
     ("ch_turn", "Front turn signals.", 2.0),
-    ("ch_fog", "Fog lights.", 2.0),
-    ("ch_park", "Aux park lights.", 2.0),
+    ("ch_fog", "Fog lights. Not on the Cybertruck.", 2.0),
+    ("ch_park", "Aux park lights. On the Cybertruck, the light inside the frunk.", 2.0),
     ("ch_marker", "Side markers.", 2.0),
     ("bar_a", "Light bar test A. The front light bars sweep left to right, using their sixty LED channels. "
               "If a Model Y's bar sweeps now, it reads the LED channels.", 6.0),
-    ("bar_b", "Light bar test B. Channel six only. If a Model Y's whole bar lights now, it reads channel six.", 3.0),
+    ("bar_b", "Light bar test B. Channel six only. If a Model Y's whole bar lights now, it reads channel six. The Cybertruck stays dark.", 3.0),
     ("fade", "Fade test. The headlights fade up over two seconds, then fade out.", 5.0),
     ("interior", "Interior lights. Red, green, then blue.", 4.5),
     ("clear", "Motor tests next. Please stand clear of the mirrors, windows, liftgates and frunk.", 0.0),
