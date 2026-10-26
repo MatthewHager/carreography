@@ -5,17 +5,19 @@ Lights flash in 20 ms; the motors move in seconds (mirrors 2 s, windows 4 s, fru
 (liftgate 6, each window 6, each mirror 20, charge port 3). So they get their own choreography,
 planned from the form map and the crescendos rather than from the light cues, with its own moves:
 
-  Lids (frunk + liftgates), one gesture per crescendo, spent on the three biggest:
-    outside-in   the Ys lift first, the truck's frunk lands exactly on the peak
-    wave         left to right a second apart, closing in the same order
-    staircase    the truck starts first and goes highest, the Ys later and lower
-    (a Stop on the peak freezes a lid part-way, so short builds still land on the beat)
+  Lids (frunk + liftgates), one gesture per crescendo, biggest first:
+    dance        the biggest builds: every lid opens fully, lands on the peak a beat after its
+                 neighbour, dances through the loud stretch and closes (Open + Dance + Close)
+    relay / alternate / wave   part-way lifts (a Stop on the peak) for the rest (Open + Close)
   Windows (6 commands per window; all down at the start, left down at the end):
-    travelling dance   fronts or rears dance for 6 s, car after car, direction alternating
-    ripple glide       in a calm section the windows glide up car by car and back down
+    travelling dance   fronts then rears dance ~4.5 s, car after car, direction alternating
+    peak dance         every window dances 10 s on the biggest peak (about 24 s per window in all)
   Mirrors (20 commands per mirror, six mirrors across the lineup), on their own musical timing:
-    wave left-right, wave right-left, outside-in, inside-out, alternate, wink, together
-  Charge port (3 commands): opens ahead of its rainbow dance through the loud half, closes near the end.
+    a tempo pulse in the steadiest section; figures on the biggest landings (wave left-right, wave
+    right-left, outside-in, inside-out, alternate, Ys-vs-truck, together); and wherever nothing
+    has moved for 12 s of lively music (30 s of calm), another figure on the next downbeat.
+  Charge port (3 commands): its Dance is a rainbow light, so it opens for the most exciting ~2
+    minutes of the song and flashes throughout, closing before the door's own 2-minute auto-close.
 """
 
 import numpy as np
@@ -25,6 +27,12 @@ from . import channels as C
 LIFTGATE_OPEN_S = {"modely": 14.0, "cybertruck": 10.0}  # Cybertruck frunk: timed on the truck, Oct 2026
 LIFTGATE_CLOSE_S = 4.0
 WINDOW_S, PORT_S, MIRROR_S = 4.0, 2.0, 2.0
+WINDOW_BURST_S, WINDOW_PEAK_DANCE_S = 4.5, 10.0   # window dances: ~3 x 4.5 + 10 = 24 s, under Tesla's ~30 s
+LID_DANCE_MIN_S, LID_DANCE_MAX_S, LID_DANCE_BUDGET_S = 4.0, 9.0, 20.0   # a lid's dance on a peak
+LID_OPEN_MARGIN_S = 0.8          # a lid only dances once fully open: land a little early
+PORT_DANCE_MAX_S = 112.0         # the port's rainbow, closed before its own 2-minute auto-close
+STILL_LIVELY_S, STILL_CALM_S = 12.0, 30.0   # longest stretch with no motor moving (stretched to the mirrors' budget)
+MIRROR_PULSE_CYCLES = 4          # the steady mirror pulse, leaving commands for the rest of the song
 
 
 def _tier_at(an, t):
@@ -134,14 +142,8 @@ def _on_beat(an, t, reach=0.35):
     return float(b[i]) if abs(b[i] - t) <= reach else t
 
 
-def _loud_stretches(an, tier=3):
-    return sorted([(a * an.step, b * an.step) for a, b in _runs(an.tier >= tier)], key=lambda s: s[0] - s[1])
-
-
 def choreograph(cars, an, use_liftgate):
     end = an.duration
-    loud = _loud_stretches(an, 3) or _loud_stretches(an, 2)
-    climax = loud[0] if loud else None
 
     for c in cars:
         # Windows: 6 commands *per window*, and they never close during the show - Tesla's README
@@ -160,7 +162,7 @@ def choreograph(cars, an, use_liftgate):
         peaks = sorted(_crescendos(an, LIFTGATE_OPEN_S[c.kind]), key=lambda p: -p[3])
         bar = 4 * 60.0 / max(an.tempo, 40)
         beat = bar / 4
-        burst = beat * max(2, round(2.5 / beat))                 # ~2.5 s, a whole number of beats
+        burst = beat * max(2, round(WINDOW_BURST_S / beat))      # ~4.5 s, a whole number of beats
         half = beat * max(1, round(burst / beat) // 2)
         peak_t = _on_beat(an, peaks[0][0]) if peaks else None
         # wave moments: starts of lively sections, spread over the piece, clear of the peak dance
@@ -186,7 +188,7 @@ def choreograph(cars, an, use_liftgate):
             for w in rears:
                 c.closure(w, t0 + half, t0 + half + burst, C.CLOSURE_DANCE)
         if peak_t is not None:
-            span = 8.0
+            span = WINDOW_PEAK_DANCE_S
             t0 = peak_t + idx * beat
             if t0 + span > end - 6:
                 t0 = max(1.0, end - 6 - span)
@@ -198,15 +200,16 @@ def choreograph(cars, an, use_liftgate):
             for w in C.WINDOWS:                                         # back fully down
                 c.closure(w, min(end - 2.0, last_dance + 1.0), min(end - 1.5, last_dance + 1.5), C.CLOSURE_OPEN)
 
-    if climax:
-        a, b = climax
+    port = _port_window(an)
+    if port is not None:
+        dance_from, dance_end = port
         for c in cars:
-            # Charge port: open ahead so the rainbow starts on the climax; dance for at most 30 s
-            # (Tesla's recommendation for any closure), well inside the 2-minute auto-close.
-            open_at = max(0.8, _on_beat(an, a) - PORT_S - 0.5)      # the rainbow starts on a beat
-            dance_end = min(max(b, open_at + PORT_S + 8.0), open_at + PORT_S + 0.5 + 29.5, end - 6)
+            # Charge port: its Dance is the rainbow light, so it joins the colours for the most
+            # exciting stretch of the song - Open, Dance, Close (its 3 commands), closed again before
+            # the door's own 2-minute auto-close.
+            open_at = dance_from - PORT_S - 0.5
             c.closure(C.CHARGE_PORT, open_at, open_at + 0.5, C.CLOSURE_OPEN)
-            c.closure(C.CHARGE_PORT, open_at + PORT_S + 0.5, dance_end, C.CLOSURE_DANCE)
+            c.closure(C.CHARGE_PORT, dance_from, dance_end, C.CLOSURE_DANCE)
             c.closure(C.CHARGE_PORT, dance_end + 0.3, dance_end + 0.8, C.CLOSURE_CLOSE)
     # Liftgate / frunk: the opening *is* the crescendo. For each of the biggest builds, start
     # opening `build length` before the peak so it is still rising all the way up, Stop on the
@@ -216,7 +219,8 @@ def choreograph(cars, an, use_liftgate):
         order = sorted(cars, key=lambda q: q.x)
         n = len(order)
         ct_idx = next((i for i, q in enumerate(order) if q.is_ct), n // 2)
-        budget = C.CLOSURE_LIMITS[C.LIFTGATE] // 2                # open + close per crescendo
+        cmds_left = C.CLOSURE_LIMITS[C.LIFTGATE]                 # Open + Dance + Close / Open + Close
+        danced = 0.0
         lead = max(LIFTGATE_OPEN_S[c.kind] for c in cars)
         accepted = []                                            # shared: the cars move as one lineup
         busy = {id(c): [] for c in cars}
@@ -261,28 +265,50 @@ def choreograph(cars, an, use_liftgate):
                 plan[id(c)] = (open_at, stop_at, close_at)
             return plan
 
+        def dance_plan(k, peak, hold_until):
+            """Per-car (open_at, None, close_at, (dance_from, dance_to)): every lid opens fully and
+            lands on the peak one beat after its neighbour (left to right, then right to left the
+            next time), dances through the loud stretch, then closes in the same order."""
+            beat = 60.0 / max(an.tempo, 40)
+            dance_len = float(np.clip(hold_until - peak, LID_DANCE_MIN_S, LID_DANCE_MAX_S))
+            plan = {}
+            for idx, c in enumerate(order):
+                lag = beat * ((n - 1 - idx) if k % 2 else idx)
+                land = _on_beat(an, peak + lag)
+                open_at = land - LIFTGATE_OPEN_S[c.kind] - LID_OPEN_MARGIN_S
+                plan[id(c)] = (open_at, None, land + dance_len + 0.3, (land, land + dance_len))
+            return plan
+
         for peak, build_len, hold_until, _score, forced in _crescendos(an, lead):
             peak = _on_beat(an, peak)
-            if len(accepted) >= budget:
+            if cmds_left < 2:
                 break
             k = len(accepted)
-            plan = lid_plan(k % 3, k, peak, build_len, hold_until)
+            dancing = (cmds_left >= 3 and hold_until - peak >= LID_DANCE_MIN_S
+                       and danced + LID_DANCE_MAX_S <= LID_DANCE_BUDGET_S)
+            plan = dance_plan(k, peak, hold_until) if dancing else lid_plan(k % 3, k, peak, build_len, hold_until)
             ok = True
             for c in cars:
-                open_at, stop_at, close_at = plan[id(c)]
+                open_at, stop_at, close_at = plan[id(c)][:3]
                 win = (open_at - 1.0, close_at + LIFTGATE_CLOSE_S + 1.0)
                 if open_at < 0.8 or close_at <= open_at + 2.0 or any(not (win[1] < a or win[0] > b) for a, b in busy[id(c)]):
                     ok = False
             if not ok:
                 continue
             accepted.append(peak)
+            cmds_left -= 3 if dancing else 2
             for c in cars:
-                open_at, stop_at, close_at = plan[id(c)]
+                open_at, stop_at, close_at = plan[id(c)][:3]
                 busy[id(c)].append((open_at - 1.0, close_at + LIFTGATE_CLOSE_S + 1.0))
                 c.closure(C.LIFTGATE, open_at, open_at + 0.5, C.CLOSURE_OPEN)
                 if stop_at is not None:
                     c.set(C.LIFTGATE, stop_at, stop_at + 0.3, C.CLOSURE_STOP)
+                if dancing:
+                    d0, d1 = plan[id(c)][3]
+                    c.closure(C.LIFTGATE, d0, d1, C.CLOSURE_DANCE)
                 c.closure(C.LIFTGATE, close_at, close_at + 0.5, C.CLOSURE_CLOSE)
+            if dancing:
+                danced += max(d1 - d0 for _, _, _, (d0, d1) in plan.values())
         for c in cars:
             lead = LIFTGATE_OPEN_S[c.kind]
             idx = order.index(c)
@@ -346,7 +372,7 @@ def choreograph(cars, an, use_liftgate):
         t_prev = -9
         cycles = 0
         for d in grid:
-            if d - t_prev < cycle - 0.1 or cycles >= 12:
+            if d - t_prev < cycle - 0.1 or cycles >= MIRROR_PULSE_CYCLES:
                 continue
             parity = cycles % 2
             mode = (cycles // 4) % 3        # four cycles each: Ys vs truck, left half vs right half, ripple
@@ -388,29 +414,135 @@ def choreograph(cars, an, use_liftgate):
             picks.append(t)
     picks.sort()
     patterns = ["wave_lr", "car_alternate", "outside_in", "alternate", "wave_rl", "inside_out", "together"]
-    beat = bar / 4
+    for k, t in enumerate(picks):
+        _mirror_gesture(an, line, spent, _on_beat(an, t), patterns[k % len(patterns)])
+    _fill_still(cars, an, line, spent)
+
+
+def _mirror_gesture(an, line, spent, t, pat, free_only=False):
+    """One fold-and-unfold figure across the six mirrors, starting at `t`:
+      wave_lr / wave_rl     an eighth note apart, crowd-left to right / right to left
+      outside_in / inside_out  a beat apart, from the ends to the middle / the middle outward
+      alternate             every other mirror, then the rest as they unfold
+      car_alternate         the Ys fold, the truck folds as they unfold
+      together              all six at once
+    With free_only, a mirror that is already moving nearby sits this one out."""
+    n = len(line)
+    beat = 60.0 / max(an.tempo, 40)
     step = max(0.2, beat / 2)                               # an eighth note between neighbours
     hold = beat * int(np.ceil((MIRROR_S + 0.5) / beat))     # fold to unfold: whole beats, >= the 2 s fold
-    for k, t in enumerate(picks):
-        t = _on_beat(an, t)
-        pat = patterns[k % len(patterns)]
-        for j, (c, m) in enumerate(line):
-            if pat == "wave_lr":
-                lag = j * step
-            elif pat == "wave_rl":
-                lag = (n - 1 - j) * step
-            elif pat == "outside_in":
-                lag = min(j, n - 1 - j) * beat
-            elif pat == "inside_out":
-                lag = (n // 2 - 1 - min(j, n - 1 - j)) * beat
-            elif pat == "alternate":                        # every other mirror, then the rest as they unfold
-                lag = (j % 2) * hold
-            elif pat == "car_alternate":                    # the Ys fold, the truck folds as they unfold
-                lag = hold if c.is_ct else 0.0
-            else:
-                lag = 0.0
-            if spent[(id(c), m)] + 2 > C.CLOSURE_LIMITS[m]:
+    placed = 0
+    for j, (c, m) in enumerate(line):
+        if pat == "wave_lr":
+            lag = j * step
+        elif pat == "wave_rl":
+            lag = (n - 1 - j) * step
+        elif pat == "outside_in":
+            lag = min(j, n - 1 - j) * beat
+        elif pat == "inside_out":
+            lag = (n // 2 - 1 - min(j, n - 1 - j)) * beat
+        elif pat == "alternate":
+            lag = (j % 2) * hold
+        elif pat == "car_alternate":
+            lag = hold if c.is_ct else 0.0
+        else:
+            lag = 0.0
+        if spent[(id(c), m)] + 2 > C.CLOSURE_LIMITS[m]:
+            continue
+        a, b = t + lag, t + lag + hold
+        if a + 0.5 > an.duration - 3 - hold:
+            continue
+        if free_only and c.frames[c.fr(a - MIRROR_S - 0.5): c.fr(b + MIRROR_S + 0.5), m].any():
+            continue
+        c.closure(m, a, a + 0.4, C.CLOSURE_CLOSE)
+        c.closure(m, b, b + 0.4, C.CLOSURE_OPEN)
+        spent[(id(c), m)] += 2
+        placed += 1
+    return placed, hold + (n - 1) * max(step, beat) + MIRROR_S
+
+
+def _motion(cars, an):
+    """Per frame: is any motor on any car visibly moving (travelling or dancing)? The charge
+    port's dance is a light, not movement, so it doesn't count."""
+    mask = np.zeros(an.n_frames, bool)
+    spans = {C.LIFTGATE: None, C.L_MIRROR: MIRROR_S, C.R_MIRROR: MIRROR_S}
+    spans.update({w: WINDOW_S for w in C.WINDOWS})
+    for c in cars:
+        for ch, travel in spans.items():
+            col = c.frames[:, ch]
+            idx = np.flatnonzero(col)
+            if not len(idx):
                 continue
-            c.closure(m, t + lag, t + lag + 0.4, C.CLOSURE_CLOSE)
-            c.closure(m, t + lag + hold, t + lag + hold + 0.4, C.CLOSURE_OPEN)
-            spent[(id(c), m)] += 2
+            starts = idx[np.r_[True, (np.diff(idx) > 1) | (np.diff(col[idx].astype(int)) != 0)]]
+            for k, f0 in enumerate(starts):
+                v = int(col[f0])
+                f1 = f0
+                while f1 < len(col) and col[f1] == v:
+                    f1 += 1
+                if 96 <= v < 160:                              # dance: for as long as it is held
+                    mask[f0:f1] = True
+                elif v < 224:                                  # open / close: the travel time
+                    t = travel or (LIFTGATE_OPEN_S[c.kind] if v < 96 else LIFTGATE_CLOSE_S)
+                    nxt = starts[k + 1] if k + 1 < len(starts) else len(col)
+                    mask[f0: min(nxt, f0 + int(t / an.step))] = True
+    return mask
+
+
+def _fill_still(cars, an, line, spent):
+    """No long stretch without something moving. The mirrors' commands are limited (20 each), so
+    they go where they help most: again and again, the longest still stretch - measured against
+    STILL_LIVELY_S in lively music, STILL_CALM_S in calm music - gets a mirror figure in its middle,
+    on a downbeat, until no stretch is too long or the commands run out."""
+    step = an.step
+    mask = _motion(cars, an)
+    downbeats = np.asarray(getattr(an, "downbeats", None) if getattr(an, "downbeats", None) is not None else [], float)
+    if not len(downbeats):
+        downbeats = np.asarray(an.beats, float)
+    patterns = ["wave_lr", "together", "wave_rl", "outside_in", "car_alternate", "inside_out", "alternate"]
+    lo, hi = int(4.0 / step), int((an.duration - 10) / step)
+    blocked = set()
+    for k in range(40):
+        best = None
+        for a, b in _runs(~mask[lo:hi]):
+            a, b = a + lo, b + lo
+            if (a, b) in blocked:
+                continue
+            lively = float(np.mean(an.tier[a:b] >= 2)) >= 0.5
+            need = (b - a) * step / (STILL_LIVELY_S if lively else STILL_CALM_S)
+            if need > 1 and (best is None or need > best[0]):
+                best = (need, a, b)
+        if best is None:
+            return
+        _, a, b = best
+        mid = (a + b) / 2 * step
+        near = downbeats[np.abs(downbeats - mid) < 3.0] if len(downbeats) else []
+        at = float(near[np.argmin(np.abs(near - mid))]) if len(near) else mid
+        placed, span = _mirror_gesture(an, line, spent, at, patterns[k % len(patterns)], free_only=True)
+        if not placed:
+            if all(spent[key] + 2 > C.CLOSURE_LIMITS[key[1]] for key in spent):
+                return                                  # every mirror's commands are spent
+            blocked.add((a, b))
+            continue
+        mask[int(at / step): int((at + span) / step)] = True
+
+
+def _port_window(an):
+    """(dance_from, dance_to) for the charge port's rainbow: the most exciting stretch of up to
+    PORT_DANCE_MAX_S (loud sections count double), starting on a beat; None for a song that never
+    gets lively (Ave Maria)."""
+    exc = (an.tier >= 2).astype(float) + (an.tier >= 3)
+    if exc.sum() == 0:
+        return None
+    step, end = an.step, an.duration
+    w = int(PORT_DANCE_MAX_S / step)
+    first = PORT_S + 1.5                                 # room to open before it dances
+    lo, hi = int(first / step), max(int(first / step) + 1, int((end - 6 - PORT_DANCE_MAX_S) / step))
+    csum = np.r_[0, np.cumsum(exc)]
+    starts = np.arange(lo, min(hi, len(exc)) + 1)
+    score = csum[np.minimum(starts + w, len(exc))] - csum[starts]
+    f0 = int(starts[int(np.argmax(score))])
+    live = np.flatnonzero(exc[f0: f0 + w] > 0)
+    a = _on_beat(an, (f0 + live[0]) * step)
+    a = max(a, first)
+    b = min((f0 + live[-1]) * step + 2.0, a + PORT_DANCE_MAX_S, end - 6)
+    return (a, b) if b - a >= 6 else None

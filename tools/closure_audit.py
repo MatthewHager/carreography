@@ -88,8 +88,10 @@ def audit(path):
         if len(counted) > limit(ch):
             flags.append(f"OVER LIMIT {len(counted)}>{limit(ch)}")
         dance_total = sum(b - a for a, b, c in cmds if c == "dance")
-        if dance_total > 30:
-            flags.append(f"DANCE > 30 s ({dance_total:.0f} s)")
+        # Tesla's ~30 s dance advice is about motors overheating; the charge port's Dance is its
+        # rainbow light, so it may flash for as long as the door stays open (it auto-closes at 2 min).
+        if dance_total > (115 if kind(ch) == "charge port" else 30):
+            flags.append(f"DANCE > {'115' if kind(ch) == 'charge port' else '30'} s ({dance_total:.0f} s)")
         last_open, last_move = None, None
         reversals = []
         for a, b, c in cmds:

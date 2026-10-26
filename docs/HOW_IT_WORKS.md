@@ -95,23 +95,29 @@ For running the project, see the [README](../README.md).
    rather than three cars blinking.
 
    Closures (`motors.py`) are their own side stage, every figure crossing the cars:
-   - **Lids** (frunk / liftgates): the opening *is* the crescendo. The three biggest builds each get a
-     different figure — *relay* (one lid lifts part way and Stops; as it drops the next lifts; the last
-     rises all the way onto the peak — left→right, then right→left next time), *alternate* (the Ys
-     lift together and the truck's frunk rises onto the peak as they drop) and *wave* (2 s apart).
+   - **Lids** (frunk / liftgates): the opening *is* the crescendo. The biggest builds (two per song,
+     when the music stays loud long enough) get the full figure: every lid opens fully, lands on the
+     peak a beat after its neighbour, **dances** (bobs up and down) through the loud stretch for up to
+     9 s, and closes in the same order - Open + Dance + Close. Other builds get part-way figures —
+     *relay* (one lid lifts part way and Stops; as it drops the next lifts; the last rises onto the
+     peak), *alternate* (the Ys lift together and the truck's frunk rises as they drop) and *wave*.
      Leftover pairs become slow half-open breaths rolling across the lineup on long calm phrases.
    - **Windows** never close during a show: Tesla's README points out that the music only plays from
      the cabin speakers, so the crowd hears it through the open windows. All four go down at the
-     start; the waves are short Dance bursts (a lowered window dancing bobs up a little), fronts
+     start; the waves are ~4.5 s Dance bursts (a lowered window dancing bobs up a little), fronts
      first and rears half a burst later, rolling across the cars (left to right, right to left, Ys
-     then truck); the biggest peak gets an 8 s dance; a final Open leaves every window fully down.
-     About 12 s of dancing per window per show, under Tesla's ~30 s thermal recommendation.
-   - **Mirrors**: a tempo pulse in the steadiest loud section cycling through Ys-vs-truck, left-half-
-     vs-right-half and a ripple, on a cycle long enough (one, two or three bars) that every 2 s fold
-     completes before the unfold; plus fold-and-unfold gestures on the biggest landings (wave, car
-     alternate, outside-in, every-other, inside-out, together).
-   - **Charge port** opens 2.5 s before the climax (Dance only works once it's open) and dances its
-     rainbow LED for at most 30 s, well inside its 2-minute auto-close.
+     then truck); the biggest peak gets a 10 s dance; a final Open leaves every window fully down.
+     Up to about 24 s of dancing per window per show, under Tesla's ~30 s thermal recommendation.
+   - **Mirrors**: a short tempo pulse (4 cycles) in the steadiest loud section; fold-and-unfold
+     gestures on the biggest landings (wave, car alternate, outside-in, every-other, inside-out,
+     together); and the rest of their 20 commands fill the stillness - again and again, the longest
+     stretch with nothing moving (over 12 s of lively music, 30 s of calm) gets a figure in its middle.
+   - **Charge port**: its Dance is the rainbow light, so it joins the colours for the most exciting
+     stretch of each song - open, flashing for up to ~2 minutes, closed before the door's own
+     2-minute auto-close. (The ~30 s dance advice is about motors overheating; the audit exempts the
+     port's light.)
+   `tools/motor_activity.py` shows how much of each song has something moving and the longest still
+   stretch.
    All within Tesla's per-show limits. `tools/closure_audit.py` checks every show against those rules;
    `tools/motor_log.py <show> [liftgate|windows|mirrors|port]` prints the motor script in time order.
 

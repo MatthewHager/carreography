@@ -11,6 +11,7 @@ Checking and reviewing shows. Run them from the project root with the analysis e
 | `setlist_review.py [show ...]` | One line per show: moods, move variety, timing, pacing, motor commands against Tesla's limits, and Tesla's validator. Run this before copying to USB. |
 | `feel_all.py [show ...]` | How strongly the lights pulse on the beat, per song, flagging sections where the beat map looks off or the lights miss beats they should hit. |
 | `closure_audit.py <.fseq ...>` | Every motor command checked against Tesla's rules: per-show limits, Dance only once open, ~30 s dance budget, the charge port's 2-minute auto-close, reversals before a move can finish. `--summary` for one line per file. |
+| `motor_activity.py [show ...]` | Per show: share of the song with a motor moving, the longest still stretch, and seconds moving / commands used for the lids, windows, mirrors and charge port. |
 | `motor_log.py <show> [liftgate\|windows\|mirrors\|port]` | Every closure command in time order across the three cars. |
 
 ## Looking closer
