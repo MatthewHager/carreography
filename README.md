@@ -4,6 +4,8 @@ Twelve synchronized light shows for three cars parked side by side, facing the c
 
 **Model Y (left) | Cybertruck (centre, pulled slightly forward) | Model Y (right)**
 
+Both Model Ys are the 2025+ model ("Juniper") with the light bar across the nose.
+
 Every show is generated from the music: the notes, beat, loudness and song structure drive the
 lights, the liftgates/frunk, windows, mirrors and charge port, choreographed across all three cars.
 There's a 3D preview that plays each show with its music in the browser.
@@ -138,6 +140,13 @@ The 3D viewer is prebuilt in `preview3d/dist/`. To change it you need Node.js:
   liftgate opens fully (owners report part-way opening when its height setting has been lowered).
 - **Windows stay open during the shows** (the music plays through the cabin speakers, so the crowd
   hears it through the windows). They're left fully down at the end - close them afterwards.
+- **The Model Ys' front light bar.** Tesla hasn't documented how a light show drives the 2025+
+  Model Y's bar, and owners report two different ways: as 60 separate LEDs on the Cybertruck's bar
+  channels, or as one lamp on channel 6 (an on-car test in Tesla's light-show issue #183 found the
+  60 LED channels did nothing on its car). The shows send both, carrying the same picture, so the bar
+  lights either way - as left/right halves (what the preview shows) or all at once. Check it at the
+  parking-lot run. If you need the older Model Y's lights instead, change `layout="YCY"` to `"yCy"`
+  in `build.py` (lower-case `y` = 2020-24 Model Y) and rebuild.
 - **Headlight ramps.** Some lamps fade instead of switching (Tesla's 0.5/1/2 s ramps). Newer Model Y
   projector headlights may switch instantly instead; the shows still work either way.
 - **Tested on macOS** (Apple Silicon). Linux should work; Windows is untested.

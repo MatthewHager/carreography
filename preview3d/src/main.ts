@@ -222,7 +222,8 @@ const labelsBox = $<HTMLInputElement>('labels');
 labelsBox.checked = params.get('labels') === '1';
 labelsBox.addEventListener('change', () => viewer.setLabels(labelsBox.checked));
 viewer.onAutoBloomOff = () => console.info('Bloom switched off: frames were slow');
-const initialY = params.get('ybody') === 'refresh' ? 'refresh' : 'mesh';
+// The event's Model Ys are 2025+ ("Juniper", front light bar); ?ybody=mesh shows an older one.
+const initialY = params.get('ybody') === 'mesh' ? 'mesh' : 'refresh';
 yBodySelect.value = initialY;
 yBodySelect.addEventListener('change', async () => {
   rigKey = '';

@@ -312,17 +312,31 @@ export const MODEL_Y_2020 = profile({
   rows: [...threeYFront(undefined), ...commonRear(NON_NA), ...commonClosures('Only with a power liftgate'), ...centerDisplay()],
 });
 
-// The 2025+ Model Y came out after Tesla's last light show documentation
-// update, so which channels drive its light bars is unknown. The preview
-// assumes the front bar follows the signature lights and the rear bar the tail
-// lights, the closest match on earlier cars.
+const lightBar = (base: string, count: number, label: string, maybe?: string): Row[] =>
+  Array.from({ length: count }, (_, i): Row => [
+    `${base}${i + 1}`,
+    'front',
+    { row: { key: base, label }, ...(maybe ? { maybe } : {}) },
+  ]);
+
+// The 2025+ Model Y ("Juniper") came out after Tesla's last light show
+// documentation update. The community reports its front light bar as 60 LEDs on
+// the Cybertruck's front-bar channels (light-show issues #144/#166), while an
+// on-car test (#183) found channel 6 drives the whole bar and channel 4 the
+// outer strips. The preview draws the pixel bar; the show generator writes both.
 const Y_2025 = 'Unverified on 2025+ Model Y';
 
 const y2025Front = (lightBar: boolean): Row[] =>
-  threeYFront(undefined).map(([id, group, extra]): Row => {
-    const bar = lightBar && /Signature$/.test(id);
-    return [id, group, { maybe: bar ? 'Assumed to drive the front light bar (unverified)' : Y_2025, ...extra }];
-  });
+  threeYFront(undefined)
+    .filter(([id]) => !(lightBar && /Channel6$/.test(id)))
+    .map(([id, group, extra]): Row => [id, group, { maybe: Y_2025, ...extra }]);
+
+/** Channels 4-5 are one strip per side; channel 6 is the light bar, not part of it. */
+const juniperOrGroups = (): OrGroup[] => [
+  { inputs: ['leftChannel4', 'leftChannel5'], outputs: ['leftChannel4', 'leftChannel5'] },
+  { inputs: ['rightChannel4', 'rightChannel5'], outputs: ['rightChannel4', 'rightChannel5'] },
+  ...threeYOrGroups(false).slice(2),
+];
 
 export const MODEL_Y_2025 = profile({
   id: 'modelY-2025',
@@ -332,9 +346,10 @@ export const MODEL_Y_2025 = profile({
   hint: 'Light bars across the front and back',
   years: { from: 2025 },
   channel4LeadsRamps: true,
-  orGroups: threeYOrGroups(false),
+  orGroups: juniperOrGroups(),
   rows: [
     ...y2025Front(true),
+    ...lightBar('frontLightBar', 60, 'Front Light Bar (60 LEDs)', 'Community-reported (unverified)'),
     ...commonRear(NON_NA).map(([id, group, extra]): Row =>
       /Tail$/.test(id) ? [id, group, { ...extra, maybe: 'Assumed to drive the rear light bar (unverified)' }] : [id, group, extra],
     ),
@@ -360,13 +375,6 @@ export const MODEL_Y_STANDARD = profile({
 // --- Cybertruck ------------------------------------------------------------------
 // Several channels drive different lights than their names suggest
 // (README "Cybertruck Light Remapping").
-
-const lightBar = (base: string, count: number, label: string, maybe?: string): Row[] =>
-  Array.from({ length: count }, (_, i): Row => [
-    `${base}${i + 1}`,
-    'front',
-    { row: { key: base, label }, ...(maybe ? { maybe } : {}) },
-  ]);
 
 export const CYBERTRUCK_2024 = profile({
   id: 'cybertruck-2024',

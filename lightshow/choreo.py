@@ -35,6 +35,7 @@ from .audio import Analysis
 from .phrases import segment
 from . import motors
 from . import cues as CUE
+from . import lamps as LAMPS
 from . import lyrics as LY
 
 PURPLE = (110, 0, 200)
@@ -54,6 +55,7 @@ class Car:
     step: float
     frames: np.ndarray = field(init=False)
     closure_counts: Counter = field(default_factory=Counter)
+    juniper: bool = False       # 2025+ Model Y: a front light bar instead of the DRL strip (lamps.py)
 
     def __post_init__(self):
         self.frames = np.zeros((self.n_frames, C.N_CHANNELS), dtype=np.uint8)
@@ -64,6 +66,11 @@ class Car:
     @property
     def is_ct(self):
         return self.kind == "cybertruck"
+
+    @property
+    def has_bar(self):
+        """A front light bar across the nose: the Cybertruck, and the 2025+ Model Y."""
+        return self.is_ct or self.juniper
 
     # All sides in the choreography are the CROWD's left/right (facing the cars' fronts). Tesla's
     # "Left" channels are the vehicle's left (driver's side), which is on the crowd's right, so
@@ -147,12 +154,13 @@ class Car:
         return L if side == "L" else R if side == "R" else L + R
 
     def drl(self, side=None):
-        """Model Y channels 4-6 (one combined output per side, ramping). Cybertruck: front turn."""
+        """Model Y channels 4-6 (one combined output per side, ramping); on a 2025+ Model Y channel 6
+        is the whole front bar, so only 4-5 (the outer strips). Cybertruck: front turn."""
         side = self._veh(side)
         if self.is_ct:
             L, R = [C.L_FRONT_TURN], [C.R_FRONT_TURN]
         else:
-            L, R = [C.L_CH4, C.L_CH5, C.L_CH6], [C.R_CH4, C.R_CH5, C.R_CH6]
+            L, R = self._drl_veh("L"), self._drl_veh("R")
         return L if side == "L" else R if side == "R" else L + R
 
     def lamps(self):
@@ -161,13 +169,19 @@ class Car:
                 self.inner("R"), self.outer("R"), self.drl("R"), self.sig("R")]
 
     def accents(self, side=None):
-        """Model Y signature + channels 4-6 (one output per side). Cybertruck: front side markers."""
+        """Model Y signature + channels 4-6 (one output per side; 4-5 on a 2025+ Model Y, whose bar
+        then shows them - see lamps.py). Cybertruck: front side markers."""
         side = self._veh(side)
         if self.is_ct:
             L, R = [C.L_SIDE_MARKER], [C.R_SIDE_MARKER]
         else:
-            L, R = [C.L_SIGNATURE, C.L_CH4, C.L_CH5, C.L_CH6], [C.R_SIGNATURE, C.R_CH4, C.R_CH5, C.R_CH6]
+            L, R = [C.L_SIGNATURE] + self._drl_veh("L"), [C.R_SIGNATURE] + self._drl_veh("R")
         return L if side == "L" else R if side == "R" else L + R
+
+    def _drl_veh(self, vside):
+        if self.juniper:
+            return [C.L_CH4, C.L_CH5] if vside == "L" else [C.R_CH4, C.R_CH5]
+        return [C.L_CH4, C.L_CH5, C.L_CH6] if vside == "L" else [C.R_CH4, C.R_CH5, C.R_CH6]
 
     def turns(self, side=None):
         side = self._veh(side)
@@ -193,10 +207,13 @@ class Car:
 
 
 def make_lineup(layout, n_frames, step):
-    kinds = {"Y": "modely", "C": "cybertruck"}
-    names = {"Y": "ModelY", "C": "Cybertruck"}
+    """One Car per letter, crowd-left to right: Y = 2025+ Model Y ("Juniper", front light bar),
+    y = 2020-2024 Model Y, C = Cybertruck."""
+    kinds = {"Y": "modely", "y": "modely", "C": "cybertruck"}
+    names = {"Y": "ModelY", "y": "ModelY", "C": "Cybertruck"}
     sides = {0: "Left", len(layout) - 1: "Right"}
-    return [Car(kinds[k], f"Car{i + 1}_{names[k]}_{sides.get(i, 'Center')}", float(i), n_frames, step)
+    return [Car(kinds[k], f"Car{i + 1}_{names[k]}_{sides.get(i, 'Center')}", float(i), n_frames, step,
+                juniper=(k == "Y"))
             for i, k in enumerate(layout)]
 
 
@@ -320,6 +337,8 @@ def choreograph(an: Analysis, layout="YCY", use_liftgate=True, name=None, style=
         _finale(cars, an)
     for car in cars:
         _tidy(car)
+        if car.juniper:
+            LAMPS.juniper_bar(car)
         car.frames[-3:, :C.L_FALCON] = 0
         car.frames[-3:, C.FRONT_BAR.start:] = 0
     an.phrases = phrases

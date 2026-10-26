@@ -1,8 +1,8 @@
 """Feel a show the way the audience will: what the cars look like from the front, against the beat.
 
   perceived brightness  every front lamp weighted by how big and bright it reads from the crowd
-                        (headlights 1.0 each, fogs 0.5, signature/DRL 0.4, turns 0.3, markers 0.1, the
-                        truck's bar 2.0 when fully lit), with Tesla's ramp codes simulated frame by frame
+                        (headlights 1.0 each, fogs 0.5, signature/DRL 0.4, turns 0.3, markers 0.1, a front
+                        light bar 2.0 when fully lit), with Tesla's ramp codes simulated frame by frame
   visual flux           how much light switches ON from one frame to the next - the "hits" the eye
                         catches
   pulse metrics         against the beat map the show was built with:
@@ -27,6 +27,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lightshow import channels as C                     # noqa: E402
 from lightshow.fseq import read_fseq                    # noqa: E402
+from lightshow.lamps import lamp_level                  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CARS = ("Car1_ModelY_Left", "Car2_Cybertruck_Center", "Car3_ModelY_Right")
@@ -35,35 +36,19 @@ LAMPS = {C.L_OUTER_MAIN: 1.0, C.R_OUTER_MAIN: 1.0, C.L_INNER_MAIN: 1.0, C.R_INNE
          C.L_SIGNATURE: 0.4, C.R_SIGNATURE: 0.4, C.L_CH4: 0.4, C.R_CH4: 0.4,
          C.L_FRONT_TURN: 0.3, C.R_FRONT_TURN: 0.3, C.L_FRONT_FOG: 0.5, C.R_FRONT_FOG: 0.5,
          C.L_SIDE_MARKER: 0.1, C.R_SIDE_MARKER: 0.1}
-RAMP = {C.ON_500: +0.04, C.ON_1000: +0.02, C.ON_2000: +0.01,
-        C.OFF_500: -0.04, C.OFF_1000: -0.02, C.OFF_2000: -0.01}
 HIT = 1.5          # light switching on within 50 ms that counts as a visible hit (a headlight pair is 2.0)
 
 
-def lamp_level(col):
-    """0..1 brightness of one lamp channel over time, following Tesla's ramp codes."""
-    if not np.isin(col, list(RAMP)).any():
-        return (col >= 128).astype(float)
-    out = np.zeros(len(col))
-    lv = 0.0
-    for i, v in enumerate(col):
-        if v in RAMP:
-            lv = min(1.0, max(0.0, lv + RAMP[v]))
-        else:
-            lv = 1.0 if v >= 128 else 0.0
-        out[i] = lv
-    return out
-
-
 def perceived(frames, is_ct):
+    """A car with a front light bar (the truck, a 2025+ Model Y) shows it instead of its DRL strip."""
+    bar = frames[:, C.FRONT_BAR.start:C.FRONT_BAR.stop].astype(float).mean(1) / 255
+    has_bar = is_ct or bar.any()
     lv = np.zeros(len(frames))
     for ch, w in LAMPS.items():
-        if is_ct and ch in (C.L_CH4, C.R_CH4):
+        if has_bar and ch in (C.L_SIGNATURE, C.R_SIGNATURE, C.L_CH4, C.R_CH4):
             continue
         lv += w * lamp_level(frames[:, ch])
-    if is_ct:
-        lv += 2.0 * frames[:, C.FRONT_BAR.start:C.FRONT_BAR.stop].astype(float).mean(1) / 255
-    return lv
+    return lv + 2.0 * bar
 
 
 def load(show):

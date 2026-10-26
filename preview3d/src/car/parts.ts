@@ -159,6 +159,23 @@ export function lightBar(
 }
 
 /**
+ * A light bar of individually driven LEDs along the same line as lightBar,
+ * with ids `${base}1`..`${base}${count}` numbered from the vehicle's left
+ * (z < 0), like the Cybertruck's bars.
+ */
+export function pixelLightBar(
+  b: Builder,
+  spec: { x: number; y: number; tilt?: number; halfLength: number; base: string; count: number; color: THREE.Color; lens: THREE.Color },
+): void {
+  const pitch = (spec.halfLength * 2) / spec.count;
+  for (let i = 0; i < spec.count; i++) {
+    const z = -spec.halfLength + pitch * (i + 0.5);
+    const mesh = b.light(b.car, [`${spec.base}${i + 1}`], spec.color, spec.lens, [0.02, 0.016, pitch * 0.9], [spec.x, spec.y, z], 4);
+    mesh.rotation.z = spec.tilt ?? 0;
+  }
+}
+
+/**
  * A door panel covering an opening in the body side, hinged at its front
  * edge. Pass a closure id when the show can open it (Model X front doors).
  */

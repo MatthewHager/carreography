@@ -54,7 +54,7 @@ For running the project, see the [README](../README.md).
    three cars carry the beat wherever the music is lively and its pulse is clear; every move keeps
    the signatures, DRLs, fogs, turns, markers and the truck's bar. Hits are short and hard (about
    120 ms) with darkness between, and land about 40 ms ahead of the music (the eye forgives early, not
-   late). The downbeat is biggest (every headlight plus a bar flash), beat 3 next, and beats 2 and 4
+   late). The downbeat is biggest (every headlight plus a flash of every front light bar), beat 3 next, and beats 2 and 4
    are the Ys only. The pattern follows the mood: a strong beat under a quiet verse gets a small
    half-time step on the inner beams; a groove thumps on the inner beams; drive on every headlight;
    frenzy adds off-beats. Through a build the pulse intensifies (Ys, then every car, then eighths,
@@ -191,3 +191,16 @@ After `setup.sh`, `vendor/light-show/` is Tesla's light-show repo (its validator
 examples). The community shows and xLights sequences that informed the move vocabulary (Tesla's 5-car
 "The Arrival", "Cyber Symphony", a community Toccata) came from public repos listed in
 [docs/SOURCES.md](SOURCES.md).
+
+## The 2025+ Model Y's light bar
+
+The event's Model Ys are the 2025+ model ("Juniper"), which has a light bar across the nose where
+the older Model Y had a signature/DRL strip in each headlight. Tesla's documentation predates it.
+Owners report the bar as 60 LEDs on the Cybertruck's front-bar channels (light-show issues #144 and
+#166), but an on-car test of a 2027 Model Y (#183) found those channels did nothing there, while
+channel 6 faded the whole bar and channel 4 the outer white strips. `lamps.py` covers both: the
+choreography still writes the Ys' accent lamps (signature and channels 4-5), and a finishing step
+draws them on the bar - crowd-left accents on the crowd-left half, right on the right - as pixels,
+and writes the same lamps, or any flash drawn on the bar directly, to channel 6 as the whole bar.
+The beat layer flashes every car's bar on the downbeat. `make_lineup` in `choreo.py` takes `Y` for
+a 2025+ Model Y and `y` for a 2020-24 one, which keeps channels 4-6 as its DRL strip.

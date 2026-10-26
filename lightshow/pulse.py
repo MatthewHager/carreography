@@ -141,8 +141,9 @@ def apply(cars, an, phrases):
             if kind == "big":
                 for c in cars:
                     c.set(lamps, t, t + hold + 0.04, C.ON)
-                if ct is not None:
-                    M.bar_flash(ct, t, min(0.3, gap * 0.6), bar_level)
+                for c in cars:                  # every front light bar flashes on the one
+                    if c.has_bar:
+                        M.bar_flash(c, t, min(0.3, gap * 0.6), bar_level)
             elif kind == "mid":
                 for c in cars:
                     c.set(lamps, t, t + hold, C.ON)
@@ -197,9 +198,9 @@ def _duck(cars, t, gap):
     between beats."""
     d = float(np.clip(gap * 0.15, 0.06, 0.1))
     for c in cars:
-        if c.is_ct:
+        if c.has_bar:
             c.set(list(C.FRONT_BAR), t - d, t, 0)
-        else:
+        if not c.is_ct:
             c.set(c.sig() + c.drl(), t - d, t, 0)
 
 

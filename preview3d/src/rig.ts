@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import type { Simulation } from './core/simulate';
 import type { BodyStyle, VehicleProfile } from './core/vehicles';
-import { CYBERTRUCK_2024, MODEL_Y_2025 } from './core/vehicles';
+import { CYBERTRUCK_2024, MODEL_Y_2020, MODEL_Y_2025 } from './core/vehicles';
 import { buildBody } from './car/bodies';
 import type { Builder, BuiltBody, GlowHandle, Materials } from './car/builder';
 import { MODEL_Y_FROM_S } from './car/derive';
@@ -16,7 +16,7 @@ import type { TeslaAsset } from './car/teslaAssets';
 import type { GlowEntry } from './glow';
 
 export type CarKind = 'modely' | 'cybertruck';
-/** How the Model Y is drawn: Tesla's Model S mesh reshaped, or the studio's code-built 2025+ body. */
+/** Which Model Y: 2020-24 (Tesla's Model S mesh reshaped) or 2025+ "Juniper" (code-built, front light bar). */
 export type YBody = 'mesh' | 'refresh';
 
 interface LightPart {
@@ -79,7 +79,7 @@ export class CarRig {
     asset: TeslaAsset | undefined,
     paint: string,
   ) {
-    this.profile = kind === 'cybertruck' ? CYBERTRUCK_2024 : MODEL_Y_2025;
+    this.profile = kind === 'cybertruck' ? CYBERTRUCK_2024 : yBody === 'mesh' ? MODEL_Y_2020 : MODEL_Y_2025;
     this.m = makeMaterials(paint, kind);
     this.cabinLight.visible = false;
     this.group.add(this.car);
