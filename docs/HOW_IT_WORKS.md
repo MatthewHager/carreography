@@ -198,18 +198,22 @@ examples). The community shows and xLights sequences that informed the move voca
 "The Arrival", "Cyber Symphony", a community Toccata) came from public repos listed in
 [docs/SOURCES.md](SOURCES.md).
 
-## The 2025+ Model Y's light bar
+## The 2025+ Model Y's lamps
 
-The event's Model Ys are the 2025+ model ("Juniper"), which has a light bar across the nose where
-the older Model Y had a signature/DRL strip in each headlight. Tesla's documentation predates it.
-Owners report the bar as 60 LEDs on the Cybertruck's front-bar channels (light-show issues #144 and
-#166), but an on-car test of a 2027 Model Y (#183) found those channels did nothing there, while
-channel 6 faded the whole bar and channel 4 the outer white strips. `lamps.py` covers both: the
-choreography still writes the Ys' accent lamps (signature and channels 4-5), and a finishing step
-draws them on the bar - crowd-left accents on the crowd-left half, right on the right - as pixels,
-and writes the same lamps, or any flash drawn on the bar directly, to channel 6 as the whole bar.
-The beat layer flashes every car's bar on the downbeat. `make_lineup` in `choreo.py` takes `Y` for
-a 2025+ Model Y and `y` for a 2020-24 one, which keeps channels 4-6 as its DRL strip.
+The event's Model Ys are the 2025+ model ("Juniper"). Tesla's documentation predates it. Two on-car
+tests in Oct 2026 - Tesla's light-show issue #183 and github.com/Nghtmare7509/tesla-lightshow-juniper,
+which tested every channel alone - agree on its front: headlights (1/2), lower white lamps (3/4),
+the light bar's outer ends (7/8, "channel 4", one per side), its whole centre (11/12, "channel 6",
+either side), amber turns (13/14) and fender repeaters (21/22). Signature, channel 5, fogs, aux park
+and side markers do nothing, and the bar is not separately controllable LED by LED (the earlier
+community claim that it is, in issues #144/#166, was never shown on a car).
+
+The choreography still writes the Model Y's lamp vocabulary, and `lamps.juniper_output` translates
+it at the end: a side's accents light that outer end of the bar plus the centre (both sides: the
+whole bar), the fogs' low glow and bass pulses light the centre, the side markers become the fender
+repeaters, and flashes drawn on the bar (the downbeats) light the matching sections. The 60-pixel
+picture is still written to 47-106 in case a software version reads it. `make_lineup` in
+`choreo.py` takes `Y` for a 2025+ Model Y and `y` for a 2020-24 one.
 
 ## The diagnostic show
 

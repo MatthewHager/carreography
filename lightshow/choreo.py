@@ -338,7 +338,7 @@ def choreograph(an: Analysis, layout="YCY", use_liftgate=True, name=None, style=
     for car in cars:
         _tidy(car)
         if car.juniper:
-            LAMPS.juniper_bar(car)
+            LAMPS.juniper_output(car)
         car.frames[-3:, :C.L_FALCON] = 0
         car.frames[-3:, C.FRONT_BAR.start:] = 0
     an.phrases = phrases
@@ -929,7 +929,7 @@ def _tidy(car, min_on=5, min_off=3):
 
 
 def _idle_glow(cars, an):
-    """Something is always lit once the music is going: fogs on the Ys, a faint truck bar."""
+    """(Unused.) Something always lit once the music is going: fogs on older Ys, a faint truck bar."""
     for a, b in _runs(an.tier >= 1):
         t0, t1 = a * an.step, b * an.step
         for car in cars:
@@ -937,7 +937,7 @@ def _idle_glow(cars, an):
                 n = b - a
                 car.pixels(C.FRONT_BAR, t0, np.full((n, len(C.FRONT_BAR)), 0.08))
                 car.pixels(C.REAR_BAR, t0, np.full((n, len(C.REAR_BAR)), 0.08))
-            else:
+            elif not car.juniper:        # (a Juniper's fogs are its bar's centre: no constant glow)
                 car.light(car.fogs(), t0, t1)
 
 

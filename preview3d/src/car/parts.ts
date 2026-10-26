@@ -159,6 +159,22 @@ export function lightBar(
 }
 
 /**
+ * A light bar made of a few separately driven sections along the same line as
+ * lightBar: [ids, from, to] with from/to running -1 (vehicle left) to 1 (right).
+ */
+export function sectionLightBar(
+  b: Builder,
+  spec: { x: number; y: number; tilt?: number; halfLength: number; sections: [string[], number, number][]; color: THREE.Color; lens: THREE.Color },
+): void {
+  for (const [ids, from, to] of spec.sections) {
+    const len = ((to - from) / 2) * spec.halfLength * 2 * 0.98;
+    const z = ((from + to) / 2) * spec.halfLength;
+    const mesh = b.light(b.car, ids, spec.color, spec.lens, [0.02, 0.016, len], [spec.x, spec.y, z], 4);
+    mesh.rotation.z = spec.tilt ?? 0;
+  }
+}
+
+/**
  * A light bar of individually driven LEDs along the same line as lightBar,
  * with ids `${base}1`..`${base}${count}` numbered from the vehicle's left
  * (z < 0), like the Cybertruck's bars.

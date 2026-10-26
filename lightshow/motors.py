@@ -195,10 +195,6 @@ def choreograph(cars, an, use_liftgate):
             if all(abs(t0 - w0) > span + 3 * burst for w0 in waves):
                 for j, w in enumerate(C.WINDOWS):
                     c.closure(w, t0 + 0.3 * j, t0 + 0.3 * j + span, C.CLOSURE_DANCE)
-        last_dance = max([w0 + 3 * burst for w0 in waves] + ([t0 + span + 1.5] if peak_t is not None else [0.0]))
-        if last_dance > 1.0:
-            for w in C.WINDOWS:                                         # back fully down
-                c.closure(w, min(end - 2.0, last_dance + 1.0), min(end - 1.5, last_dance + 1.5), C.CLOSURE_OPEN)
 
     port = _port_window(an)
     if port is not None:
@@ -417,6 +413,123 @@ def choreograph(cars, an, use_liftgate):
     for k, t in enumerate(picks):
         _mirror_gesture(an, line, spent, _on_beat(an, t), patterns[k % len(patterns)])
     _fill_still(cars, an, line, spent)
+    _spend_leftovers(cars, an, line, spent, use_liftgate)
+    _finish_windows(cars, an)
+
+
+# ---- Using the whole budget --------------------------------------------------------------------
+# Tesla's limits per show: Open/Close/Dance commands per closure (lid 6, each window 6, each mirror
+# 20, port 3) and ~30 s of dancing per closure before thermal cut-outs. The planners above spend
+# them on the music's big moments; what is left goes where it helps most - the longest stretch with
+# nothing moving, again and again - keeping DANCE_CAP_S of dancing per closure as a safety margin.
+
+DANCE_CAP_S = 27.0
+
+
+def _danced(car, ch, step):
+    col = car.frames[:, ch]
+    return float(((col >= 96) & (col < 160)).sum()) * step
+
+
+def _free(car, ch, t0, t1):
+    return not car.frames[max(0, car.fr(t0)): car.fr(t1), ch].any()
+
+
+def _gaps(mask, an, lively_only):
+    """Still stretches, longest (relative to its threshold) first: [(need, t0, t1, lively)]."""
+    step = an.step
+    lo, hi = int(4.0 / step), int((an.duration - 10) / step)
+    out = []
+    for a, b in _runs(~mask[lo:hi]):
+        a, b = a + lo, b + lo
+        lively = float(np.mean(an.tier[a:b] >= 2)) >= 0.5
+        if lively_only and not lively:
+            continue
+        need = (b - a) * step / (STILL_LIVELY_S if lively else STILL_CALM_S)
+        out.append((need, a * step, b * step, lively))
+    return sorted(out, reverse=True)
+
+
+def _spend_leftovers(cars, an, line, spent, use_liftgate):
+    order = sorted(cars, key=lambda q: q.x)
+    beat = 60.0 / max(an.tempo, 40)
+    step = an.step
+    lively_only = int(np.max(an.tier)) <= 1      # a song held quiet on purpose (Ave Maria) stays gentle
+    # 1. Windows: extra travelling dances in the stillness (one command kept for the final Open).
+    burst = beat * max(2, round(WINDOW_BURST_S / beat))
+    for k in range(12):
+        mask = _motion(cars, an)
+        placed = False
+        for need, g0, g1, _ in _gaps(mask, an, lively_only):
+            if g1 - g0 < burst + 3 * beat + 2 or need < 0.5:
+                continue
+            t0 = _on_beat(an, (g0 + g1) / 2 - (burst + 2 * beat) / 2)
+            for idx, c in enumerate(order):
+                lag = beat * (idx if k % 2 == 0 else len(order) - 1 - idx)
+                for j, w in enumerate(C.WINDOWS):
+                    a = t0 + lag + (0 if j % 2 == 0 else beat / 2)
+                    if (c.closure_counts[w] < C.CLOSURE_LIMITS[w] - 1 and _danced(c, w, step) + burst <= DANCE_CAP_S
+                            and _free(c, w, a - 0.5, a + burst + 0.5)):
+                        c.closure(w, a, a + burst, C.CLOSURE_DANCE)
+                        placed = True
+            if placed:
+                break
+        if not placed:
+            break
+    # 2. Lids: a lift across the lineup in the longest stillness - opening fully and dancing
+    #    when three commands and the time allow, else part way (Open, Stop, Close).
+    if use_liftgate:
+        for k in range(3):
+            mask = _motion(cars, an)
+            placed = False
+            for need, g0, g1, _ in _gaps(mask, an, lively_only):
+                for idx, c in enumerate(order):
+                    left = C.CLOSURE_LIMITS[C.LIFTGATE] - c.closure_counts[C.LIFTGATE]
+                    if left < 2:
+                        continue
+                    lag = beat * (idx if k % 2 == 0 else len(order) - 1 - idx)
+                    full = LIFTGATE_OPEN_S[c.kind] + LID_OPEN_MARGIN_S
+                    t_open = g0 + 1.0 + lag
+                    dance = left >= 3 and g1 - t_open >= full + LID_DANCE_MIN_S + LIFTGATE_CLOSE_S + 1 \
+                        and _danced(c, C.LIFTGATE, step) + LID_DANCE_MIN_S <= DANCE_CAP_S
+                    if dance:
+                        d0 = _on_beat(an, t_open + full)
+                        d1 = min(d0 + LID_DANCE_MAX_S, g1 - LIFTGATE_CLOSE_S - 1,
+                                 d0 + DANCE_CAP_S - _danced(c, C.LIFTGATE, step))
+                        t_close = d1 + 0.3
+                    else:
+                        stop = _on_beat(an, t_open + LIFTGATE_OPEN_S[c.kind] * 0.5)
+                        t_close = stop + max(2.0, 2 * beat)
+                    if t_close + LIFTGATE_CLOSE_S > min(g1 + 2, an.duration - 3) or \
+                            not _free(c, C.LIFTGATE, t_open - 1.0, t_close + LIFTGATE_CLOSE_S + 1.0):
+                        continue
+                    c.closure(C.LIFTGATE, t_open, t_open + 0.5, C.CLOSURE_OPEN)
+                    if dance:
+                        c.closure(C.LIFTGATE, d0, d1, C.CLOSURE_DANCE)
+                    else:
+                        c.set(C.LIFTGATE, stop, stop + 0.3, C.CLOSURE_STOP)
+                    c.closure(C.LIFTGATE, t_close, t_close + 0.5, C.CLOSURE_CLOSE)
+                    placed = True
+                if placed:
+                    break
+            if not placed:
+                break
+    # 3. Mirrors: whatever commands are left, into the longest stillness (lively or calm), down to
+    #    stretches of about 8 s of calm music.
+    _fill_still(cars, an, line, spent, scale=0.5)
+    _fill_still(cars, an, line, spent, scale=0.27)
+
+
+def _finish_windows(cars, an):
+    """After a window's last dance, one Open puts it fully down again for the rest of the show."""
+    for c in cars:
+        for w in C.WINDOWS:
+            col = c.frames[:, w]
+            dance = np.flatnonzero((col >= 96) & (col < 160))
+            if not len(dance):
+                continue
+            t = (dance[-1] + 1) * an.step + 1.0
+            c.closure(w, min(an.duration - 2.0, t), min(an.duration - 1.5, t + 0.5), C.CLOSURE_OPEN)
 
 
 def _mirror_gesture(an, line, spent, t, pat, free_only=False):
@@ -488,7 +601,7 @@ def _motion(cars, an):
     return mask
 
 
-def _fill_still(cars, an, line, spent):
+def _fill_still(cars, an, line, spent, scale=1.0):
     """No long stretch without something moving. The mirrors' commands are limited (20 each), so
     they go where they help most: again and again, the longest still stretch - measured against
     STILL_LIVELY_S in lively music, STILL_CALM_S in calm music - gets a mirror figure in its middle,
@@ -508,7 +621,7 @@ def _fill_still(cars, an, line, spent):
             if (a, b) in blocked:
                 continue
             lively = float(np.mean(an.tier[a:b] >= 2)) >= 0.5
-            need = (b - a) * step / (STILL_LIVELY_S if lively else STILL_CALM_S)
+            need = (b - a) * step / (scale * (STILL_LIVELY_S if lively else STILL_CALM_S))
             if need > 1 and (best is None or need > best[0]):
                 best = (need, a, b)
         if best is None:

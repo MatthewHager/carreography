@@ -39,13 +39,23 @@ LAMPS = {C.L_OUTER_MAIN: 1.0, C.R_OUTER_MAIN: 1.0, C.L_INNER_MAIN: 1.0, C.R_INNE
 HIT = 1.5          # light switching on within 50 ms that counts as a visible hit (a headlight pair is 2.0)
 
 
-def perceived(frames, is_ct):
-    """A car with a front light bar (the truck, a 2025+ Model Y) shows it instead of its DRL strip."""
+# The 2025+ Model Y's front, from on-car tests (lightshow/lamps.py): headlights, lower lamps, the
+# bar's outer ends (channel 4) and centre (channel 6), amber turns, fender repeaters.
+JUNIPER = {C.L_OUTER_MAIN: 1.0, C.R_OUTER_MAIN: 1.0, C.L_INNER_MAIN: 1.0, C.R_INNER_MAIN: 1.0,
+           C.L_CH4: 0.5, C.R_CH4: 0.5, C.L_FRONT_TURN: 0.3, C.R_FRONT_TURN: 0.3,
+           C.L_SIDE_REPEATER: 0.1, C.R_SIDE_REPEATER: 0.1}
+
+
+def perceived(frames, is_ct, juniper=False):
+    """Perceived brightness from the crowd. The truck shows its bar; a 2025+ Model Y (juniper) only
+    the lamps it really has, with its bar's centre (channel 6, either side) weighted 1.2."""
+    if juniper:
+        lv = sum(w * lamp_level(frames[:, ch]) for ch, w in JUNIPER.items())
+        return lv + 1.2 * np.maximum(lamp_level(frames[:, C.L_CH6]), lamp_level(frames[:, C.R_CH6]))
     bar = frames[:, C.FRONT_BAR.start:C.FRONT_BAR.stop].astype(float).mean(1) / 255
-    has_bar = is_ct or bar.any()
     lv = np.zeros(len(frames))
     for ch, w in LAMPS.items():
-        if has_bar and ch in (C.L_SIGNATURE, C.R_SIGNATURE, C.L_CH4, C.R_CH4):
+        if is_ct and ch in (C.L_SIGNATURE, C.R_SIGNATURE, C.L_CH4, C.R_CH4):
             continue
         lv += w * lamp_level(frames[:, ch])
     return lv + 2.0 * bar
@@ -54,7 +64,8 @@ def perceived(frames, is_ct):
 def load(show):
     out = ROOT / "output" / show
     an = pickle.loads((out / "analysis.pkl").read_bytes())
-    cars = [perceived(read_fseq(out / c / "LightShow" / f"{show}.fseq")[0], "Cybertruck" in c) for c in CARS]
+    cars = [perceived(read_fseq(out / c / "LightShow" / f"{show}.fseq")[0], "Cybertruck" in c, "ModelY" in c)
+            for c in CARS]                     # the event's Model Ys are 2025+ (Juniper)
     n = min(len(c) for c in cars)
     cars = np.array([c[:n] for c in cars])
     import librosa

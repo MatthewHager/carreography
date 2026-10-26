@@ -156,13 +156,13 @@ The 3D viewer is prebuilt in `preview3d/dist/`. To change it you need Node.js:
   liftgate opens fully (owners report part-way opening when its height setting has been lowered).
 - **Windows stay open during the shows** (the music plays through the cabin speakers, so the crowd
   hears it through the windows). They're left fully down at the end - close them afterwards.
-- **The Model Ys' front light bar.** Tesla hasn't documented how a light show drives the 2025+
-  Model Y's bar, and owners report two different ways: as 60 separate LEDs on the Cybertruck's bar
-  channels, or as one lamp on channel 6 (an on-car test in Tesla's light-show issue #183 found the
-  60 LED channels did nothing on its car). The shows send both, carrying the same picture, so the bar
-  lights either way - as left/right halves (what the preview shows) or all at once. The diagnostic's
-  light-bar tests A and B show which way your cars read it. If you need the older Model Y's lights instead, change `layout="YCY"` to `"yCy"`
-  in `build.py` (lower-case `y` = 2020-24 Model Y) and rebuild.
+- **The Model Ys' lights.** Tesla hasn't documented the 2025+ Model Y. Two owners' on-car tests
+  (Tesla's light-show issue #183, and github.com/Nghtmare7509/tesla-lightshow-juniper, Oct 2026)
+  agree: its front bar is three sections - each outer end on channel 4, the centre on channel 6 -
+  not 60 separate LEDs, and its signature, fog, aux park and side marker channels do nothing. The
+  shows are mapped to that (`lightshow/lamps.py`), and the preview draws it. The diagnostic's lamp
+  check and light-bar tests confirm it on your cars. For an older (2020-24) Model Y, change
+  `layout="YCY"` to `"yCy"` in `build.py` and rebuild.
 - **Headlight ramps.** Some lamps fade instead of switching (Tesla's 0.5/1/2 s ramps). Newer Model Y
   projector headlights may switch instantly instead; the shows still work either way.
 - **Tested on macOS** (Apple Silicon). Linux should work; Windows is untested.

@@ -20,7 +20,7 @@ import {
   hingedDoor,
   interior,
   lightBar,
-  pixelLightBar,
+  sectionLightBar,
   mirrors,
   rearLowLights,
   sideRepeaters,
@@ -174,17 +174,16 @@ function buildFamily(b: Builder, style: BodyStyle, spec: FamilySpec): BuiltBody 
   headBeams(b, { x: h.x + 0.2, y: hy, z: (h.zIn + h.zOut) / 2 }, style.fogLamps ? { x: fx, y: spec.bumper.y, z: spec.bumper.zOut } : undefined);
   sideRepeaters(b, kit, spec.repeater[0], spec.repeater[1]);
   if (style.frontLightBar && spec.frontBar) {
-    // Tesla hasn't documented this bar. The community reports it as 60 LEDs on the
-    // Cybertruck's front-bar channels (light-show issues #144/#166), so it is drawn
-    // that way; the show generator also drives the whole bar on channel 6 (#183).
+    // Tesla hasn't documented this bar. On-car tests (light-show issue #183,
+    // Nghtmare7509/tesla-lightshow-juniper) found three sections: each outer end on
+    // its side's channel 4, the whole centre on channel 6 (vehicles.ts maps them).
     const fb = spec.frontBar;
-    pixelLightBar(b, {
+    sectionLightBar(b, {
       x: fb.x + (GROWTH + 0.01) * Math.cos(fb.tilt),
       y: fb.y + (GROWTH + 0.01) * Math.sin(fb.tilt),
       tilt: fb.tilt,
       halfLength: fb.halfLength,
-      base: 'frontLightBar',
-      count: 60,
+      sections: [[['barLeftEnd'], -1, -0.5], [['barCentre'], -0.5, 0.5], [['barRightEnd'], 0.5, 1]],
       color: COLORS.white,
       lens: COLORS.lensFront,
     });

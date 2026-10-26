@@ -328,16 +328,23 @@ const lightBar = (base: string, count: number, label: string, maybe?: string): R
 // outer strips. The preview draws the pixel bar; the show generator writes both.
 const Y_2025 = 'Unverified on 2025+ Model Y';
 
+// On-car tests of the light-bar Model Y (Oct 2026: light-show issue #183 and
+// github.com/Nghtmare7509/tesla-lightshow-juniper) found signature, channel 5, fogs,
+// aux park and side markers do nothing; channel 4 lights each outer end of the
+// front bar and channel 6 (either side) its whole centre.
+const JUNIPER_DEAD = /(Signature|Channel5|FrontFog|AuxPark|SideMarker)$/;
+
 const y2025Front = (lightBar: boolean): Row[] =>
   threeYFront(undefined)
-    .filter(([id]) => !(lightBar && /Channel6$/.test(id)))
+    .filter(([id]) => !(lightBar && JUNIPER_DEAD.test(id)))
     .map(([id, group, extra]): Row => [id, group, { maybe: Y_2025, ...extra }]);
 
-/** Channels 4-5 are one strip per side; channel 6 is the light bar, not part of it. */
+/** Channel 4 -> the bar's outer ends, channel 6 -> its centre; nothing in the headlights. */
 const juniperOrGroups = (): OrGroup[] => [
-  { inputs: ['leftChannel4', 'leftChannel5'], outputs: ['leftChannel4', 'leftChannel5'] },
-  { inputs: ['rightChannel4', 'rightChannel5'], outputs: ['rightChannel4', 'rightChannel5'] },
-  ...threeYOrGroups(false).slice(2),
+  { inputs: ['leftChannel4'], outputs: ['barLeftEnd'] },
+  { inputs: ['rightChannel4'], outputs: ['barRightEnd'] },
+  { inputs: ['leftChannel6', 'rightChannel6'], outputs: ['barCentre'] },
+  { inputs: [], outputs: ['leftChannel4', 'rightChannel4', 'leftChannel6', 'rightChannel6'] },
 ];
 
 export const MODEL_Y_2025 = profile({
@@ -351,7 +358,6 @@ export const MODEL_Y_2025 = profile({
   orGroups: juniperOrGroups(),
   rows: [
     ...y2025Front(true),
-    ...lightBar('frontLightBar', 60, 'Front Light Bar (60 LEDs)', 'Community-reported (unverified)'),
     ...commonRear(NON_NA).map(([id, group, extra]): Row =>
       /Tail$/.test(id) ? [id, group, { ...extra, maybe: 'Assumed to drive the rear light bar (unverified)' }] : [id, group, extra],
     ),
