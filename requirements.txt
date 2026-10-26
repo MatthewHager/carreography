@@ -1,0 +1,15 @@
+# The analysis environment (.venv312, Python 3.12) - setup.sh creates it.
+# Versions are the ones the shows in output/ were built with.
+numpy==1.26.4             # basic-pitch needs numpy < 2
+scipy==1.17.1
+librosa==0.11.0
+soundfile==0.14.0
+matplotlib==3.11.2
+pillow==13.0.0
+setuptools==80.10.2       # basic-pitch still imports pkg_resources (gone in setuptools 81)
+basic-pitch[onnx]==0.3.0  # note transcription
+onnxruntime==1.31.0
+torch==2.14.1
+demucs==4.1.0             # stem separation for band songs
+faster-whisper==1.2.1     # lyric timing for sung songs
+pyflakes==4.0.3           # lint (optional)

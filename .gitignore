@@ -1,0 +1,29 @@
+# Python environments (setup.sh recreates them)
+.venv*/
+__pycache__/
+*.pyc
+
+# Third-party repos fetched by setup.sh, and local study material (not ours to redistribute)
+vendor/
+
+# Recordings we tried but don't use
+songs/unused/
+
+# Generated from songs/ by build.py (--assemble regenerates them in a minute)
+output/**/*.wav
+output/**/stems/
+usb/
+
+# Analysis caches and logs (rebuilt by build.py)
+output/**/*.pkl
+output/**/*.npy
+output/**/*.json
+output/**/build.log
+output/.demucs.lock
+output/**/*.mp4
+
+# Review images, viewer dependencies
+checks/
+preview3d/node_modules/
+
+.DS_Store

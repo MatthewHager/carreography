@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#05070a" />
+    <title>Light Show 3D</title>
+    <script type="module" crossorigin src="./assets/index-yUotsmQ3.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DoZWLnZV.css">
+  </head>
+  <body>
+    <div id="stage"></div>
+    <header id="bar">
+      <select id="show" aria-label="Show"></select>
+      <button id="play" class="primary">Play</button>
+      <span id="time">0:00.0 / 0:00.0</span>
+      <input id="scrub" type="range" min="0" max="1" step="0.02" value="0" aria-label="Position" />
+    </header>
+    <footer id="tools">
+      <div id="cams" class="group"></div>
+      <div class="group">
+        <select id="ybody" hidden><option value="mesh">Tesla mesh</option></select>
+        <label><input id="labels" type="checkbox" /> Labels</label>
+        <span id="fps"></span>
+      </div>
+    </footer>
+    <div id="status" hidden>
+      <div id="statusText"></div>
+      <div class="progress"><div id="progressBar"></div></div>
+    </div>
+  </body>
+</html>

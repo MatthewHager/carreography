@@ -1,0 +1,21 @@
+{
+  "name": "tesla-lightshow-preview3d",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser 3D viewer for the three-car Tesla light shows (Model Y | Cybertruck | Model Y).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}
