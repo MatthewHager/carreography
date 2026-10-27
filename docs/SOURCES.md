@@ -16,6 +16,9 @@ shows, get the same recordings and put them in `songs/` under these names.
   from the xLights show folder Tesla publishes with its
   [light-show repo](https://github.com/teslamotors/light-show); `lightshow/tesla_files.py` fetches
   them at setup, since Tesla publishes them without a licence to redistribute.
+- **Tesla's app models** (optional, for the 3D viewer): extracted from your own copy of the Tesla
+  Android app with [tesla-model-extractor](https://github.com/koenhendriks/tesla-model-extractor)
+  (MIT) by `lightshow/tesla_app_models.py`; Tesla's, not redistributed here.
 - **Validator**: Tesla's `validator.py`, fetched into `vendor/light-show/` by `setup.sh`.
 - **Beat tracking**: [Beat This!](https://github.com/CPJKU/beat_this) (Foscarin, Schlüter & Widmer, 2024).
 - **Note transcription**: [basic-pitch](https://github.com/spotify/basic-pitch) (Spotify).

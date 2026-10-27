@@ -13,6 +13,8 @@ import type { Builder, BuiltBody, GlowHandle, Materials } from './car/builder';
 import { MODEL_Y_FROM_S } from './car/derive';
 import { buildTeslaBody } from './car/meshBody';
 import type { TeslaAsset } from './car/teslaAssets';
+import { buildAppBody, type AppModelId } from './car/appBody';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GlowEntry } from './glow';
 
 export type CarKind = 'modely' | 'cybertruck';
@@ -78,6 +80,8 @@ export class CarRig {
     private readonly yBody: YBody,
     asset: TeslaAsset | undefined,
     paint: string,
+    /** Tesla's own model from the Tesla app (appBody.ts), when it has been extracted. */
+    private readonly app?: { id: AppModelId; gltf: GLTF },
   ) {
     this.profile = kind === 'cybertruck' ? CYBERTRUCK_2024 : yBody === 'mesh' ? MODEL_Y_2020 : MODEL_Y_2025;
     this.m = makeMaterials(paint, kind);
@@ -121,7 +125,9 @@ export class CarRig {
       },
     };
 
-    if (this.kind === 'cybertruck') {
+    if (this.app) {
+      this.bounds = buildAppBody(builder, this.app.gltf, this.app.id);
+    } else if (this.kind === 'cybertruck') {
       const style: BodyStyle = CYBERTRUCK_2024.body;
       this.bounds = asset ? buildTeslaBody(builder, asset, style) : buildBody(builder, style);
     } else if (this.yBody === 'mesh' && asset) {

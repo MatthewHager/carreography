@@ -174,6 +174,9 @@ docs/               how it works, the choreography, sources
   crowd hears it through the open windows. Close them afterwards.
 - **Motor limits.** Every show stays within Tesla's per-show command limits and the ~30 s dance
   advice; `tools/closure_audit.py` checks it.
+- **Better car models.** The 3D preview can use Tesla's own models and animations from the Tesla
+  app: `python3 -m lightshow.tesla_app_models <Tesla app bundle>` (see
+  [preview3d/README.md](preview3d/README.md#teslas-app-models-recommended)).
 - **Tested on macOS** (Apple Silicon) and Linux (via the web app). Windows is untested.
 - **Music rights.** Use recordings you have the right to use. The light-show files the generator
   makes are yours.

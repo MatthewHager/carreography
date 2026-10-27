@@ -39,6 +39,25 @@ seek 5 s (shift: 1 s).
 - Audio is downloaded whole and played from a blob URL, because `http.server` doesn't answer range
   requests (which Safari needs for seeking). Time follows `audio.currentTime`.
 
+## Tesla's app models (recommended)
+
+The best car models are Tesla's own, from the Tesla app: the real 2025+ Model Y, 2020-24 Model Y
+and Cybertruck, with Tesla's animations for the frunk, liftgate, windows, mirrors and charge port.
+They aren't in the repository (they're Tesla's). With an app bundle (.apkm/.apks/.xapk/.apk, from
+your Android phone or an APK mirror) and
+[tesla-model-extractor](https://github.com/koenhendriks/tesla-model-extractor) installed:
+
+```bash
+python3 -m lightshow.tesla_app_models ~/Downloads/Tesla_4.61.6-4647.apkm
+```
+
+That writes `public/models/tesla-app/` and `dist/models/tesla-app/`, and the viewer uses them from
+then on (`src/car/appBody.ts`; `?models=classic` shows the older models). The app keeps each kind of
+lamp in one mesh, so `appBody.ts` splits them by position into the show's channels: per side, inner
+and outer beams, the 2025+ Model Y's bar sections, and the Cybertruck's bars LED by LED. Closures
+play the app's own animation clips at the closure's position. The 2025+ Model Y's mirrors don't fold
+(the app doesn't animate them).
+
 ## Rebuild
 
 ```bash

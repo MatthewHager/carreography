@@ -7,6 +7,8 @@ import { readFseq } from './core/fseq';
 import { simulate } from './core/simulate';
 import { loadTeslaAsset, fetchWithProgress, type TeslaAsset } from './car/teslaAssets';
 import { CarRig, type CarKind, type YBody } from './rig';
+import { loadAppModel, type AppModelId } from './car/appBody';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CoolerFog } from './coolerFog';
 import { CAMERA_PRESETS, Viewer } from './viewer';
 
@@ -256,26 +258,41 @@ async function fetchShowFile(path: string): Promise<Uint8Array> {
 
 // --- cars ---------------------------------------------------------------------------
 
-let assets: { modelS?: TeslaAsset; cybertruck?: TeslaAsset } = {};
-
-async function loadAssets(): Promise<void> {
-  const progress = new Map<string, number>();
-  const report = (label: string, f: number) => {
-    progress.set(label.split(':')[0]!, f);
-    const total = [...progress.values()].reduce((a, b) => a + b, 0) / 2;
-    setStatus(`Loading ${label}…`, total);
-  };
-  const [modelS, cybertruck] = await Promise.all([
-    loadTeslaAsset('modelS', report),
-    loadTeslaAsset('cybertruck', report),
-  ]);
-  assets = { modelS, cybertruck };
-}
+let assets: { modelS?: TeslaAsset; cybertruck?: TeslaAsset; app: Partial<Record<AppModelId, GLTF>> } = { app: {} };
 
 function bodyOf(c: ShowCar): YBody {
   if (c.body === 'modely2020') return 'mesh';
   if (c.body === 'modely2025') return 'refresh';
   return yBodySelect.value as YBody;
+}
+
+/** Which of Tesla's app models draws a car (appBody.ts); ?models=classic uses the older meshes. */
+function appModelFor(c: ShowCar): AppModelId {
+  return c.kind === 'cybertruck' ? 'cybertruck' : bodyOf(c) === 'mesh' ? 'y_high' : 'bayberry';
+}
+
+async function loadAssets(): Promise<void> {
+  const progress = new Map<string, number>();
+  const report = (label: string, f: number) => {
+    progress.set(label.split(':')[0]!, f);
+    const total = [...progress.values()].reduce((a, b) => a + b, 0) / Math.max(1, progress.size);
+    setStatus(`Loading ${label}…`, total);
+  };
+  // Tesla's app models when they've been extracted (python3 -m lightshow.tesla_app_models), else
+  // the meshes from Tesla's light-show repo.
+  if (params.get('models') !== 'classic') {
+    const ids: AppModelId[] = ['bayberry', 'y_high', 'cybertruck'];
+    const loaded = await Promise.all(ids.map((id) => loadAppModel(id, (f) => report(`car models: ${id}`, f)).catch(() => undefined)));
+    ids.forEach((id, i) => {
+      if (loaded[i]) assets.app[id] = loaded[i];
+    });
+  }
+  const need = (id: AppModelId) => !assets.app[id];
+  const [modelS, cybertruck] = await Promise.all([
+    need('bayberry') || need('y_high') ? loadTeslaAsset('modelS', report) : undefined,
+    need('cybertruck') ? loadTeslaAsset('cybertruck', report) : undefined,
+  ]);
+  assets = { ...assets, modelS, cybertruck };
 }
 
 async function ensureRigs(show: ShowEntry): Promise<void> {
@@ -287,7 +304,12 @@ async function ensureRigs(show: ShowEntry): Promise<void> {
   await new Promise((r) => setTimeout(r, 30));
   rigKey = key;
   rigs = show.cars.map(
-    (c) => new CarRig(c.kind, c.name, bodyOf(c), c.kind === 'cybertruck' ? assets.cybertruck : assets.modelS, PAINT[c.kind]),
+    (c) => {
+      const id = appModelFor(c);
+      const gltf = assets.app[id];
+      return new CarRig(c.kind, c.name, bodyOf(c), c.kind === 'cybertruck' ? assets.cybertruck : assets.modelS, PAINT[c.kind],
+        gltf && { id, gltf });
+    },
   );
   const first = !viewer.hasCars;
   const resized = rigs.length !== viewer.carCount;
