@@ -51,7 +51,7 @@ async def lifespan(_app):
     yield
 
 
-app = FastAPI(title="Tesla light show", lifespan=lifespan)
+app = FastAPI(title="Carreography", lifespan=lifespan)
 
 
 @app.middleware("http")

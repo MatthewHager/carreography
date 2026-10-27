@@ -1,4 +1,4 @@
-# The web app (webapp/) in a container:   docker build -t lightshow . && docker run -p 8000:8000 lightshow
+# The web app (webapp/) in a container:   docker build -t carreography . && docker run -p 8000:8000 carreography
 # Untested: this was written on a machine without Docker. See webapp/README.md.
 FROM python:3.12-slim
 

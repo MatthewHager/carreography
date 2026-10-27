@@ -1,5 +1,5 @@
 {
-  "name": "tesla-lightshow-preview3d",
+  "name": "carreography-preview3d",
   "version": "0.1.0",
   "private": true,
   "description": "Browser 3D viewer for Tesla light shows: a lineup of 1 to 5 cars playing their FSEQ files with the music.",

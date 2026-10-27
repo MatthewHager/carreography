@@ -1,4 +1,4 @@
-# Tesla Light Show Maker
+# Carreography
 
 Turn any song into a synchronized light show for a lineup of **one to five Teslas**: Model Y
 (2025+ or 2020–24) and Cybertruck, parked side by side facing the crowd. Every car gets its own
@@ -28,8 +28,8 @@ You need **Python 3.12**, **ffmpeg**, **git** and **uv**. On a Mac: `brew instal
 On Debian/Ubuntu: `apt install python3 ffmpeg git espeak-ng`, then install uv.
 
 ```bash
-git clone https://github.com/MatthewHager/tesla-lightshow.git
-cd tesla-lightshow
+git clone https://github.com/MatthewHager/carreography.git
+cd carreography
 ./setup.sh          # one time: the analysis environment (~3 GB of Python packages) and Tesla's files
 ```
 
