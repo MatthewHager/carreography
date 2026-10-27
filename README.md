@@ -54,7 +54,7 @@ python3 make_usb.py
 ```
 
 It asks which car, erases the drive (exFAT), names it after the car (`CAR1 LEFT Y`, `CAR2 TRUCK`,
-`CAR3 RIGHT Y`), copies that car's folder, checks every file and ejects it. Label each drive - the
+`CAR3 RIGHT`), copies that car's folder, checks every file and ejects it. Label each drive - the
 two Model Y drives are different. `python3 make_usb.py 2` goes straight to the Cybertruck's;
 `--list` shows which drives it sees. Without a Mac: format the drive exFAT and copy the car's
 `LightShow` folder (the folder itself) to the top level of the drive.

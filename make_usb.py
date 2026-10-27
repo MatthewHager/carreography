@@ -25,10 +25,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 USB = ROOT / "usb"
+# Drive names: at most 11 characters (diskutil's limit for exFAT volume names).
 CARS = {
     1: ("Car1_ModelY_Left", "CAR1 LEFT Y", "the Model Y on the crowd's left"),
     2: ("Car2_Cybertruck_Center", "CAR2 TRUCK", "the Cybertruck in the middle"),
-    3: ("Car3_ModelY_Right", "CAR3 RIGHT Y", "the Model Y on the crowd's right"),
+    3: ("Car3_ModelY_Right", "CAR3 RIGHT", "the Model Y on the crowd's right"),
 }
 ALIASES = {"1": 1, "left": 1, "l": 1, "2": 2, "truck": 2, "cybertruck": 2, "center": 2, "centre": 2, "c": 2,
            "3": 3, "right": 3, "r": 3}
@@ -37,7 +38,10 @@ MAX_BYTES = 512e9           # never offer anything bigger than this: that's a ba
 
 def diskutil(verb, *args, plist=True):
     cmd = ["diskutil", verb, *(["-plist"] if plist else []), *args]
-    out = subprocess.run(cmd, check=True, capture_output=True).stdout
+    r = subprocess.run(cmd, capture_output=True)
+    if r.returncode:
+        sys.exit(f"diskutil {verb} failed: {(r.stderr or r.stdout).decode().strip()}")
+    out = r.stdout
     return plistlib.loads(out) if plist else out.decode()
 
 
