@@ -37,9 +37,9 @@ To look at a show, serve the repo (`python3 -m http.server 8765`) and open
   side.
 - `build.py` is the CLI. `webapp/` wraps it (FastAPI, one job at a time). `make_usb.py` is
   macOS-only drive making.
-- `preview3d/`: TypeScript + three.js. AGPL code adapted from Tesla Lightshow Studio. Car bodies:
-  `car/appBody.ts` (Tesla's app models, if extracted with `lightshow/tesla_app_models.py`), else
-  `car/meshBody.ts` (Tesla's xLights meshes) and `car/bodies.ts` (code-built).
+- `preview3d/`: TypeScript + three.js. AGPL code adapted from Tesla Lightshow Studio. The cars are
+  Tesla's own models from the Tesla app only (`car/appBody.ts`; extracted with
+  `lightshow/tesla_app_models.py`, never committed). Don't add hand-built or approximated car models.
 
 ## Invariants (don't break these)
 

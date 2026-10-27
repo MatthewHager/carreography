@@ -11,8 +11,9 @@ github.com/koenhendriks/tesla-model-extractor) turns an app bundle you have (.ap
 
 This runs it for the cars the shows support - the 2025+ Model Y (bayberry), the 2020-24 Model Y
 (y_high) and the Cybertruck - and puts them where the viewer looks:
-preview3d/public/models/tesla-app/ and preview3d/dist/models/tesla-app/. Without them the viewer
-draws its older models. The models are Tesla's: they stay out of the repository (.gitignore).
+preview3d/public/models/tesla-app/ and preview3d/dist/models/tesla-app/. They're the only car models the
+viewer draws (until they're there it says how to get them). The models are Tesla's: they stay out of
+the repository (.gitignore).
 
 Plain Python with no dependencies; the first run takes a few minutes (the extractor unpacks the app).
 """

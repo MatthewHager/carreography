@@ -11,9 +11,10 @@ uploads) and the web app's three packages:
     uv pip install --python .venv312/bin/python -r requirements-web.txt
     .venv312/bin/python -m webapp          # from the repo root; python3 webapp/server.py works too
 
-Then open <http://localhost:8000>. The first start fetches Tesla's car models for the 3D viewer
-(`lightshow/tesla_files.py`; needs git and the network). The diagnostic show needs `say` (macOS) or
-`espeak-ng`.
+Then open <http://localhost:8000>. The "Watch it in 3D" viewer draws Tesla's own car models from the
+Tesla app, which aren't in the repository: install them once with
+`python3 -m lightshow.tesla_app_models <Tesla app bundle>` (see `preview3d/README.md`). Building and
+downloading shows work without them. The diagnostic show needs `say` (macOS) or `espeak-ng`.
 
 The server can run in any Python that has `requirements-web.txt`; the build itself runs in the Python named
 by `$LIGHTSHOW_PYTHON` (default `.venv312/bin/python`), as it does when you run `build.py` by hand.

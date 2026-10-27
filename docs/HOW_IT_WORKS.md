@@ -167,9 +167,9 @@ reset to its default; check each Model Y opens fully.
   (it redirects to `preview3d/dist/`; works from an iPad on the same Wi-Fi, tap Play once for audio).
   It plays the set list in `preview/shows.json`, or any build's own list with
   `?manifest=<url of its shows.json>` (`build.py --out` and the web app write one). The lineup is
-  drawn from Tesla's own models (fetched at setup) on a night lot: every lamp and light-bar LED driven
-  from the real show files, closures moving at their travel times, the truck's bar tilting with the
-  frunk lid. Rebuild after code changes with `cd preview3d && npm install && npm run build` (see
+  drawn from Tesla's own models and animations from the Tesla app (installed once, see
+  `preview3d/README.md`) on a night lot: every lamp and light-bar LED driven from the real show files,
+  closures moving at their travel times, the truck's bar riding up on the frunk lid. Rebuild after code changes with `cd preview3d && npm install && npm run build` (see
   `preview3d/README.md`; built on Tesla Lightshow Studio, AGPL-3.0).
 - **Quantization** — `tools/quantize_check.py <show>`: for each phrase, the share of light hits on
   the performer-following sixteenth grid and on played attacks, flagging beat moves that drift

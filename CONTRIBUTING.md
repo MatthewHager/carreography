@@ -110,7 +110,9 @@ output, and what the motors do differ. To add, say, a Model 3:
 4. **`lightshow/motors.py`**: travel times (`LIFTGATE_OPEN_S`) and anything the car lacks. A Model 3
    has a trunk, not a liftgate; check the channel's behaviour.
 5. **`lightshow/diagnostic.py`**: the wording for the new car (what it lacks, its lid's name).
-6. **The 3D preview**: a profile in `preview3d/src/core/vehicles.ts` and a body in `preview3d/src/rig.ts`.
+6. **The 3D preview**: a profile in `preview3d/src/core/vehicles.ts`, and the car's Tesla app model in
+   `preview3d/src/car/appBody.ts` (its id in `lightshow/tesla_app_models.py`, and rules mapping its
+   lamp meshes to channels and its animation clips to closures). Only Tesla's official models.
 7. **Tests**: add the letter to the lineup lists in `tests/`.
 8. **A test report**: run the diagnostic on the real car, then fill in what each lamp channel did.
 
@@ -146,4 +148,5 @@ web app). Put it on the car, play it, and open an issue with the **Car test repo
 
 The project is AGPL-3.0 (see [LICENSE](LICENSE)); contributions are accepted under the same licence.
 Don't add files you don't have the right to share: no commercial recordings, and none of Tesla's
-models or files (they're fetched at setup).
+models or files (the validator is fetched at setup; the car models are extracted from the Tesla
+app). The preview draws only Tesla's official models: don't add hand-built or approximated cars.

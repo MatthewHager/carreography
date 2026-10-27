@@ -1,15 +1,13 @@
 import * as THREE from 'three';
 // App shell: show list, audio playback and sync, scrub bar, camera presets,
-// and building the lineup (1 to 5 cars) from Tesla's meshes.
+// and building the lineup (1 to 5 cars) from Tesla's own car models.
 
 import './style.css';
 import { readFseq } from './core/fseq';
 import { simulate } from './core/simulate';
-import { loadTeslaAsset, fetchWithProgress, type TeslaAsset } from './car/teslaAssets';
 import { CarRig, type CarKind, type YBody } from './rig';
-import { loadAppModel, type AppModelId } from './car/appBody';
+import { fetchWithProgress, loadAppModel, type AppModelId } from './car/appBody';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { CoolerFog } from './coolerFog';
 import { CAMERA_PRESETS, Viewer } from './viewer';
 
 interface ShowCar {
@@ -60,7 +58,6 @@ audio.preload = 'auto';
 let shows: ShowList = {};
 let currentShow = '';
 let rigs: CarRig[] = [];
-let cooler: CoolerFog | undefined;
 let rigKey = '';
 let durationS = 0;
 let stepMs = 20;
@@ -119,12 +116,7 @@ function showTime(t: number): void {
   if (!scrubbing) scrub.value = String(t);
 }
 
-let lastTick = performance.now();
 viewer.onTick = () => {
-  const nowMs = performance.now();
-  const dt = Math.min(0.1, (nowMs - lastTick) / 1000);
-  lastTick = nowMs;
-  cooler?.update(dt);
   let t = nowS();
   // Keep time monotonic through small audio-clock jitter; follow real jumps.
   if (playing && t < shownT && shownT - t < 0.12) t = shownT;
@@ -258,7 +250,13 @@ async function fetchShowFile(path: string): Promise<Uint8Array> {
 
 // --- cars ---------------------------------------------------------------------------
 
-let assets: { modelS?: TeslaAsset; cybertruck?: TeslaAsset; app: Partial<Record<AppModelId, GLTF>> } = { app: {} };
+/** Tesla's app models, loaded when a show first needs them (appBody.ts). */
+const models = new Map<AppModelId, Promise<GLTF | undefined>>();
+const MODEL_NAMES: Record<AppModelId, string> = {
+  bayberry: 'Model Y (2025+)',
+  y_high: 'Model Y (2020-24)',
+  cybertruck: 'Cybertruck',
+};
 
 function bodyOf(c: ShowCar): YBody {
   if (c.body === 'modely2020') return 'mesh';
@@ -266,33 +264,35 @@ function bodyOf(c: ShowCar): YBody {
   return yBodySelect.value as YBody;
 }
 
-/** Which of Tesla's app models draws a car (appBody.ts); ?models=classic uses the older meshes. */
+/** Which of Tesla's app models draws a car. */
 function appModelFor(c: ShowCar): AppModelId {
   return c.kind === 'cybertruck' ? 'cybertruck' : bodyOf(c) === 'mesh' ? 'y_high' : 'bayberry';
 }
 
-async function loadAssets(): Promise<void> {
-  const progress = new Map<string, number>();
-  const report = (label: string, f: number) => {
-    progress.set(label.split(':')[0]!, f);
-    const total = [...progress.values()].reduce((a, b) => a + b, 0) / Math.max(1, progress.size);
-    setStatus(`Loading ${label}…`, total);
-  };
-  // Tesla's app models when they've been extracted (python3 -m lightshow.tesla_app_models), else
-  // the meshes from Tesla's light-show repo.
-  if (params.get('models') !== 'classic') {
-    const ids: AppModelId[] = ['bayberry', 'y_high', 'cybertruck'];
-    const loaded = await Promise.all(ids.map((id) => loadAppModel(id, (f) => report(`car models: ${id}`, f)).catch(() => undefined)));
-    ids.forEach((id, i) => {
-      if (loaded[i]) assets.app[id] = loaded[i];
-    });
+/** The models these cars need; a clear error naming the setup step if any isn't installed. */
+async function loadModels(cars: ShowCar[]): Promise<Map<AppModelId, GLTF>> {
+  const ids = [...new Set(cars.map(appModelFor))];
+  const progress = new Map<AppModelId, number>();
+  const loaded = await Promise.all(
+    ids.map((id) => {
+      if (!models.has(id)) {
+        models.set(id, loadAppModel(id, (f) => {
+          progress.set(id, f);
+          setStatus('Loading car models…', [...progress.values()].reduce((a, b) => a + b, 0) / ids.length);
+        }).catch(() => undefined));
+      }
+      return models.get(id)!;
+    }),
+  );
+  const missing = ids.filter((_, i) => !loaded[i]);
+  if (missing.length) {
+    throw new Error(
+      `the 3D car models aren't installed (${missing.map((id) => MODEL_NAMES[id]).join(', ')}). ` +
+        'They are Tesla\'s own, from the Tesla app: run python3 -m lightshow.tesla_app_models <Tesla app bundle> ' +
+        '(see preview3d/README.md).',
+    );
   }
-  const need = (id: AppModelId) => !assets.app[id];
-  const [modelS, cybertruck] = await Promise.all([
-    need('bayberry') || need('y_high') ? loadTeslaAsset('modelS', report) : undefined,
-    need('cybertruck') ? loadTeslaAsset('cybertruck', report) : undefined,
-  ]);
-  assets = { ...assets, modelS, cybertruck };
+  return new Map(ids.map((id, i) => [id, loaded[i]!]));
 }
 
 async function ensureRigs(show: ShowEntry): Promise<void> {
@@ -300,28 +300,17 @@ async function ensureRigs(show: ShowEntry): Promise<void> {
   yBodySelect.hidden = !show.cars.some((c) => c.kind === 'modely' && !c.body);
   const key = show.cars.map((c) => `${c.kind}:${bodyOf(c)}`).join(',');
   if (key === rigKey) return;
+  const gltfs = await loadModels(show.cars);
   setStatus('Building cars…');
   await new Promise((r) => setTimeout(r, 30));
   rigKey = key;
-  rigs = show.cars.map(
-    (c) => {
-      const id = appModelFor(c);
-      const gltf = assets.app[id];
-      return new CarRig(c.kind, c.name, bodyOf(c), c.kind === 'cybertruck' ? assets.cybertruck : assets.modelS, PAINT[c.kind],
-        gltf && { id, gltf });
-    },
-  );
+  rigs = show.cars.map((c) => {
+    const id = appModelFor(c);
+    return new CarRig(c.kind, c.name, bodyOf(c), PAINT[c.kind], { id, gltf: gltfs.get(id)! });
+  });
   const first = !viewer.hasCars;
   const resized = rigs.length !== viewer.carCount;
   viewer.setCars(rigs);
-  if (!cooler && params.get('cooler') === '1') {
-    // ?cooler=1: a cyber cooler with dry ice and lights in front of the lineup (a candy station),
-    // a step to the crowd's left of centre so it does not hide the middle car's nose.
-    cooler = new CoolerFog();
-    viewer.scene.add(cooler.group);
-    cooler.group.position.set(4.6, 0, 1.1);
-    cooler.group.rotation.y = 0;   // long side parallel to the lineup, open chest toward the crowd
-  }
   if (resized) viewer.flyTo(params.get('cam') ?? '3/4', first);   // a longer or shorter lineup: refit
   (window as unknown as { __rigs: CarRig[] }).__rigs = rigs;
 }
@@ -415,7 +404,6 @@ async function main(): Promise<void> {
   const first = wanted && shows[wanted] ? wanted : Object.keys(shows)[0];
   if (!first) throw new Error('shows.json lists no shows');
   showSelect.value = first;
-  await loadAssets();
   await loadShow(first);
   const t = Number(params.get('t'));
   if (t > 0) seek(t);

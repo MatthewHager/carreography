@@ -13,9 +13,7 @@ shows, get the same recordings and put them in `songs/` under these names.
 
 - **3D viewer** (`preview3d/`): adapted from [Tesla Lightshow Studio](https://github.com/nathanjgrace/tesla-lightshow-studio)
   by Nathan Grace, AGPL-3.0-only (see `preview3d/LICENSE`). The car models it draws are Tesla's own,
-  from the xLights show folder Tesla publishes with its
-  [light-show repo](https://github.com/teslamotors/light-show); `lightshow/tesla_files.py` fetches
-  them at setup, since Tesla publishes them without a licence to redistribute.
+  from the Tesla app (below).
 - **Tesla's app models** (optional, for the 3D viewer): extracted from your own copy of the Tesla
   Android app with [tesla-model-extractor](https://github.com/koenhendriks/tesla-model-extractor)
   (MIT) by `lightshow/tesla_app_models.py`; Tesla's, not redistributed here.

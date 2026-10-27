@@ -54,8 +54,7 @@ BEATS_PY = Path(os.environ.get("LIGHTSHOW_BEATS_PYTHON") or ROOT / ".venv_beats"
 DEFAULT_LINEUP = "YCY"
 
 sys.path.insert(0, str(ROOT))
-from lightshow import tesla_files as TESLA  # noqa: E402  (plain Python: safe outside the analysis environment)
-from lightshow import vehicles as VEH      # noqa: E402
+from lightshow import vehicles as VEH      # noqa: E402  (plain Python: safe outside the analysis environment)
 
 
 # --- set list ----------------------------------------------------------------------------------
@@ -400,7 +399,6 @@ def main():
     else:
         songs = [{**s, "lineup": lineup} for s in select(setlist(), args.songs)]
 
-    TESLA.ensure_viewer_models()
     if args.assemble:
         for song in songs:
             prepare_audio(song)

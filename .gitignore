@@ -3,7 +3,8 @@
 __pycache__/
 *.pyc
 
-# Third-party files fetched by lightshow/tesla_files.py (Tesla's repo, the viewer's car models) and
+# Third-party files: Tesla's repo (lightshow/tesla_files.py), the viewer's car models from the Tesla
+# app (lightshow/tesla_app_models.py), and
 # local study material: none of it is ours to redistribute
 vendor/
 preview3d/public/models/

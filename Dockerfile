@@ -20,7 +20,7 @@ RUN python -m venv /opt/beats \
 
 COPY . .
 # Tesla's light-show repo (vendor/light-show) and the 3D viewer's car models, which the repo doesn't carry
-RUN python3 -m lightshow.tesla_files
+RUN python3 -m lightshow.tesla_files   # Tesla's light-show repo: its validator
 
 RUN useradd --create-home app && mkdir -p /data/jobs && chown -R app /app /data
 USER app

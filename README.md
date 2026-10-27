@@ -33,6 +33,13 @@ cd tesla-lightshow
 ./setup.sh          # one time: the analysis environment (~3 GB of Python packages) and Tesla's files
 ```
 
+The 3D preview draws Tesla's own car models from the Tesla app, which can't be shipped here. Install
+them once from a Tesla Android app bundle (see [preview3d/README.md](preview3d/README.md#the-car-models-install-once)):
+
+```bash
+python3 -m lightshow.tesla_app_models ~/Downloads/Tesla_4.61.6-4647.apkm
+```
+
 ### The web app
 
 ```bash
@@ -174,9 +181,6 @@ docs/               how it works, the choreography, sources
   crowd hears it through the open windows. Close them afterwards.
 - **Motor limits.** Every show stays within Tesla's per-show command limits and the ~30 s dance
   advice; `tools/closure_audit.py` checks it.
-- **Better car models.** The 3D preview can use Tesla's own models and animations from the Tesla
-  app: `python3 -m lightshow.tesla_app_models <Tesla app bundle>` (see
-  [preview3d/README.md](preview3d/README.md#teslas-app-models-recommended)).
 - **Tested on macOS** (Apple Silicon) and Linux (via the web app). Windows is untested.
 - **Music rights.** Use recordings you have the right to use. The light-show files the generator
   makes are yours.
@@ -185,9 +189,9 @@ docs/               how it works, the choreography, sources
 
 [AGPL-3.0](LICENSE). The 3D preview is adapted from
 [Tesla Lightshow Studio](https://github.com/nathanjgrace/tesla-lightshow-studio) by Nathan Grace
-(AGPL-3.0). Tesla's car models, xLights layout and validator are fetched from
-[teslamotors/light-show](https://github.com/teslamotors/light-show) at setup and aren't
-redistributed here. Music analysis uses [basic-pitch](https://github.com/spotify/basic-pitch),
+(AGPL-3.0). Tesla's validator is fetched from
+[teslamotors/light-show](https://github.com/teslamotors/light-show) at setup, and the preview's car
+models are extracted from your own copy of the Tesla app; neither is redistributed here. Music analysis uses [basic-pitch](https://github.com/spotify/basic-pitch),
 [Beat This!](https://github.com/CPJKU/beat_this), [Demucs](https://github.com/facebookresearch/demucs)
 and [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Full credits are in
 [docs/SOURCES.md](docs/SOURCES.md).

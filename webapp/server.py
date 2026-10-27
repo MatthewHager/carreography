@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse                        
 from fastapi.staticfiles import StaticFiles                                      # noqa: E402
 from starlette.background import BackgroundTask                                  # noqa: E402
 
-from lightshow import tesla_files, vehicles                                      # noqa: E402
+from lightshow import vehicles                                                  # noqa: E402
 from webapp import jobs                                                          # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -44,10 +44,9 @@ QUEUE = jobs.JobQueue()
 
 @asynccontextmanager
 async def lifespan(_app):
-    try:
-        tesla_files.ensure_viewer_models()          # Tesla's car models aren't in the repo: fetch them once
-    except (OSError, subprocess.CalledProcessError, zipfile.BadZipFile, KeyError) as e:
-        print(f"warning: the 3D viewer's car models are missing and could not be fetched ({e})", file=sys.stderr)
+    if not (VIEWER / "models" / "tesla-app").is_dir():
+        print("note: the 3D viewer's car models aren't installed (python3 -m lightshow.tesla_app_models "
+              "<Tesla app bundle>); builds and downloads work without them", file=sys.stderr)
     QUEUE.start()
     yield
 

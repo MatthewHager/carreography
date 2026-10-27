@@ -1,20 +1,12 @@
-// What a body builder (meshBody.ts for Tesla's meshes, bodies.ts for the
-// code-built bodies) uses to add the parts a show drives. Adapted from
+// What the body builder (appBody.ts, Tesla's app models) uses to add the parts a show drives. Adapted from
 // tesla-lightshow-studio's CarScene.ts (AGPL-3.0, Nathan Grace); in this
 // viewer each car in the lineup has its own Builder (see rig.ts).
 
 import type * as THREE from 'three';
 
 export interface Materials {
+  /** The lineup's paint for this kind of car (its colour is copied onto the model's paint). */
   paint: THREE.MeshPhysicalMaterial;
-  /** Paint for Tesla's own meshes: their texture is a red paint bake, read as shading. */
-  meshPaint: THREE.MeshPhysicalMaterial;
-  glass: THREE.MeshPhysicalMaterial;
-  sideGlass: THREE.MeshPhysicalMaterial;
-  smallPaint: THREE.MeshStandardMaterial;
-  trim: THREE.MeshStandardMaterial;
-  cabin: THREE.MeshStandardMaterial;
-  display: THREE.MeshStandardMaterial;
 }
 
 /** A glow sprite the builder places by hand (the charge port LED). */

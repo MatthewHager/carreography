@@ -1,24 +1,19 @@
-// One car of the lineup: builds its body (Tesla's mesh or the studio's
-// code-built body), collects the parts the show drives, and applies a
-// simulation frame to them. The light/closure wiring follows
+// One car of the lineup: builds its body from Tesla's own model (car/appBody.ts),
+// collects the parts the show drives, and applies a simulation frame to them. The light/closure wiring follows
 // tesla-lightshow-studio's CarScene.ts (AGPL-3.0, Nathan Grace), split out so
 // several cars can share one scene.
 
 import * as THREE from 'three';
 import type { Simulation } from './core/simulate';
-import type { BodyStyle, VehicleProfile } from './core/vehicles';
+import type { VehicleProfile } from './core/vehicles';
 import { CYBERTRUCK_2024, MODEL_Y_2020, MODEL_Y_2025 } from './core/vehicles';
-import { buildBody } from './car/bodies';
 import type { Builder, BuiltBody, GlowHandle, Materials } from './car/builder';
-import { MODEL_Y_FROM_S } from './car/derive';
-import { buildTeslaBody } from './car/meshBody';
-import type { TeslaAsset } from './car/teslaAssets';
 import { buildAppBody, type AppModelId } from './car/appBody';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GlowEntry } from './glow';
 
 export type CarKind = 'modely' | 'cybertruck';
-/** Which Model Y: 2020-24 (Tesla's Model S mesh reshaped) or 2025+ "Juniper" (code-built, front light bar). */
+/** Which Model Y: 2020-24 ('mesh') or 2025+ "Juniper" ('refresh', front light bar). */
 export type YBody = 'mesh' | 'refresh';
 
 interface LightPart {
@@ -77,20 +72,19 @@ export class CarRig {
   constructor(
     readonly kind: CarKind,
     readonly name: string,
-    private readonly yBody: YBody,
-    asset: TeslaAsset | undefined,
+    yBody: YBody,
     paint: string,
-    /** Tesla's own model from the Tesla app (appBody.ts), when it has been extracted. */
-    private readonly app?: { id: AppModelId; gltf: GLTF },
+    /** Tesla's own model from the Tesla app (appBody.ts). */
+    private readonly app: { id: AppModelId; gltf: GLTF },
   ) {
     this.profile = kind === 'cybertruck' ? CYBERTRUCK_2024 : yBody === 'mesh' ? MODEL_Y_2020 : MODEL_Y_2025;
     this.m = makeMaterials(paint, kind);
     this.cabinLight.visible = false;
     this.group.add(this.car);
-    this.build(asset);
+    this.build();
   }
 
-  private build(asset: TeslaAsset | undefined): void {
+  private build(): void {
     const car = this.car;
     const builder: Builder = {
       car,
@@ -125,18 +119,8 @@ export class CarRig {
       },
     };
 
-    if (this.app) {
-      this.bounds = buildAppBody(builder, this.app.gltf, this.app.id);
-    } else if (this.kind === 'cybertruck') {
-      const style: BodyStyle = CYBERTRUCK_2024.body;
-      this.bounds = asset ? buildTeslaBody(builder, asset, style) : buildBody(builder, style);
-    } else if (this.yBody === 'mesh' && asset) {
-      // Tesla's Model S mesh reshaped to Model Y dimensions (derive.ts).
-      this.bounds = buildTeslaBody(builder, asset, { model: 'modelY', fogLamps: true }, MODEL_Y_FROM_S);
-    } else {
-      this.bounds = buildBody(builder, MODEL_Y_2025.body);
-    }
-    // The studio's body builders add the cabin light to the car; it stays
+    this.bounds = buildAppBody(builder, this.app.gltf, this.app.id);
+    // The body builder adds the cabin light to the car; it stays
     // hidden (no per-pixel light cost) and only marks where the display is.
     this.cabinLight.visible = false;
     car.updateMatrixWorld(true);
@@ -255,12 +239,15 @@ export class CarRig {
 
   /**
    * Interior RGB (centre display plus five accent strips): soft colored glows
-   * inside the greenhouse, visible through the glass, and a tint on the glass.
+   * inside the greenhouse, visible through the glass.
    */
   private placeCabin(): void {
     const box = new THREE.Box3();
     this.car.traverse((o) => {
-      if (o instanceof THREE.Mesh && (o.material === this.m.glass || o.material === this.m.sideGlass)) box.expandByObject(o);
+      // The greenhouse: the model's visible glass.
+      if (o instanceof THREE.Mesh && o.visible && [o.material].flat().some((m) => m.transparent && /glass|window/i.test(m.name))) {
+        box.expandByObject(o);
+      }
     });
     if (box.isEmpty()) box.set(new THREE.Vector3(-1, 0.9, -0.7), new THREE.Vector3(0.8, 1.4, 0.7));
     const inv = new THREE.Matrix4().copy(this.car.matrixWorld).invert();
@@ -336,9 +323,6 @@ export class CarRig {
     }
     for (const { handle, entry } of this.freeGlows) entry.color.copy(handle.color).multiplyScalar(handle.level);
     // Interior RGB.
-    let r = 0;
-    let g = 0;
-    let b = 0;
     for (const c of this.cabin) {
       let cr = 0;
       let cg = 0;
@@ -349,19 +333,7 @@ export class CarRig {
         cb = Math.max(cb, this.level(bi));
       }
       c.entry.color.setRGB(cr, cg, cb).multiplyScalar(0.32);
-      r = Math.max(r, cr);
-      g = Math.max(g, cg);
-      b = Math.max(b, cb);
     }
-    const dr = this.level('centerFrontDisplayRed');
-    const dg = this.level('centerFrontDisplayGreen');
-    const db = this.level('centerFrontDisplayBlue');
-    this.m.display.emissive.setRGB(dr, dg, db);
-    this.m.display.emissiveIntensity = 2.5;
-    this.m.glass.emissive.setRGB(r, g, b);
-    this.m.glass.emissiveIntensity = 0.015;
-    this.m.sideGlass.emissive.setRGB(r, g, b);
-    this.m.sideGlass.emissiveIntensity = 0.025;
   }
 
   dispose(): void {
@@ -382,16 +354,7 @@ function makeMaterials(paint: string, kind: CarKind): Materials {
     kind === 'cybertruck'
       ? { color: paint, metalness: 0.3, roughness: 0.55, clearcoat: 0 }
       : { color: paint, metalness: 0.15, roughness: 0.6, clearcoat: 0 };
-  return {
-    paint: new THREE.MeshPhysicalMaterial(paintParams),
-    meshPaint: paintFromBake(new THREE.MeshPhysicalMaterial(paintParams)),
-    glass: new THREE.MeshPhysicalMaterial({ color: '#06080b', metalness: 0, roughness: 0.5 }),
-    sideGlass: new THREE.MeshPhysicalMaterial({ color: '#06080b', transparent: true, opacity: 0.9, metalness: 0, roughness: 0.5 }),
-    smallPaint: new THREE.MeshStandardMaterial({ color: '#d9dadc', roughness: 0.55 }),
-    trim: new THREE.MeshStandardMaterial({ color: '#0a0b0d', metalness: 0.05, roughness: 0.7 }),
-    cabin: new THREE.MeshStandardMaterial({ color: '#1b1c20', roughness: 0.9 }),
-    display: new THREE.MeshStandardMaterial({ color: '#000', emissive: '#000' }),
-  };
+  return { paint: new THREE.MeshPhysicalMaterial(paintParams) };
 }
 
 const tmpA = new THREE.Vector3();
@@ -535,26 +498,4 @@ function ledStrip(material: THREE.MeshStandardMaterial, levels: Float32Array, fr
  * Recolors Tesla's paint bake: where the texture is red (paint), its
  * brightness becomes shading under the material color. (From the studio.)
  */
-function paintFromBake(material: THREE.MeshPhysicalMaterial): THREE.MeshPhysicalMaterial {
-  material.userData.paintScale = 1;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.paintScale = {
-      get value() {
-        return material.userData.paintScale as number;
-      },
-    };
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float paintScale;')
-      .replace(
-        '#include <map_fragment>',
-        `#ifdef USE_MAP
-          vec4 bake = texture2D( map, vMapUv );
-          float paintMask = clamp( ( bake.r - max( bake.g, bake.b ) ) / max( bake.r, 1e-3 ) * 1.6, 0.0, 1.0 );
-          float shade = clamp( bake.r * paintScale, 0.0, 1.0 );
-          diffuseColor.rgb = mix( bake.rgb, diffuseColor.rgb * shade, paintMask );
-        #endif`,
-      );
-  };
-  return material;
-}
 

@@ -1,9 +1,9 @@
 // Tesla's own car models from the Tesla app, with Tesla's own closure
 // animations (frunk, liftgate, doors, windows, mirrors, charge port).
 //
-// They're not in the repo: run `python3 -m lightshow.tesla_app_models <Tesla
-// Android app bundle>` to extract them into public/models/tesla-app/ (and
-// dist/). Without them the viewer uses the meshes in meshBody.ts/bodies.ts.
+// They're the only car models the viewer draws, and they're not in the repo (they're Tesla's):
+// `python3 -m lightshow.tesla_app_models <Tesla Android app bundle>` extracts them into
+// public/models/tesla-app/ (and dist/).
 //
 // The app keeps each kind of lamp in one mesh (all the DRLs, all the brake
 // lights...), so lamps are split here by where each triangle sits: per side,
@@ -14,8 +14,6 @@ import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Builder, BuiltBody } from './builder';
 import { COLORS } from './kit';
-import { headBeams } from './parts';
-import { fetchWithProgress } from './teslaAssets';
 
 export type AppModelId = 'bayberry' | 'y_high' | 'cybertruck';
 
@@ -26,7 +24,32 @@ const FILES: Record<AppModelId, string> = {
 };
 const BASE = './models/tesla-app/';
 
-/** The model, or undefined if it hasn't been extracted (the viewer then uses its own bodies). */
+/** A file's bytes, reporting progress (0-1) while it downloads. */
+export async function fetchWithProgress(url: string, onProgress?: (f: number) => void): Promise<ArrayBuffer> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body || !total || !onProgress) return res.arrayBuffer();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    onProgress(Math.min(1, got / total));
+  }
+  const out = new Uint8Array(got);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out.buffer;
+}
+
+/** The model, or undefined if it hasn't been extracted. */
 export async function loadAppModel(id: AppModelId, onProgress?: (f: number) => void): Promise<GLTF | undefined> {
   const url = BASE + FILES[id];
   const head = await fetch(url, { method: 'HEAD' }).catch(() => undefined);
@@ -400,6 +423,18 @@ function bakeTriangles(geo: THREE.BufferGeometry, m: THREE.Matrix4, keep: boolea
     out.setAttribute(name, new THREE.Float32BufferAttribute(data, a.itemSize, a.normalized));
   }
   return out;
+}
+
+/** Headlight beams: light pools on the ground in front of each side's headlights (rig.ts). */
+function headBeams(b: Builder, at: { x: number; y: number; z: number }): void {
+  for (const side of ['left', 'right'] as Side[]) {
+    const s = side === 'right' ? 1 : -1;
+    const beam = new THREE.SpotLight('#fff3dc', 0, 28, 0.42, 0.65, 1.3);
+    beam.position.set(at.x, at.y, s * at.z);
+    beam.target.position.set(at.x + 12, 0, s * (at.z + 0.9));
+    b.car.add(beam, beam.target);
+    b.beam([`${side}OuterMainBeam`, `${side}InnerMainBeam`], beam, 160);
+  }
 }
 
 interface CarTri {
