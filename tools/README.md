@@ -12,7 +12,7 @@ Checking and reviewing shows. Run them from the project root with the analysis e
 | `feel_all.py [show ...]` | How strongly the lights pulse on the beat, per song, flagging sections where the beat map looks off or the lights miss beats they should hit. |
 | `closure_audit.py <.fseq ...>` | Every motor command checked against Tesla's rules: per-show limits, Dance only once open, ~30 s dance budget, the charge port's 2-minute auto-close, reversals before a move can finish. `--summary` for one line per file. |
 | `motor_activity.py [show ...]` | Per show: share of the song with a motor moving, the longest still stretch, and seconds moving / commands used for the lids, windows, mirrors and charge port. |
-| `motor_log.py <show> [liftgate\|windows\|mirrors\|port]` | Every closure command in time order across the three cars. |
+| `motor_log.py <show> [liftgate\|windows\|mirrors\|port]` | Every closure command in time order across the cars. |
 
 ## Looking closer
 
@@ -22,7 +22,7 @@ Checking and reviewing shows. Run them from the project root with the analysis e
 | `timeline.py <show> <t0> <t1>` | Piano roll of the transcribed notes above each car's lamps, for checking sync by eye. |
 | `quantize_check.py <show>` | Per phrase: share of light hits on the beat grid and on played notes. |
 | `move_lab.py <show> [move ...]` | Plays each move alone on a song's analysis and measures how it sits on the beat - for testing a new move. |
-| `orientation_test.py` | A 12 s calibration show (lights march crowd-left to right); open the viewer with `?labels=1`. |
+| `orientation_test.py` | A 12 s calibration show for setlist.json's lineup (lights march crowd-left to right); open the viewer with `?labels=1`. |
 
 ## Preview videos
 

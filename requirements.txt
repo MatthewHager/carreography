@@ -13,3 +13,4 @@ torch==2.14.1
 demucs==4.1.0             # stem separation for band songs
 faster-whisper==1.2.1     # lyric timing for sung songs
 pyflakes==4.0.3           # lint (optional)
+pytest==9.0.1             # tests (optional)

@@ -2,8 +2,10 @@
 """Make a car's USB drive (macOS): plug in a drive, run this, answer two questions.
 
     python3 make_usb.py              asks which car, waits for a USB drive, then does everything
-    python3 make_usb.py 2            car 2 (the Cybertruck); also: 1 / left, 2 / truck, 3 / right
+    python3 make_usb.py 2            car 2 (numbered from the crowd's left); also left, right, truck
     python3 make_usb.py --list       show the USB drives this would use, change nothing
+
+The cars are the lineup in setlist.json (build.py --lineup to change it).
 
 It erases the drive (exFAT, Master Boot Record), names it after the car, copies that car's
 LightShow folder from usb/ (build.py makes it), checks every file against the original and
@@ -15,6 +17,7 @@ erasing - only when you're sure which drive it is).
 
 import argparse
 import hashlib
+import json
 import plistlib
 import shutil
 import struct
@@ -25,14 +28,41 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 USB = ROOT / "usb"
-# Drive names: at most 11 characters (diskutil's limit for exFAT volume names).
-CARS = {
-    1: ("Car1_ModelY_Left", "CAR1 LEFT Y", "the Model Y on the crowd's left"),
-    2: ("Car2_Cybertruck_Center", "CAR2 TRUCK", "the Cybertruck in the middle"),
-    3: ("Car3_ModelY_Right", "CAR3 RIGHT", "the Model Y on the crowd's right"),
-}
-ALIASES = {"1": 1, "left": 1, "l": 1, "2": 2, "truck": 2, "cybertruck": 2, "center": 2, "centre": 2, "c": 2,
-           "3": 3, "right": 3, "r": 3}
+sys.path.insert(0, str(ROOT))
+from lightshow import vehicles as VEH      # noqa: E402  (plain Python)
+
+# The drive names the classic three-car lineup's drives were made with; other lineups get
+# "CAR<n> MODELY" / "CAR<n> TRUCK". At most 11 characters (diskutil's limit for exFAT names).
+CLASSIC_LABELS = {"Car1_ModelY_Left": "CAR1 LEFT Y", "Car2_Cybertruck_Center": "CAR2 TRUCK",
+                  "Car3_ModelY_Right": "CAR3 RIGHT"}
+
+
+def lineup_cars():
+    """{number: (folder, drive name, who)} for setlist.json's lineup."""
+    setlist = ROOT / "setlist.json"
+    lineup = json.loads(setlist.read_text()).get("lineup", "YCY") if setlist.exists() else "YCY"
+    out = {}
+    for i, (folder, v, place) in enumerate(VEH.cars(lineup), 1):
+        model = "Cybertruck" if v.kind == "cybertruck" else "Model Y"
+        where = VEH.SPOKEN_PLACES[place]
+        label = CLASSIC_LABELS.get(folder) or f"CAR{i} {'TRUCK' if v.kind == 'cybertruck' else 'MODELY'}"
+        out[i] = (folder, label, f"the {model}{' ' + where if where else ''}")
+    return out
+
+
+def aliases(cars):
+    """What people may type for each car: its number, left/right for the ends, truck if there's one."""
+    out = {str(n): n for n in cars}
+    if len(cars) > 1:
+        out.update({"left": 1, "l": 1, "right": len(cars), "r": len(cars)})
+    trucks = [n for n, (folder, _, _) in cars.items() if "Cybertruck" in folder]
+    if len(trucks) == 1:
+        out.update({"truck": trucks[0], "cybertruck": trucks[0]})
+    return out
+
+
+CARS = lineup_cars()
+ALIASES = aliases(CARS)
 MAX_BYTES = 512e9           # never offer anything bigger than this: that's a backup disk, not a stick
 
 
@@ -75,7 +105,7 @@ def describe(d):
 def pick_car(arg):
     while arg is None or str(arg).lower() not in ALIASES:
         if arg is not None:
-            print(f"  '{arg}' isn't a car - use 1, 2 or 3")
+            print(f"  '{arg}' isn't a car - use " + ", ".join(str(n) for n in CARS))
         for n, (_, _, who) in CARS.items():
             print(f"  {n}  {who}")
         arg = input("Which car is this drive for? ").strip()
@@ -160,7 +190,7 @@ def verify(mount, src):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("car", nargs="?", help="1/left, 2/truck, 3/right")
+    ap.add_argument("car", nargs="?", help="the car's number (1 = the crowd's left), or left/right/truck")
     ap.add_argument("--disk", help="the drive to use, e.g. disk8 (see --list)")
     ap.add_argument("--yes", action="store_true", help="erase without asking")
     ap.add_argument("--list", action="store_true", help="list USB drives and stop")

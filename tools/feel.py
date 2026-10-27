@@ -25,12 +25,12 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from build import show_cars                             # noqa: E402
 from lightshow import channels as C                     # noqa: E402
 from lightshow.fseq import read_fseq                    # noqa: E402
 from lightshow.lamps import lamp_level                  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-CARS = ("Car1_ModelY_Left", "Car2_Cybertruck_Center", "Car3_ModelY_Right")
 STEP = 0.02
 LAMPS = {C.L_OUTER_MAIN: 1.0, C.R_OUTER_MAIN: 1.0, C.L_INNER_MAIN: 1.0, C.R_INNER_MAIN: 1.0,
          C.L_SIGNATURE: 0.4, C.R_SIGNATURE: 0.4, C.L_CH4: 0.4, C.R_CH4: 0.4,
@@ -64,8 +64,8 @@ def perceived(frames, is_ct, juniper=False):
 def load(show):
     out = ROOT / "output" / show
     an = pickle.loads((out / "analysis.pkl").read_bytes())
-    cars = [perceived(read_fseq(out / c / "LightShow" / f"{show}.fseq")[0], "Cybertruck" in c, "ModelY" in c)
-            for c in CARS]                     # the event's Model Ys are 2025+ (Juniper)
+    cars = [perceived(read_fseq(d / "LightShow" / f"{show}.fseq")[0], v.kind == "cybertruck", v.juniper)
+            for d, v in show_cars(show)]
     n = min(len(c) for c in cars)
     cars = np.array([c[:n] for c in cars])
     import librosa

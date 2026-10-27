@@ -1,7 +1,7 @@
 """The move catalogue: what every move looks like, and when the choreographer may choose it.
 
 Each entry:
-  what      one line - what the audience sees across the three cars
+  what      one line - what the audience sees across the cars
   moods     the moods it suits (see mood.py): calm, groove, drive, frenzy
   gestures  the phrase shapes it fits (see phrases.py): motif, run, figuration, trill, chords,
             cadence, recitative
@@ -11,9 +11,14 @@ Each entry:
               bar    the tracked downbeats, spanning whole bars
               build  shapes a whole crescendo by itself (chosen by the build detector, not here)
               self   paces itself (cadence hits, the Toccata motif, trills)
-  collab    the cars pass something between them (counts toward the three-car quota)
+  collab    the cars pass something between them (counts toward the whole-lineup quota)
 
-Split formations (the two Ys in one move, the truck in another) are listed as "y_move | ct_move".
+Split formations (the side cars in one move, the centre truck in another) are listed as "y_move | ct_move".
+
+The descriptions are written for the classic lineup, Model Y | Cybertruck | Model Y. In any lineup,
+"the truck" is the centrepiece - the Cybertruck nearest the middle, whose 60-LED bar plays comets and
+sweeps - and "the Ys" are the side cars, every other car (moves.centre_truck and moves.sides). With no
+Cybertruck, every car is a side car and the bar parts of a move fall back to whole-stage versions.
 """
 
 from dataclasses import dataclass
@@ -54,7 +59,7 @@ UNISON = {
     "meter": Move("a loudness meter: the Ys and the bar fill with the level", ("calm", "groove"), ("chords", "figuration"),
                   "self", collab=False),
     # --- beat-locked ------------------------------------------------------------------------
-    "wave": Move("a wave rolls across the three cars on the beat and back", LIVELY, FIG, "beat"),
+    "wave": Move("a wave rolls across the cars on the beat and back", LIVELY, FIG, "beat"),
     "converge": Move("both outer cars fire toward the truck on the beat and it answers", ("drive", "frenzy"), FIG, "beat"),
     "lr_beat": Move("left half, right half, on the beat", ("groove", "drive"), ("figuration", "recitative"), "beat"),
     "pinball": Move("a hit ricochets car to car on off-beats", ("drive", "frenzy"), FIG, "beat"),
@@ -66,7 +71,7 @@ UNISON = {
     "lr_channel": Move("whole left half of the stage on one beat, whole right half on the next",
                        ("groove", "drive"), ("figuration", "recitative"), "beat"),
     "heartbeat": Move("lub-dub double pulses from the truck outward", ("calm", "groove"), ("recitative",), "beat"),
-    "marquee": Move("theatre chase: every third lamp along all three cars lit, stepping along on each hit",
+    "marquee": Move("theatre chase: every third lamp along all the cars lit, stepping along on each hit",
                     ("groove", "drive"), ("figuration", "recitative"), "beat"),
     "scanner": Move("an eye sweeps the truck's bar end to end and the Ys bounce it back with a headlight",
                     ("groove", "drive"), FIG, "beat"),
@@ -162,4 +167,6 @@ def write_markdown(path=None):
     path = pathlib.Path(path) if path else pathlib.Path(__file__).resolve().parents[1] / "MOVES.md"
     path.write_text("# Move catalogue\n\nGenerated from `lightshow/catalog.py` on every build: what each move "
                     "looks like, the moods and phrase shapes the choreographer may use it for, and what it "
-                    "locks to.\n\n" + markdown())
+                    "locks to. Written for the classic Model Y | Cybertruck | Model Y lineup: in any lineup "
+                    "\"the truck\" is the centre Cybertruck and \"the Ys\" are the other cars (see "
+                    "docs/CHOREOGRAPHY.md).\n\n" + markdown())

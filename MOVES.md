@@ -1,6 +1,6 @@
 # Move catalogue
 
-Generated from `lightshow/catalog.py` on every build: what each move looks like, the moods and phrase shapes the choreographer may use it for, and what it locks to.
+Generated from `lightshow/catalog.py` on every build: what each move looks like, the moods and phrase shapes the choreographer may use it for, and what it locks to. Written for the classic Model Y | Cybertruck | Model Y lineup: in any lineup "the truck" is the centre Cybertruck and "the Ys" are the other cars (see docs/CHOREOGRAPHY.md).
 
 | move | what you see | moods | fits | locks to |
 |---|---|---|---|---|
@@ -18,7 +18,7 @@ Generated from `lightshow/catalog.py` on every build: what each move looks like,
 | shimmer | trills shimmer between neighbouring lamps | drive, frenzy | trill | self |
 | cadence | a big closing hit with a breath of black before it | calm, groove, drive, frenzy | cadence | self |
 | meter | a loudness meter: the Ys and the bar fill with the level | calm, groove | chords, figuration | self |
-| wave | a wave rolls across the three cars on the beat and back | groove, drive, frenzy | figuration | beat |
+| wave | a wave rolls across the cars on the beat and back | groove, drive, frenzy | figuration | beat |
 | converge | both outer cars fire toward the truck on the beat and it answers | drive, frenzy | figuration | beat |
 | lr_beat | left half, right half, on the beat | groove, drive | figuration, recitative | beat |
 | pinball | a hit ricochets car to car on off-beats | drive, frenzy | figuration | beat |
@@ -28,7 +28,7 @@ Generated from `lightshow/catalog.py` on every build: what each move looks like,
 | checker | a checkerboard across the six slots and the bar flips every beat | groove, drive, frenzy | figuration | beat |
 | lr_channel | whole left half of the stage on one beat, whole right half on the next | groove, drive | figuration, recitative | beat |
 | heartbeat | lub-dub double pulses from the truck outward | calm, groove | recitative | beat |
-| marquee | theatre chase: every third lamp along all three cars lit, stepping along on each hit | groove, drive | figuration, recitative | beat |
+| marquee | theatre chase: every third lamp along all the cars lit, stepping along on each hit | groove, drive | figuration, recitative | beat |
 | scanner | an eye sweeps the truck's bar end to end and the Ys bounce it back with a headlight | groove, drive | figuration | beat |
 | sparkle | single lamps twinkle at random across the stage, soft and sparse when calm, sharp in a frenzy | calm, groove, frenzy | trill, figuration, recitative | beat |
 | ping_pong | the two Ys trade hits half a beat apart, the lead swapping each bar; the truck answers downbeats | groove, drive | figuration | beat |

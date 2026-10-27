@@ -3,11 +3,18 @@
 __pycache__/
 *.pyc
 
-# Third-party repos fetched by setup.sh, and local study material (not ours to redistribute)
+# Third-party files fetched by lightshow/tesla_files.py (Tesla's repo, the viewer's car models) and
+# local study material: none of it is ours to redistribute
 vendor/
+preview3d/public/models/
+preview3d/dist/models/
 
-# Recordings we tried but don't use
-songs/unused/
+# Recordings: bring your own (songs/README.md); they're never committed
+songs/*
+!songs/README.md
+
+# Voice tracks for diagnostic shows of other lineups (build.py --diagnostic)
+cache/
 
 # Generated from songs/ by build.py (--assemble regenerates them in a minute)
 output/**/*.wav
@@ -21,6 +28,9 @@ output/**/*.json
 output/**/build.log
 output/.demucs.lock
 output/**/*.mp4
+
+# The web app's uploads and results (deleted after a day anyway)
+webapp/jobs/
 
 # Review images, viewer dependencies
 checks/

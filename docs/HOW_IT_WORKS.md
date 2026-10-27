@@ -1,7 +1,8 @@
 # How the shows are made
 
-The technical tour: how a recording becomes a three-car light show, and the tools for checking one.
-For running the project, see the [README](../README.md).
+The technical tour: how a recording becomes a light show for a lineup of 1 to 5 cars, and the tools
+for checking one. For running the project, see the [README](../README.md); for the strategy behind
+the choreography (roles, formations, the rules every show keeps), [CHOREOGRAPHY.md](CHOREOGRAPHY.md).
 
 ## The pipeline (`lightshow/`)
 
@@ -22,8 +23,8 @@ For running the project, see the [README](../README.md).
    chorus...) located in the recording by detectors and applied as overrides.
 5. `phrases.py` + `moves.py` + `choreo.py` — the choreographer. The piece is split into phrases
    (between rests, after held notes, at arrivals, at texture changes, max 8 s). Each phrase gets one
-   *formation*: **unison** (one move on all three cars) or **split** (the two Ys in one move, the
-   Cybertruck in another). The chooser matches moves to the phrase's gesture and intensity, keeps
+   *formation*: **unison** (one move on every car) or **split** (the side cars in one move, the
+   centre Cybertruck in another; see CHOREOGRAPHY.md for how the roles map onto any lineup). The chooser matches moves to the phrase's gesture and intensity, keeps
    variety (least-used first, each section leaning unison or split, never the same twice running).
    A repeated section replays the formations it had the first time, escalated one step when the arc
    allows more (callbacks). A quarter-second of black precedes every big move, and the truck's bar
@@ -50,10 +51,10 @@ For running the project, see the [README](../README.md).
    "The Arrival", "Cyber Symphony", the community Toccata); see the timing rules in the catalogue.
 
    **The beat layer** (`pulse.py`). Concert lighting keeps a show readable by giving the beat to
-   the fixtures with the most visual mass and the effects to the rest. Here the headlights of all
-   three cars carry the beat wherever the music is lively and its pulse is clear; every move keeps
+   the fixtures with the most visual mass and the effects to the rest. Here the headlights of every
+   car carry the beat wherever the music is lively and its pulse is clear; every move keeps
    the signatures, DRLs, fogs, turns, markers and the truck's bar. Hits are short and hard (about
-   120 ms) with darkness between, and land about 40 ms ahead of the music (the eye forgives early, not
+   120 ms) with darkness between, and land a frame (20 ms) ahead of the music (the eye forgives early, not
    late). The downbeat is biggest (every headlight plus a flash of every front light bar), beat 3 next, and beats 2 and 4
    are the Ys only. The pattern follows the mood: a strong beat under a quiet verse gets a small
    half-time step on the inner beams; a groove thumps on the inner beams; drive on every headlight;
@@ -90,9 +91,9 @@ For running the project, see the [README](../README.md).
    | trill | shimmer | | |
    | cadence / arrival | all_on / lightning with a blackout before | | |
 
-   In lively sections at least 60 % of the chooser's picks are three-car *collaboration* moves (the
+   In lively sections at least 60 % of the chooser's picks are whole-lineup *collaboration* moves (the
    stage-wide sweeps, builds, ping-pongs and checker patterns), so the show reads as one instrument
-   rather than three cars blinking.
+   rather than cars blinking side by side.
 
    Closures (`motors.py`) are their own side stage, every figure crossing the cars:
    - **Lids** (frunk / liftgates): the opening *is* the crescendo. The biggest builds (two per song,
@@ -130,6 +131,10 @@ For running the project, see the [README](../README.md).
    fading in as it passes); the interiors warming from blue to gold; a slow fade at the end.
 6. `fseq.py` — writes FSEQ v2 uncompressed, 200 channels, 20 ms (Tesla's format). `vendor/light-show/validator.py` is Tesla's checker (setup.sh fetches it).
 
+   The lineup itself is `vehicles.py`: one letter per car (`Y` 2025+ Model Y, `y` 2020-24 Model Y,
+   `C` Cybertruck), crowd's left to right, 1 to 5 cars; each car's folder is named after its place
+   (`Car2_ModelY_CenterLeft`). `make_lineup` in `choreo.py` builds the `Car`s from it.
+
 ### Motor timing: what's known and what isn't
 
 Tesla's light-show README is the only published source (checked October 2026; owner forums and videos
@@ -149,7 +154,7 @@ validator checks only the file format and the 4-hour maximum - not these limits 
 creators routinely reverse mirrors at 45-90 % of their travel, and Tesla's own 5-car example starts a
 liftgate dancing 12.8 s after Open and uses four charge-port commands; these shows are stricter.
 
-**The Cybertruck's frunk** isn't in Tesla's documentation; timed on the event's truck it opens in
+**The Cybertruck's frunk** isn't in Tesla's documentation; timed on a 2024 Cybertruck it opens in
 about 10 s and closes in 4 s (`LIFTGATE_OPEN_S` in `lightshow/motors.py`, `closureSeconds` on the
 Cybertruck profile in `preview3d/src/core/vehicles.ts`, `TRUCK_FRUNK_OPEN` in `tools/closure_audit.py`). Owners
 report liftgates that open only part way on some older cars until the liftgate's opening height is
@@ -160,11 +165,12 @@ reset to its default; check each Model Y opens fully.
 - **3D viewer** (the preview): start the server from this folder —
   `python3 -m http.server 8765 --bind 0.0.0.0` — and open `http://<this Mac's IP>:8765/`
   (it redirects to `preview3d/dist/`; works from an iPad on the same Wi-Fi, tap Play once for audio).
-  Three cars from Tesla's own models on a night lot: every lamp and light-bar LED driven from the
-  real show files, closures moving at their travel times, the truck's bar tilting with the frunk lid,
-  the Ys' frunks open with the candy lights and dry-ice fog. Rebuild after code changes with
-  `cd preview3d && npm install && npm run build` (see `preview3d/README.md`; built on
-  Tesla Lightshow Studio, AGPL-3.0).
+  It plays the set list in `preview/shows.json`, or any build's own list with
+  `?manifest=<url of its shows.json>` (`build.py --out` and the web app write one). The lineup is
+  drawn from Tesla's own models (fetched at setup) on a night lot: every lamp and light-bar LED driven
+  from the real show files, closures moving at their travel times, the truck's bar tilting with the
+  frunk lid. Rebuild after code changes with `cd preview3d && npm install && npm run build` (see
+  `preview3d/README.md`; built on Tesla Lightshow Studio, AGPL-3.0).
 - **Quantization** — `tools/quantize_check.py <show>`: for each phrase, the share of light hits on
   the performer-following sixteenth grid and on played attacks, flagging beat moves that drift
   (currently 96 % of the Toccata's hits and 93 % of This Is Halloween's land on one or the other).
@@ -200,7 +206,7 @@ examples). The community shows and xLights sequences that informed the move voca
 
 ## The 2025+ Model Y's lamps
 
-The event's Model Ys are the 2025+ model ("Juniper"). Tesla's documentation predates it. Two on-car
+Tesla's documentation predates the 2025+ Model Y ("Juniper"). Two on-car
 tests in Oct 2026 - Tesla's light-show issue #183 and github.com/Nghtmare7509/tesla-lightshow-juniper,
 which tested every channel alone - agree on its front: headlights (1/2), lower white lamps (3/4),
 the light bar's outer ends (7/8, "channel 4", one per side), its whole centre (11/12, "channel 6",
@@ -218,8 +224,10 @@ picture is still written to 47-106 in case a software version reads it. `make_li
 ## The diagnostic show
 
 `00_diagnostic` is generated by `lightshow/diagnostic.py` rather than from music. Its script is a list
-of announcements, each with an action; macOS's `say` speaks them into `songs/00_diagnostic.wav`, and the
-spoken clips' lengths fix the timeline (`songs/00_diagnostic.json`) that the lights and motors follow.
-Every announcement opens with a short tone that all three cars flash with, so sync is checked from
-start to finish. Both files are committed, so the show rebuilds without a Mac; they are only
-regenerated when the script changes. `make_usb.py` puts it on each car's drive with the songs.
+of announcements, each with an action, written for the lineup: each car is introduced by number and
+place, and the lines about liftgates, frunks and light bars name only what the lineup has. macOS's `say`
+(or espeak-ng elsewhere) speaks them into a voice track, and the spoken clips' lengths fix the
+timeline (a `.json` beside it) that the lights and motors follow. Every announcement opens with a short
+tone that every car flashes with, so sync is checked from start to finish. The voice track is only
+regenerated when the script, the lineup or the voice changes. For a set list it lives in `songs/`
+(`python3 build.py 00`); `build.py --diagnostic --lineup ... --out DIR` builds one for any lineup.

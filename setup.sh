@@ -19,8 +19,8 @@ echo "== neural beat tracker environment (.venv_beats)"
 uv venv --allow-existing --python 3.12 .venv_beats
 uv pip install --python .venv_beats/bin/python -r requirements-beats.txt
 
-echo "== Tesla's light-show repo (for its validator)"
-[ -d vendor/light-show ] || git clone --depth 1 https://github.com/teslamotors/light-show vendor/light-show
+echo "== Tesla's light-show repo (its validator, and the 3D viewer's car models)"
+python3 -m lightshow.tesla_files
 
 echo
 echo "Setup done. Build everything with:   python3 build.py"

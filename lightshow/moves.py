@@ -4,7 +4,7 @@ Stage, left to right as the crowd sees it: left Model Y (two sides), Cybertruck 
 sides plus a continuous 60-LED bar), right Model Y (two sides) — six slots and a bar.
 
   keyboard    lowest note on the left, highest on the right, one flash per note (the phrase's own
-              pitch range is stretched across the stage, so every phrase uses all three cars)
+              pitch range is stretched across the stage, so every phrase uses every car)
   lr_notes    zigzag figuration: notes above the phrase's middle hit the right Y, below hit the
               left Y, the truck's bar tracks the pitch
   lr_beat     left Y / right Y alternate on the beat; notes only tick on the truck bar
@@ -20,7 +20,7 @@ sides plus a continuous 60-LED bar), right Model Y (two sides) — six slots and
   all_on      a beat of black, then everything, released with a ramp
   shimmer     trills
   motif       the Toccata's mordent-and-run: quick notes on the truck, the run sweeps the stage,
-              the landing note holds on the car it lands on while all three interiors glow
+              the landing note holds on the car it lands on while every interior glow
 """
 
 import numpy as np
@@ -33,22 +33,41 @@ ON, OFF_500, ON_500, OFF_1000 = C.ON, C.OFF_500, C.ON_500, C.OFF_1000
 # --- helpers -----------------------------------------------------------------------------------
 
 def slots6(cars):
+    """Every (car, side) on the stage, crowd-left to right."""
     return [(c, s) for c in cars for s in ("L", "R")]
 
 
+def centre_truck(cars):
+    """The centrepiece: the Cybertruck nearest the middle of the line (its 60-LED bar carries the
+    comets, sweeps and crescendo pops), or None if the lineup has no Cybertruck."""
+    trucks = [c for c in cars if c.is_ct]
+    if not trucks:
+        return None
+    mid = (len(cars) - 1) / 2
+    return min(trucks, key=lambda c: (abs(cars.index(c) - mid), cars.index(c)))
+
+
+def sides(cars):
+    """Every car but the centrepiece, crowd-left to right: the cars that play their 8 front lamps.
+    In the classic Model Y | Cybertruck | Model Y line these are the two Ys."""
+    ct = centre_truck(cars)
+    return [c for c in cars if c is not ct] or list(cars)   # a lone truck plays both parts
+
+
+CENTRE_SHARE = 4 / 3   # the centrepiece's share of the pitch range against a side car's (40% vs 30% of 3)
+
+
 def slot_for(cars, pitch, lo, hi):
-    """Pitch -> (car, side, within-bar-position or None) with the truck taking the middle 40%."""
+    """Pitch -> (car, side, position along a truck's bar or None): low notes on the crowd's left, high on the
+    right; the centrepiece truck's bar takes a wider share so runs sweep across it."""
     pos = float(np.clip((pitch - lo) / max(hi - lo, 1e-9), 0, 1))
-    ct = next((c for c in cars if c.is_ct), None)
-    if len(cars) == 3 and ct is cars[1]:
-        if pos < 0.30:
-            return cars[0], ("L" if pos < 0.15 else "R"), None
-        if pos < 0.70:
-            return cars[1], ("L" if pos < 0.5 else "R"), (pos - 0.30) / 0.40
-        return cars[2], ("L" if pos < 0.85 else "R"), None
-    idx = min(len(cars) - 1, int(pos * len(cars)))
-    within = pos * len(cars) - idx
-    return cars[idx], ("L" if within < 0.5 else "R"), (within if cars[idx].is_ct else None)
+    ct = centre_truck(cars)
+    widths = np.array([CENTRE_SHARE if c is ct else 1.0 for c in cars])
+    edges = np.concatenate([[0.0], np.cumsum(widths) / widths.sum()])
+    idx = min(len(cars) - 1, int(np.searchsorted(edges, pos, side="right")) - 1)
+    within = (pos - edges[idx]) / (edges[idx + 1] - edges[idx])
+    car = cars[idx]
+    return car, ("L" if within < 0.5 else "R"), (within if car.is_ct else None)   # any truck plays its bar
 
 
 def comet(car, t, pos, dur, amp=1.0, width=6):
@@ -125,8 +144,8 @@ def keyboard(cars, an, ph, heads=False):
 
 def lr_notes(cars, an, ph):
     ev = an.events
-    ct = next((c for c in cars if c.is_ct), None)
-    outer = [c for c in cars if not c.is_ct] or cars
+    ct = centre_truck(cars)
+    outer = sides(cars) or cars
     median = float(np.median(ev.top[ph.a:ph.b]))
     lo, hi = phrase_range(ph, an)
     # In band songs a note only strobes a Y when it sits on a beat subdivision (eighths); the rest
@@ -151,8 +170,8 @@ def lr_notes(cars, an, ph):
 
 def lr_beat(cars, an, ph):
     ev = an.events
-    ct = next((c for c in cars if c.is_ct), None)
-    outer = [c for c in cars if not c.is_ct] or cars
+    ct = centre_truck(cars)
+    outer = sides(cars) or cars
     beats = an.beats[(an.beats >= ph.t0 - 0.05) & (an.beats < ph.t1)]
     downs = set(np.round(an.downbeats, 3))
     for k, b in enumerate(beats):
@@ -182,8 +201,8 @@ def rotation(cars, an, ph, order=None):
 
 def mirror(cars, an, ph):
     ev = an.events
-    ct = next((c for c in cars if c.is_ct), None)
-    outer = [c for c in cars if not c.is_ct]
+    ct = centre_truck(cars)
+    outer = sides(cars)
     median = float(np.median(ev.top[ph.a:ph.b]))
     for k, i in enumerate(range(ph.a, ph.b)):
         t, d = float(ev.t[i]), flash_len(ev, i)
@@ -204,8 +223,8 @@ def out_in(cars, an, ph, reverse=False):
     ticks (short flashes) in whatever part of the stage is active; the truck bar fills toward the
     centre; the truck's headlights join only in the last stage; a beat of black, then the pop."""
     ev, (lo, hi) = an.events, phrase_range(ph, an)
-    ct = next((c for c in cars if c.is_ct), None)
-    ys = [c for c in cars if not c.is_ct]
+    ct = centre_truck(cars)
+    ys = sides(cars)
     f0, f1 = int(ph.t0 / an.step), max(int(ph.t0 / an.step) + 1, int(ph.t1 / an.step))
     e = an.intensity[f0:f1]
     rising = len(e) > 10 and e[-len(e) // 4:].mean() > e[: len(e) // 4].mean() * 1.15
@@ -282,13 +301,13 @@ def _land(cars, an, ph, ct, pop):
 
 def meter(cars, an, ph):
     ev = an.events
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     f0, f1 = int(ph.t0 / an.step), max(int(ph.t0 / an.step) + 1, int(ph.t1 / an.step))
     e = an.loud_fast[f0:f1]          # fast loudness: the bar breathes with every note and swell
     e = (e - e.min()) / max(np.ptp(e), 1e-6) if np.ptp(e) > 0.05 else np.full_like(e, 0.5)
     if ct is not None:
         bar_fill(ct, ph.t0, ph.t1 - ph.t0, 0.2 + 0.75 * e, from_centre=True)
-    outer = [c for c in cars if not c.is_ct]
+    outer = sides(cars)
     # The Ys answer the volume on each beat: inner sides above 0.45, the whole front above 0.75.
     beats = an.beats[(an.beats >= ph.t0) & (an.beats < ph.t1)]
     for b in beats:
@@ -328,7 +347,7 @@ def pulse(cars, an, ph):
 
 def block(cars, an, ph, beat_len):
     ev, (lo, hi) = an.events, phrase_range(ph, an)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     for i in range(ph.a, ph.b):
         t, dur = float(ev.t[i]), float(ev.dur[i])
         hold = float(np.clip(dur, 0.15, max(0.3, 2 * beat_len)))
@@ -347,8 +366,8 @@ def block(cars, an, ph, beat_len):
             if hold > 0.8:
                 car.light(car.accents(side), t + hold, t + hold + 0.6, OFF_500)
         if ct is not None and any(c.is_ct for c, _ in span):
-            w0 = a[2] if a[0].is_ct else (0.0 if a[0].x < ct.x else 1.0)
-            w1 = b[2] if b[0].is_ct else (0.0 if b[0].x < ct.x else 1.0)
+            w0 = a[2] if a[0] is ct else (0.0 if a[0].x < ct.x else 1.0)
+            w1 = b[2] if b[0] is ct else (0.0 if b[0].x < ct.x else 1.0)
             if big:
                 w0, w1 = 0.0, 1.0
             n = max(2, ct.fr(t + hold) - ct.fr(t))
@@ -383,7 +402,7 @@ def cadence(cars, an, ph):
 
 def shimmer(cars, an, ph):
     ev = an.events
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     car, _, _ = slot_for(cars, float(np.median(ev.top[ph.a:ph.b])), an.pitch_lo, an.pitch_hi)
     for k, i in enumerate(range(ph.a, ph.b)):
         t = float(ev.t[i])
@@ -397,9 +416,9 @@ def shimmer(cars, an, ph):
 
 def motif(cars, an, ph):
     """Mordent-and-run: quick ornament on the truck, the run sweeps the stage toward where it
-    lands, and the landing note holds on that car while all three interiors glow."""
+    lands, and the landing note holds on that car while every interior glow."""
     ev = an.events
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     idx = list(range(ph.a, ph.b))
     land = idx[-1]
     pre = idx[:-1]
@@ -600,8 +619,8 @@ def ct_meter(ct, an, ph):
 def wave(cars, an, ph):
     """Once per bar a single light travels the whole stage: through the left Y's 8 lamps, across
     the truck bar as a comet, through the right Y's lamps; direction alternates each bar."""
-    ct = next((c for c in cars if c.is_ct), None)
-    ys = [c for c in cars if not c.is_ct]
+    ct = centre_truck(cars)
+    ys = sides(cars)
     downs = an.downbeats[(an.downbeats >= ph.t0) & (an.downbeats < ph.t1)]
     bar = 4 * 60.0 / max(an.tempo, 40)
     for k, d in enumerate(downs):
@@ -630,8 +649,8 @@ def wave(cars, an, ph):
 
 def converge(cars, an, ph):
     """Every beat: both Ys ripple inward, then the truck bar closes from the edges to the centre."""
-    ct = next((c for c in cars if c.is_ct), None)
-    ys = [c for c in cars if not c.is_ct]
+    ct = centre_truck(cars)
+    ys = sides(cars)
     y_ripple(ys, an, ph, inward=True)
     if ct is not None:
         beats = an.beats[(an.beats >= ph.t0) & (an.beats < ph.t1)]
@@ -657,8 +676,8 @@ def heartbeat(cars, an, ph):
 def call_response(cars, an, ph):
     """The sides play the first half of the phrase, the truck answers with the second half."""
     ev = an.events
-    ys = [c for c in cars if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
+    ys = sides(cars)
+    ct = centre_truck(cars)
     mid = ph.a + (ph.b - ph.a) // 2
     class Half:  # a view of the phrase restricted to one half
         pass
@@ -674,20 +693,22 @@ def call_response(cars, an, ph):
         keyboard(cars, an, h2)
 
 
-# --- Round three: showing off the three-car sync -----------------------------------------------
+# --- Round three: showing off the cars' sync -----------------------------------------------
 
 def _stations(cars):
     """Every light on the stage in crowd order: left Y lamps, the truck bar (as a token), right Y
     lamps. Returns [(car, channels) | ('bar', k)] where the bar is split into 6 segments."""
     out = []
-    ys = [c for c in cars if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
-    if ys:
-        out += [(ys[0], lp) for lp in ys[0].lamps()]
+    ys = sides(cars)
+    ct = centre_truck(cars)
+    left = [c for c in ys if ct is None or c.x < ct.x]
+    for c in left:
+        out += [(c, lp) for lp in c.lamps()]
     if ct is not None:
         out += [("bar", k) for k in range(6)]
-    if len(ys) > 1:
-        out += [(ys[1], lp) for lp in ys[1].lamps()]
+    for c in ys:
+        if c not in left:
+            out += [(c, lp) for lp in c.lamps()]
     return out, ct
 
 
@@ -749,8 +770,8 @@ def pinball(cars, an, ph):
     """On every beat a light bounces between the outer Ys, passing through the truck: the bar
     scans in the travel direction and the Y it lands on flashes its whole front. Best for steady,
     medium-intensity beat passages: pure synchronization on display."""
-    ys = [c for c in cars if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
+    ys = sides(cars)
+    ct = centre_truck(cars)
     beats = an.beats[(an.beats >= ph.t0) & (an.beats < ph.t1 + 0.3)]
     for k in range(len(beats) - 1):
         b0, b1 = float(beats[k]), float(min(beats[k + 1], ph.t1))
@@ -852,8 +873,8 @@ def expand_contract(cars, an, ph):
     """Breathing stage: on one bar the lit region grows from the truck's centre out to the Ys'
     outer corners, on the next it contracts back. Best for sustained chords and long notes in
     loud sections, where there are no notes to tick but the sound is big."""
-    ct = next((c for c in cars if c.is_ct), None)
-    ys = [c for c in cars if not c.is_ct]
+    ct = centre_truck(cars)
+    ys = sides(cars)
     downs = _grid(an, ph, "downbeats")
     bar = 4 * 60.0 / max(an.tempo, 40)
     for k, d in enumerate(downs):
@@ -895,8 +916,8 @@ def lightning(cars, t, flashes=3):
 def syncopate(cars, an, ph):
     """The Ys hit the beats together (mirrored, whole fronts); the truck answers on the off-beats
     with a bar flash and its headlights. Best for beat-locked loud passages (the band songs)."""
-    ys = [c for c in cars if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
+    ys = sides(cars)
+    ct = centre_truck(cars)
     beats = an.beats[(an.beats >= ph.t0) & (an.beats < ph.t1)]
     for k, b in enumerate(beats):
         side = "L" if k % 2 == 0 else "R"
@@ -913,8 +934,8 @@ def rain(cars, an, ph):
     """Twinkle: random LEDs sparkle across the truck bar and the Ys' markers and signatures
     flicker, denser with the loudness. Best for tremolos, trills and shimmering sustained textures
     (strings, xylophone), where single notes are not the point."""
-    ct = next((c for c in cars if c.is_ct), None)
-    ys = [c for c in cars if not c.is_ct]
+    ct = centre_truck(cars)
+    ys = sides(cars)
     f0, f1 = int(ph.t0 / an.step), max(int(ph.t0 / an.step) + 1, int(ph.t1 / an.step))
     rng = np.random.default_rng(int(ph.t0 * 100))
     n = f1 - f0
@@ -1006,7 +1027,7 @@ def y_wink(ys, an, ph):
         k += 1
 
 
-# --- Round four: three-car collaboration on steady beats ---------------------------------------
+# --- Round four: whole-lineup collaboration on steady beats ---------------------------------------
 
 def march(cars, an, ph):
     """A single light marches car to car on the beat - left, centre, right, centre, left... - the
@@ -1029,7 +1050,7 @@ def march(cars, an, ph):
 
 def cascade(cars, an, ph):
     """Every bar a quick ripple runs across the lineup - left Y, truck, right Y, 120 ms apart - and
-    the next bar runs back. Fast enough to read as a swipe, slow enough to see three cars."""
+    the next bar runs back. Fast enough to read as a swipe, slow enough to see every car."""
     order = sorted(cars, key=lambda q: q.x)
     downs = _grid(an, ph, "downbeats")
     for k, d in enumerate(downs):
@@ -1048,7 +1069,7 @@ def tug_of_war(cars, an, ph):
     """Light fills the stage left to right one slot per beat (six slots: both halves of each car),
     holds, then drains back right to left; the truck bar fills and empties with it."""
     slots = slots6(cars)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     beats = _grid(an, ph, "beats")
     n = len(slots)
     k = 0
@@ -1071,7 +1092,7 @@ def bounce_build(cars, an, ph):
     """An accelerating ping-pong for a build: the ball crosses the lineup every bar, then every
     half bar, then every beat, then every half beat, and everything lands together at the end."""
     order = sorted(cars, key=lambda q: q.x)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     span = max(ph.t1 - ph.t0, 1.0)
     beat = 60.0 / max(an.tempo, 40)
     t = ph.t0
@@ -1103,8 +1124,8 @@ def antiphony(cars, an, ph):
     """Bar-level call and response: the truck plays a bar of the melody (comets and headlights),
     then the two Ys answer the next bar in mirror (keyboard on their lamps), and so on."""
     ev = an.events
-    ys = [c for c in cars if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
+    ys = sides(cars)
+    ct = centre_truck(cars)
     bar = 4 * 60.0 / max(an.tempo, 40)
     lo, hi = phrase_range(ph, an)
     for i in range(ph.a, ph.b):
@@ -1127,9 +1148,9 @@ def antiphony(cars, an, ph):
 
 def checker(cars, an, ph):
     """Checkerboard across the six slots and the bar: on one beat the even slots are lit (and every
-    other block of the bar), on the next the odd ones - a flickering lattice across three cars."""
+    other block of the bar), on the next the odd ones - a flickering lattice across the cars."""
     slots = slots6(cars)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     beats = _grid(an, ph, "beats")
     leds = len(C.FRONT_BAR)
     block = leds // 6
@@ -1152,7 +1173,7 @@ def beam(cars, an, ph):
     """A searchlight two slots wide sweeps across the stage over each bar, left to right then back,
     with the bar lighting the part of itself the beam is crossing."""
     slots = slots6(cars)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     downs = _grid(an, ph, "downbeats")
     bar = 4 * 60.0 / max(an.tempo, 40)
     n = len(slots)
@@ -1180,8 +1201,8 @@ def beam(cars, an, ph):
 def lr_channel(cars, an, ph):
     """Left channel, right channel: the whole left half of the stage (left Y, the truck's crowd-left
     headlight and half of the bar) on one beat, the whole right half on the next."""
-    ys = [c for c in cars if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
+    ys = sides(cars)
+    ct = centre_truck(cars)
     beats = _grid(an, ph, "beats")
     if len(beats) > 1 and np.median(np.diff(beats)) < 0.3:
         beats = beats[::2]
@@ -1202,7 +1223,7 @@ def implode(cars, an, ph):
     inward and stay, the bar fills from both ends, the truck pops at the top, and then everything
     fades out slowly (2 s ramps) instead of cutting."""
     slots = slots6(cars)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     n = len(slots)
     order = []                                  # outer corners first, truck last
     for k in range(n // 2):
@@ -1228,8 +1249,8 @@ def fade_cross(cars, an, ph):
     """A slow crossfade from one side of the stage to the other on the ramping lamps: the left Y
     ramps up over a second while the right ramps down, the truck's outer beams follow the louder
     side, then it swaps every two bars."""
-    ys = [c for c in cars if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
+    ys = sides(cars)
+    ct = centre_truck(cars)
     downs = list(_grid(an, ph, "downbeats")[::2]) + [ph.t1]
     k = 0
     for t, stop in zip(downs[:-1], downs[1:]):
@@ -1281,7 +1302,7 @@ def curtain(cars, an, ph):
     Suits section starts and sustained, singing material in groove/drive; not strobe-y."""
     slots = slots6(cars)
     n = len(slots)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     downs = _grid(an, ph, "downbeats")
     bar = _bar_len(an)
     t_open = float(downs[0])
@@ -1311,7 +1332,7 @@ def curtain(cars, an, ph):
 
 def breathe_wash(cars, an, ph):
     """Colour-wash breathing (the Arrival's long Color Wash blocks). Each car's signature and DRLs
-    glow up on a 1 s ramp and fade on a 2 s ramp, the three cars a beat apart so the breath rolls
+    glow up on a 1 s ramp and fade on a 2 s ramp, the cars a beat apart so the breath rolls
     across the stage and back; the truck's bar swells and ebbs with it. One breath per two bars,
     started on the downbeats. The calmest collaborative move: intros, quiet verses, held chords."""
     order = sorted(cars, key=lambda q: q.x)
@@ -1342,11 +1363,11 @@ def breathe_wash(cars, an, ph):
 def marquee(cars, an, ph):
     """Marquee / theatre chase (the Arrival, 45-50 s). Along the whole line of front lamps - eight
     per Y with the truck's between them - every third lamp is lit, and the pattern steps one lamp on
-    each hit, so light crawls across all three cars; the bar chases in blocks of five LEDs. It turns
+    each hit, so light crawls across every car; the bar chases in blocks of five LEDs. It turns
     round every two bars. Steps on the beat grid (every other beat when calm). Groove material."""
     order = sorted(cars, key=lambda q: q.x)
     line = [(c, lamp) for c in order for lamp in c.lamps()]
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     hits = _grid(an, ph, "beats")
     beat = 60.0 / max(an.tempo, 40)
     per_turn = max(4, int(round(2 * _bar_len(an) / max(np.median(np.diff(hits)) if len(hits) > 1 else beat, 0.1))))
@@ -1371,7 +1392,7 @@ def crossing(cars, an, ph):
     bar in a frenzy. Big and kinetic: choruses, drive and climax passages, fast runs."""
     slots = slots6(cars)
     n = len(slots)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     downs = _grid(an, ph, "downbeats")
     bar = _bar_len(an)
     per_bar = 2 if getattr(ph, "mood", "") == "frenzy" else 1
@@ -1396,8 +1417,8 @@ def shockwave(cars, an, ph):
     from the centre outward, then 70 ms later the Ys' inner lamps, then their outer lamps, then the
     fogs and markers - the hit visibly travels out through the line. On downbeats in groove/drive,
     on every beat in a frenzy. For arrivals, drops after a build, and big accents."""
-    ct = next((c for c in cars if c.is_ct), None)
-    ys = [c for c in cars if not c.is_ct]
+    ct = centre_truck(cars)
+    ys = sides(cars)
     grid = _grid(an, ph, "beats" if getattr(ph, "mood", "") == "frenzy" else "downbeats")
     for k, t in enumerate(grid):
         t = float(t)
@@ -1436,7 +1457,7 @@ def sparkle(cars, an, ph):
     rng = np.random.default_rng(int(ph.t0 * 1000) % (2 ** 32))
     order = sorted(cars, key=lambda q: q.x)
     lamps = [(c, lamp) for c in order for lamp in c.lamps()]
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     mood = getattr(ph, "mood", "groove")
     beats = an.beats[(an.beats >= ph.t0) & (an.beats < ph.t1)]
     if len(beats) < 2:
@@ -1466,7 +1487,7 @@ def sunrise(cars, an, ph):
     opening and closing of quiet pieces and long held passages: calm only."""
     slots = slots6(cars)
     n = len(slots)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     downs = list(_grid(an, ph, "downbeats"))
     if ph.t1 - ph.t0 < 3.0:
         return
@@ -1496,7 +1517,7 @@ def scanner(cars, an, ph):
     sweeps the truck's bar end to end, one sweep per hit interval, and the Y at whichever end it
     reaches answers with its near headlight - so the sweep bounces off the outer cars like a ball
     between walls. Ys idle on a dim DRL. Groove/drive; nice for ostinatos and walking basslines."""
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     order = sorted(cars, key=lambda q: q.x)
     if ct is None:
         return wave(cars, an, ph)
@@ -1530,7 +1551,7 @@ def accelerando(cars, an, ph):
     fills in from both ends. Half a beat of black before the end, then the whole stage lands on the
     next downbeat. For crescendos and pre-chorus climbs; never in calm passages."""
     beat = 60.0 / max(an.tempo, 40)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     beats = an.beats[(an.beats >= ph.t0) & (an.beats < ph.t1)]
     if len(beats) < 4:
         beats = np.arange(ph.t0, ph.t1, beat)
@@ -1571,8 +1592,8 @@ def teardown(cars, an, t0, span):
     signatures - each fading on a 1 s ramp, until only the DRLs glow and fade out. The bar dissolves
     LED by LED from its ends. Called by the choreographer on the downbeat after a build when the
     music drops, for `span` seconds (about two bars)."""
-    ct = next((c for c in cars if c.is_ct), None)
-    ys = [c for c in cars if not c.is_ct]
+    ct = centre_truck(cars)
+    ys = sides(cars)
     stages = [(0.15, lambda c: c.fogs() + c.markers(), cars),
               (0.35, lambda c: c.heads(), ys),
               (0.6, lambda c: c.heads(), [ct] if ct else []),
@@ -1602,7 +1623,7 @@ def ping_pong(cars, an, ph):
     downbeat. Reads as a rally between the outer cars. Groove/drive."""
     order = sorted(cars, key=lambda q: q.x)
     ys = [c for c in order if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     if len(ys) < 2:
         return lr_beat(cars, an, ph)
     beats = _grid(an, ph, "beats")
@@ -1615,7 +1636,7 @@ def ping_pong(cars, an, ph):
             bar_k += 1
             if ct is not None:
                 bar_flash(ct, b, 0.3, 0.9)
-        lead, follow = (ys[0], ys[1]) if bar_k % 2 == 0 else (ys[1], ys[0])
+        lead, follow = (ys[0], ys[-1]) if bar_k % 2 == 0 else (ys[-1], ys[0])
         half = _beat_at(an, b) / 2
         lead.flash(lead.heads() + lead.accents(), b, min(0.2, half * 0.8))
         follow.flash(follow.heads() + follow.accents(), _snap(an, b + half, 2), min(0.2, half * 0.8))
@@ -1648,8 +1669,8 @@ def stripes(cars, an, ph):
     """Stripe scroll (Cyber Symphony's Bars): four bright stripes scroll along the truck's bar for
     two beats, then reverse; the Ys answer as a mirrored pair - inner halves on one two-beat block,
     outer halves on the next. Groove/drive under a steady rhythm section."""
-    ct = next((c for c in cars if c.is_ct), None)
-    ys = [c for c in cars if not c.is_ct]
+    ct = centre_truck(cars)
+    ys = sides(cars)
     beats = _grid(an, ph, "beats")
     beat = 60.0 / max(an.tempo, 40)
     blocks = beats[::2]
@@ -1673,7 +1694,7 @@ def flutter(cars, an, ph):
     pair against the truck, for a beat at a time with a beat's rest between - a shiver of light
     for trills, tremolo strings and the last bar before a drop. Frenzy only."""
     order = sorted(cars, key=lambda q: q.x)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = centre_truck(cars)
     ys = [c for c in order if not c.is_ct]
     beats = an.beats[(an.beats >= ph.t0) & (an.beats < ph.t1)]
     if len(beats) < 2:

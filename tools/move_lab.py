@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from build import setlist_lineup                        # noqa: E402
 from lightshow import catalog as CAT                    # noqa: E402
 from lightshow import moves as M                        # noqa: E402
 from lightshow.choreo import LIGHT_LEAD_S, make_lineup  # noqa: E402
@@ -93,7 +94,7 @@ def main(show, names):
     for name in names:
         info = CAT.UNISON.get(name)
         grid = info.grid if info else "half"
-        cars = make_lineup("YCY", an.n_frames, an.step)
+        cars = make_lineup(setlist_lineup(), an.n_frames, an.step)
         ok = True
         for ph in phrases:
             p = copy.copy(ph)

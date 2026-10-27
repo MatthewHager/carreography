@@ -4,12 +4,12 @@
 
   dur/bpm     length and the tempo of the performer-following beat map
   moods       phrases per mood (calm/groove/drive/frenzy)
-  moves       distinct moves, the most-repeated one, and the share of three-car moves in lively phrases
+  moves       distinct moves, the most-repeated one, and the share of whole-lineup (collab) moves in lively phrases
   timing      light hits on the beat grid or on a played attack (ripples counted once)
   pacing      light hits per second per car in the calmest and liveliest thirds, and their correlation
               with the energy curve
   motors      closure commands against Tesla's per-show limits (OK, or the channel that is over)
-  valid       Tesla's validator on all three files
+  valid       Tesla's validator on every car's file
 """
 
 import pickle
@@ -22,12 +22,12 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lightshow import channels as C                     # noqa: E402
+from build import car_dirs                               # noqa: E402
 from lightshow import catalog as CAT                    # noqa: E402
 from lightshow.choreo import LIGHT_LEAD_S               # noqa: E402
 from lightshow.fseq import read_fseq                    # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-CARS = ("Car1_ModelY_Left", "Car2_Cybertruck_Center", "Car3_ModelY_Right")
 LIMITS = {C.LIFTGATE: C.CLOSURE_LIMITS[C.LIFTGATE], C.CHARGE_PORT: C.CLOSURE_LIMITS[C.CHARGE_PORT]}
 LIMITS.update({w: C.CLOSURE_LIMITS[w] for w in C.WINDOWS})
 LIMITS.update({m: C.CLOSURE_LIMITS[m] for m in C.MIRRORS})
@@ -53,7 +53,8 @@ def commands(col):
 def review(show):
     out = ROOT / "output" / show
     an = pickle.loads((out / "analysis.pkl").read_bytes())
-    frs = [read_fseq(out / c / "LightShow" / f"{show}.fseq")[0] for c in CARS]
+    cars = [d.name for d in car_dirs(show)]
+    frs = [read_fseq(out / c / "LightShow" / f"{show}.fseq")[0] for c in cars]
     rows = [l.split(None, 4) for l in (out / "moves.txt").read_text().splitlines()]
     moods = Counter(r[3] for r in rows)
     names = [r[4].split(" → ")[-1].split("+")[0].strip() for r in rows]
@@ -87,21 +88,21 @@ def review(show):
     corr = np.corrcoef(E, R)[0, 1] if len(E) > 2 and R.std() > 0 else 0
     # motors
     over = []
-    for c, fr in zip(CARS, frs):
+    for c, fr in zip(cars, frs):
         for ch, lim in LIMITS.items():
             n = commands(fr[:, ch])
             if n > lim:
                 over.append(f"{c[:4]} ch{ch} {n}>{lim}")
     # validator
     ok = 0
-    for c in CARS:
+    for c in cars:
         r = subprocess.run([sys.executable, str(ROOT / "vendor/light-show/validator.py"), str(out / c / "LightShow" / f"{show}.fseq")],
                            input="\n", capture_output=True, text=True)
         ok += "Found" in r.stdout and "rror" not in r.stdout
     top, topn = used.most_common(1)[0]
     print(f"{show:<32} {an.duration / 60:4.1f}m {an.tempo:4.0f}bpm  "
           f"moods {moods.get('calm', 0):2d}/{moods.get('groove', 0):2d}/{moods.get('drive', 0):2d}/{moods.get('frenzy', 0):2d}  "
-          f"moves {len(used):2d} (top {top} x{topn}, 3-car {collab:.0%})  timing {timing:.0%}  "
+          f"moves {len(used):2d} (top {top} x{topn}, collab {collab:.0%})  timing {timing:.0%}  "
           f"pacing {calm_r:.1f}->{live_r:.1f}/s r={corr:.2f}  motors {'OK' if not over else '; '.join(over)}  valid {ok}/3")
 
 

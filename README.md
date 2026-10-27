@@ -1,174 +1,192 @@
-# Halloween Tesla Light Shows
+# Tesla Light Show Maker
 
-Twelve synchronized light shows for three cars parked side by side, facing the crowd:
+Turn any song into a synchronized light show for a lineup of **one to five Teslas**: Model Y
+(2025+ or 2020–24) and Cybertruck, parked side by side facing the crowd. Every car gets its own
+show file, and together they play as one instrument. Notes run across the cars like a keyboard, the
+beat thumps through every headlight, builds sweep in from the edges and pop on the peak, and the
+liftgates, frunks, windows, mirrors and charge ports dance on the big moments.
 
-**Model Y (left) | Cybertruck (centre, pulled slightly forward) | Model Y (right)**
+![Three cars mid-show in the 3D preview](docs/images/preview.jpg)
 
-Both Model Ys are the 2025+ model ("Juniper") with the light bar across the nose.
+Nothing is hand-programmed per song. The generator listens to the recording: the notes, beat,
+loudness, song structure and, for sung songs, the lyrics. A choreographer then picks a move from a
+catalogue of 57 for every musical phrase. You can watch the result in a 3D preview before it goes
+anywhere near a car.
 
-Every show is generated from the music: the notes, beat, loudness and song structure drive the
-lights, the liftgates/frunk, windows, mirrors and charge port, choreographed across all three cars.
-There's a 3D preview that plays each show with its music in the browser.
+- **Upload a song** in the web app, pick your cars, and download a zip with each car's
+  `LightShow` folder.
+- **Or use the command line**: `python3 build.py --song my.mp3 --lineup YCY`.
+- **Run the diagnostic first.** It's a voiced test show that checks every car's drive, sync, lamps
+  and motors before the real thing.
 
-| # | Song | # | Song |
-|---|---|---|---|
-| 1 | Toccata and Fugue in D minor (Bach) | 7 | Thriller |
-| 2 | This Is Halloween | 8 | She Blinded Me with Science |
-| 3 | Danse Macabre (Saint-Saëns) | 9 | The Sorcerer's Apprentice (Dukas) |
-| 4 | Monster Mash | 10 | The Addams Family theme |
-| 5 | In the Hall of the Mountain King (Grieg) | 11 | Night on Bald Mountain (Mussorgsky) |
-| 6 | Ghostbusters | 12 | Ave Maria (calm closer) |
+It started as a three-car show for a Halloween event in 2026 (twelve songs, two Model Ys and a
+Cybertruck). Those shows are kept in `output/` as examples.
 
-## Quick start: watch the shows
+## Quick start
 
-You need **git**, **Python 3** and **ffmpeg** (on a Mac: `brew install ffmpeg`).
+You need **Python 3.12**, **ffmpeg**, **git** and **uv**. On a Mac: `brew install python@3.12 ffmpeg uv`.
+On Debian/Ubuntu: `apt install python3 ffmpeg git espeak-ng`, then install uv.
 
 ```bash
 git clone https://github.com/MatthewHager/tesla-lightshow.git
 cd tesla-lightshow
-python3 build.py --assemble
-python3 -m http.server 8765
+./setup.sh          # one time: the analysis environment (~3 GB of Python packages) and Tesla's files
 ```
 
-Open <http://localhost:8765>, pick a show, press Play. From an iPad or phone on the same Wi-Fi, use
-`http://<this computer's IP>:8765` (tap Play once to allow audio). Drag to orbit; the camera buttons
-switch views; **Labels** shows which car is which.
+### The web app
 
-`--assemble` cuts each song's audio from `songs/` to match the show files already in `output/`,
-and fills the `usb/` folders. It takes about a minute and needs nothing else installed.
+```bash
+uv pip install --python .venv312/bin/python -r requirements-web.txt
+.venv312/bin/python -m webapp
+```
 
-## Put the shows on the cars
+Open <http://localhost:8000>, drop in a song, add your cars from the crowd's left to right, and press
+**Make the light show**. A three-minute song takes a few minutes. Then download the zip, or
+**Watch it in 3D**. There's a Dockerfile for hosting it; see [webapp/README.md](webapp/README.md).
 
-After `python3 build.py --assemble`, there's one folder per car:
+### The command line
 
-| folder | car |
+```bash
+python3 build.py --song path/to/song.mp3 --lineup YCY --out my_show
+```
+
+`my_show/usb/` then has one folder per car, ready to copy. Options:
+
+| option | what it does |
 |---|---|
-| `usb/Car1_ModelY_Left/LightShow` | the Model Y on the crowd's **left** |
-| `usb/Car2_Cybertruck_Center/LightShow` | the **Cybertruck** in the middle |
-| `usb/Car3_ModelY_Right/LightShow` | the Model Y on the crowd's **right** |
+| `--lineup YCY` | the cars, crowd's left to right (see below) |
+| `--start 30 --end 150` | trim the recording (seconds) |
+| `--stems` | a band or vocal recording: separate vocals, drums and bass first, so each can drive its own lights (slower) |
+| `--style legato` | slow, flowing music with no beat: the lights follow the swell and the melody |
+| `--max-level 1` | cap the intensity (0–3); 1 keeps a song calm |
+| `--no-liftgate` | never open the liftgates or frunks |
+| `--diagnostic` | build the voiced test show for the lineup instead of a song |
 
-**Make the drives (Mac):** plug in a USB drive (1 GB or bigger) and run
+### Lineups
 
-```
-python3 make_usb.py
-```
+A lineup is one letter per car, written left to right **as the crowd sees the cars** (facing their
+fronts):
 
-It asks which car, erases the drive (exFAT), names it after the car (`CAR1 LEFT Y`, `CAR2 TRUCK`,
-`CAR3 RIGHT`), copies that car's folder, checks every file and ejects it. Label each drive - the
-two Model Y drives are different. `python3 make_usb.py 2` goes straight to the Cybertruck's;
-`--list` shows which drives it sees. Without a Mac: format the drive exFAT and copy the car's
-`LightShow` folder (the folder itself) to the top level of the drive.
-
-Then, in the cars:
-
-1. Plug each drive into its car's front USB port.
-2. **Toybox → Light Show**, pick the same show, and **Schedule** the same start time on all three cars
-   so they play in sync. (Each car plays its own part of the show.)
-3. Keep people clear of the liftgates, frunk, mirrors and windows - they move during the shows.
-
-**Run `00_diagnostic` first** (it's first in the list). A voice announces each test and the cars do
-it: each car flashes alone (is every drive in the right car?), a left-to-right sweep, beeps and tones
-the lights must match (are the cars in sync?), every lamp channel by name, the two light-bar tests
-(which tells you how your Model Ys' bars are driven - see *Things to check*), a fade, the interiors,
-then the mirrors, charge port, windows and the liftgates and frunk while the voice counts the
-seconds (time the frunk). It lasts 4 minutes; the windows stay down afterwards, like the shows.
-
-## Change a show and rebuild
-
-One-time setup for rebuilding (about 3 GB of Python packages; needs `brew install uv ffmpeg`):
-
-```bash
-./setup.sh
-```
-
-Then:
-
-```bash
-python3 build.py              # rebuild all 12 (20-30 minutes, two songs at a time)
-python3 build.py 04           # rebuild one song (by number or name: python3 build.py thriller)
-```
-
-Each build rewrites the song's show files in `output/`, refreshes the `usb/` folders and the
-preview's show list. Reload the browser to see the change. Per-song logs are in
-`output/<song>/build.log`; `output/<song>/moves.txt` lists the move chosen for every phrase and
-`pulse.txt` how the beat was handled.
-
-Builds are reproducible on one machine: the same code and recording give the same show. A
-different machine can come out slightly different (stem separation and transcription use
-floating-point models), so commit the `output/*.fseq` files you're happy with.
-
-### Common changes
-
-| to change... | edit |
+| letter | car |
 |---|---|
-| signature moments in a song (a hit, a solo, a blackout, the big peak) | `lightshow/cues.py` |
-| reactions to lyrics ("eyes glowing red" turns the interiors red) | `lightshow/lyrics.py` |
-| the moves themselves | `lightshow/moves.py`, described in `lightshow/catalog.py` (listed in [MOVES.md](MOVES.md)) |
-| how the beat shows in the headlights | `lightshow/pulse.py` |
-| frunk/liftgate, windows, mirrors, charge port choreography and travel times | `lightshow/motors.py` |
-| how moods and pacing are judged | `lightshow/mood.py` |
-| the slow, flowing style (Ave Maria: glow, swells, the melody gliding across the cars) | `lightshow/legato.py`; turn it on for a song with `"style": "legato"` in `setlist.json` |
+| `Y` | Model Y, 2025 and later ("Juniper", with the light bar across the nose) |
+| `y` | Model Y, 2020–2024 |
+| `C` | Cybertruck |
 
-To try a new song: `python3 build.py --song path/to/song.mp3 --name my_song` (add `--stems` for a band
-recording, `--start/--end` to trim). To keep it, copy the file into `songs/` and add it to
-`setlist.json`.
+For example `C` is a lone Cybertruck, `YY` two Model Ys, `YCY` the classic three, and `YYCYY` five
+cars. Each car's folder is named after its place, for example `Car1_ModelY_Left` or
+`Car3_Cybertruck_Center`. That folder goes on that car's drive; the files differ from car to car.
 
-### Checking a show
+Other Tesla models aren't supported yet. Adding one is a good first contribution; see
+[CONTRIBUTING.md](CONTRIBUTING.md#adding-a-vehicle).
+
+## Put a show on the cars
+
+1. **Format a USB drive** as exFAT (FAT32 also works). It needs no more than a few hundred MB per show.
+2. **Copy that car's `LightShow` folder** (the folder itself, not just its contents) to the top level
+   of the drive. Use one drive per car.
+   - On a Mac, `python3 make_usb.py` does all of this for a set list: it erases the drive, copies the
+     files, checks every file and ejects the drive.
+3. **Plug the drive into the car.** In the car, open **Toybox → Light Show** and pick the show.
+   **Schedule** the same start time on every car so they play together.
+4. **Keep people clear** of the liftgates, frunks, mirrors and windows. They move during the show.
+
+**Run the diagnostic first.** It's `00_diagnostic` in a set list, or the web app's "include the
+diagnostic show" option. A voice announces each test and the cars do it:
+
+- each car flashes alone, so you can catch a drive in the wrong car;
+- a left-to-right sweep;
+- beeps and tones the lights must match, to check the cars are in sync;
+- every lamp channel by name;
+- the light-bar tests;
+- the motors, while the voice counts the seconds.
+
+## A set list for an event
+
+For several songs on the same drives, list them in [`setlist.json`](setlist.json) and set its
+`"lineup"`:
 
 ```bash
-.venv312/bin/python tools/setlist_review.py     # every show: variety, timing, motor limits, Tesla's validator
-.venv312/bin/python tools/feel_all.py           # how clearly each show pulses on the beat
-.venv312/bin/python tools/closure_audit.py --summary output/*/*/LightShow/*.fseq   # motors vs Tesla's rules
+python3 build.py              # build every song in setlist.json (two at a time)
+python3 build.py 04 thriller  # rebuild some of them, by number or name
+python3 build.py --assemble   # no analysis: just the audio, the usb/ folders and the preview list
+python3 make_usb.py           # Mac: make each car's drive
 ```
 
-More tools (beat strips, motor scripts, preview videos) are in [tools/README.md](tools/README.md).
+Recordings go in `songs/`. They're never committed (see [songs/README.md](songs/README.md)). Each
+build writes `output/<song>/<car>/LightShow/<song>.fseq`, gathers every car's shows into `usb/`, and
+lists them in the 3D preview. Serve the folder with `python3 -m http.server 8765` and open
+<http://localhost:8765>. From a phone or iPad on the same Wi-Fi, use `http://<computer's IP>:8765`
+and tap Play once.
 
 ## How it works
 
-[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) is the technical tour: transcription, the form map,
-the choreographer and its move catalogue, the beat layer, the beat map that follows the
-performer, and the motor choreography. Sources and credits are in [docs/SOURCES.md](docs/SOURCES.md).
+The short version: `audio.py` and its neighbours listen; `form.py` maps the song's sections and
+shape; `phrases.py` cuts it into phrases; `choreo.py` picks one move per phrase from
+`catalog.py`/`moves.py`; `pulse.py` lays the beat into the headlights; `motors.py` plans the
+liftgates, frunks, windows, mirrors and charge port within Tesla's limits; `fseq.py` writes Tesla's
+file format.
+
+- [docs/CHOREOGRAPHY.md](docs/CHOREOGRAPHY.md): the choreography strategy. How a song becomes
+  moves, how the cars share the stage in a lineup of any size, the beat layer, the motors, and the
+  rules every show keeps.
+- [MOVES.md](MOVES.md): the move catalogue, with what each move looks like and when it's used
+  (generated from `lightshow/catalog.py`).
+- [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md): the technical tour of the pipeline, the checking
+  tools, and what's known about each car.
+- [tools/README.md](tools/README.md): tools for checking a show (sync, beat feel, motor rules,
+  preview videos).
+
+## Contributing
+
+New moves, new vehicles, better music analysis, car test reports: all welcome. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md). If you're working with a coding agent, point it at
+[AGENTS.md](AGENTS.md). Run the tests with:
+
+```bash
+.venv312/bin/python -m pytest
+```
 
 ## Project layout
 
 ```
-build.py            the one command: build / assemble / try a song
-make_usb.py         makes a car's USB drive (macOS)
-setlist.json        the diagnostic + 12 songs: recording, trim, options
-songs/              the recordings
-lightshow/          the generator (analysis, choreographer, moves, beat layer, motors, FSEQ writer)
-output/<song>/      generated shows: <car>/LightShow/<song>.fseq per car, moves.txt, pulse.txt
-usb/                ready-to-copy LightShow folders, one per car (generated)
-preview3d/          the 3D viewer (TypeScript/three.js; dist/ is the built copy the browser loads)
-preview/shows.json  the viewer's list of shows (generated)
+build.py            the one command: build a song, a set list, or a diagnostic
+make_usb.py         makes a car's USB drive from a set list (macOS)
+setlist.json        an event's songs and lineup
+lightshow/          the generator: analysis, choreographer, moves, beat layer, motors, FSEQ writer
+webapp/             the upload-a-song web app (FastAPI, no build step)
+preview3d/          the 3D preview (TypeScript + three.js; dist/ is the built copy)
 tools/              checking and review tools
-setup.sh            one-time setup for rebuilding
-docs/               how it works, sources
+tests/              pytest
+output/<song>/      generated shows: <car>/LightShow/<song>.fseq, moves.txt, pulse.txt
+songs/              your recordings (never committed)
+docs/               how it works, the choreography, sources
 ```
 
-The 3D viewer is prebuilt in `preview3d/dist/`. To change it you need Node.js:
-`cd preview3d && npm install && npm run build`.
+## Things to know
 
-## Things to check
+- **Model Y 2025+.** Tesla hasn't documented the 2025+ Model Y's lamps. The mapping comes from
+  owners' on-car tests (see [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md#the-2025-model-ys-lamps)),
+  and the diagnostic shows what your car does. Test reports are very welcome.
+- **The Cybertruck's frunk** opens in about 10 s and closes in about 4 s (timed on a truck; Tesla
+  doesn't publish it).
+- **Windows stay down** during and after a show. The music plays from the cabin speakers, so the
+  crowd hears it through the open windows. Close them afterwards.
+- **Motor limits.** Every show stays within Tesla's per-show command limits and the ~30 s dance
+  advice; `tools/closure_audit.py` checks it.
+- **Tested on macOS** (Apple Silicon) and Linux (via the web app). Windows is untested.
+- **Music rights.** Use recordings you have the right to use. The light-show files the generator
+  makes are yours.
 
-- **Cybertruck frunk timing.** Tesla doesn't publish it; timed on the truck it opens in about 10 s
-  and closes in 4 s, which the shows use (`LIFTGATE_OPEN_S` in `lightshow/motors.py`). Also check each Model Y's
-  liftgate opens fully (owners report part-way opening when its height setting has been lowered).
-- **Windows stay open during the shows** (the music plays through the cabin speakers, so the crowd
-  hears it through the windows). They're left fully down at the end - close them afterwards.
-- **The Model Ys' lights.** Tesla hasn't documented the 2025+ Model Y. Two owners' on-car tests
-  (Tesla's light-show issue #183, and github.com/Nghtmare7509/tesla-lightshow-juniper, Oct 2026)
-  agree: its front bar is three sections - each outer end on channel 4, the centre on channel 6 -
-  not 60 separate LEDs, and its signature, fog, aux park and side marker channels do nothing. The
-  shows are mapped to that (`lightshow/lamps.py`), and the preview draws it. The diagnostic's lamp
-  check and light-bar tests confirm it on your cars. For an older (2020-24) Model Y, change
-  `layout="YCY"` to `"yCy"` in `build.py` and rebuild.
-- **Headlight ramps.** Some lamps fade instead of switching (Tesla's 0.5/1/2 s ramps). Newer Model Y
-  projector headlights may switch instantly instead; the shows still work either way.
-- **Tested on macOS** (Apple Silicon). Linux should work; Windows is untested.
+## Licence and credits
 
-## Licences
+[AGPL-3.0](LICENSE). The 3D preview is adapted from
+[Tesla Lightshow Studio](https://github.com/nathanjgrace/tesla-lightshow-studio) by Nathan Grace
+(AGPL-3.0). Tesla's car models, xLights layout and validator are fetched from
+[teslamotors/light-show](https://github.com/teslamotors/light-show) at setup and aren't
+redistributed here. Music analysis uses [basic-pitch](https://github.com/spotify/basic-pitch),
+[Beat This!](https://github.com/CPJKU/beat_this), [Demucs](https://github.com/facebookresearch/demucs)
+and [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Full credits are in
+[docs/SOURCES.md](docs/SOURCES.md).
 
-The 3D viewer is adapted from Tesla Lightshow Studio and is AGPL-3.0 (`preview3d/LICENSE`).
-Several recordings in `songs/` are commercial - this repository is private; don't publish them.
-See [docs/SOURCES.md](docs/SOURCES.md).
+Not affiliated with Tesla. Light shows move real parts of real cars: watch the space around them.

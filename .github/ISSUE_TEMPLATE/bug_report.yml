@@ -1,0 +1,20 @@
+name: Bug report
+description: Something broke or looks wrong
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How to reproduce
+      description: The command or web app options, the lineup, and the song's length and style (not the recording itself)
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The end of build.log, or the error the page showed
+      render: text

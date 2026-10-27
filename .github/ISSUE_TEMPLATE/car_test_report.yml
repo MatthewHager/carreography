@@ -1,0 +1,44 @@
+name: Car test report
+description: What the diagnostic show did on your car (helps map cars Tesla hasn't documented)
+labels: ["car report"]
+body:
+  - type: input
+    id: car
+    attributes:
+      label: Car
+      description: Model, year, and software version (Controls > Software)
+      placeholder: Model Y Long Range 2025, 2026.32.4
+    validations:
+      required: true
+  - type: input
+    id: lineup
+    attributes:
+      label: Lineup letter you used
+      placeholder: Y
+  - type: textarea
+    id: lamps
+    attributes:
+      label: Lamp check
+      description: For each announced channel, what lit (or "nothing")
+      value: |
+        Outer main beams:
+        Inner main beams:
+        Signature lights:
+        Channel four:
+        Channel five:
+        Channel six:
+        Front turn signals:
+        Fog lights:
+        Aux park lights:
+        Side markers:
+        Light bar test A (LED channels):
+        Light bar test B (channel six):
+  - type: textarea
+    id: motors
+    attributes:
+      label: Motors
+      description: Liftgate/frunk open and close times (the voice counts the seconds), and anything that didn't move
+  - type: textarea
+    id: other
+    attributes:
+      label: Anything else (sync, interior colours, a video link)

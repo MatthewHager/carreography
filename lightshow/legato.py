@@ -26,6 +26,7 @@ loudness becomes how many lamps are lit, plus the parts that really dim: the bar
 import numpy as np
 
 from . import channels as C
+from . import moves as M
 
 RES = 0.25                                  # seconds per control step
 LAYER_PCT = (12, 40, 70, 90)                 # loudness percentiles at which layers 1-4 come in
@@ -117,7 +118,7 @@ def melody_path(an, t0, t1, n):
 
 def choreograph(cars, an):
     """All the lights for a legato song (the motors are scheduled separately, as for any song)."""
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = M.centre_truck(cars)
     order = sorted(cars, key=lambda q: q.x)
     start, end = music_span(an)
     L = loudness(an)
@@ -151,11 +152,11 @@ def choreograph(cars, an):
 
     # 2. the swoop: the melody gliding across the stage
     path = melody_path(an, start, end, n)
-    stage = path * 6                                   # six slots: Y-left, Y-left, truck, truck, Y-right, Y-right
-    for slot in range(6):
+    stage = path * 2 * len(order)                      # two slots per car (its left and right), crowd-left to right
+    for slot in range(2 * len(order)):
         car = order[slot // 2]
         side = "L" if slot % 2 == 0 else "R"
-        if car.is_ct:
+        if car is ct:
             continue
         here = (~np.isnan(stage)) & (np.floor(np.nan_to_num(stage, nan=-1)) == slot)
         for a, b in _runs(here):
@@ -166,8 +167,9 @@ def choreograph(cars, an):
         m = ct.fr(end) - f0
         frame_t = f0 * ct.step + np.arange(m) * ct.step
         s = np.interp(frame_t, tt, np.nan_to_num(stage, nan=-10))
-        on_truck = (s >= 1.5) & (s <= 4.5)
-        centre = np.clip((s - 2) / 2, 0, 1) * (len(C.FRONT_BAR) - 1)
+        k = 2 * order.index(ct)                        # the truck's two slots: k and k + 1
+        on_truck = (s >= k - 0.5) & (s <= k + 2.5)
+        centre = np.clip((s - k) / 2, 0, 1) * (len(C.FRONT_BAR) - 1)
         leds = np.arange(len(C.FRONT_BAR))
         spot = np.exp(-((leds[None, :] - centre[:, None]) / 6.0) ** 2) * on_truck[:, None] * 0.9
         ct.pixels(C.FRONT_BAR, start, spot)

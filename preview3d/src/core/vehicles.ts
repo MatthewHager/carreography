@@ -393,7 +393,7 @@ export const CYBERTRUCK_2024 = profile({
   hint: 'Cybertruck',
   years: { from: 2024 },
   channel4LeadsRamps: false,
-  // The frunk (liftgate channel), timed on the event's truck: 10 s up, 4 s down.
+  // The frunk (liftgate channel), timed on a 2024 Cybertruck: 10 s up, 4 s down.
   closureSeconds: { liftgate: [10, 4] },
   orGroups: [],
   rows: [

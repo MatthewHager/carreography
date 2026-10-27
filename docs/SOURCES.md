@@ -1,9 +1,10 @@
 # Sources
 
-## Recordings (in `songs/`)
+## Recordings
 
-The twelve recordings the shows are built from, as listed in `setlist.json`. Several are commercial
-recordings: they are in this private repository so the shows can be rebuilt, not for redistribution.
+The twelve recordings the example shows in `output/` (the Halloween 2026 set in `setlist.json`) were
+built from. They are not in the repository - several are commercial recordings - so to rebuild those
+shows, get the same recordings and put them in `songs/` under these names.
 
 | # | Piece | Recording | File | Source |
 |---|---|---|---|---|
@@ -11,14 +12,17 @@ recordings: they are in this private repository so the shows can be rebuilt, not
 ## Code and assets
 
 - **3D viewer** (`preview3d/`): adapted from [Tesla Lightshow Studio](https://github.com/nathanjgrace/tesla-lightshow-studio)
-  by Nathan Grace, AGPL-3.0-only (see `preview3d/LICENSE`). Car models in `preview3d/public/models/` are
-  Tesla's own, from the xLights show folder Tesla publishes with its
-  [light-show repo](https://github.com/teslamotors/light-show).
+  by Nathan Grace, AGPL-3.0-only (see `preview3d/LICENSE`). The car models it draws are Tesla's own,
+  from the xLights show folder Tesla publishes with its
+  [light-show repo](https://github.com/teslamotors/light-show); `lightshow/tesla_files.py` fetches
+  them at setup, since Tesla publishes them without a licence to redistribute.
 - **Validator**: Tesla's `validator.py`, fetched into `vendor/light-show/` by `setup.sh`.
 - **Beat tracking**: [Beat This!](https://github.com/CPJKU/beat_this) (Foscarin, Schlüter & Widmer, 2024).
 - **Note transcription**: [basic-pitch](https://github.com/spotify/basic-pitch) (Spotify).
 - **Stem separation**: [Demucs](https://github.com/facebookresearch/demucs) (htdemucs).
 - **Lyric timing**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
+- **Diagnostic voice**: macOS `say`, or [espeak-ng](https://github.com/espeak-ng/espeak-ng).
+- **Web app**: [FastAPI](https://fastapi.tiangolo.com/) and uvicorn.
 
 ## Study material (not in the repo)
 

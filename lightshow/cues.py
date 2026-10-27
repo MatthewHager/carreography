@@ -43,8 +43,10 @@ DRIVERS = {
 }
 
 
-def driver(name):
-    return DRIVERS.get(name, "orchestra")
+def driver(name, stems=False):
+    """What drives the rhythm: the song's entry above, else a guess - a recording separated into stems
+    is a band (its drum kit drives the beat), anything else is treated like an orchestra."""
+    return DRIVERS.get(name) or ("band" if stems else "orchestra")
 
 
 CUES = {
@@ -106,8 +108,10 @@ def resolve(name, an):
                 times = [(t, t)]
         elif at == "loudest_last_quarter":
             f0 = int(0.75 * len(an.loud_fast))
-            f = f0 + int(np.argmax(an.loud_fast[f0:-int(3 / an.step)]))
-            times = [(f * an.step, f * an.step)]
+            f1 = len(an.loud_fast) - int(3 / an.step)
+            if f1 > f0:                          # (a very short song has no last quarter to search)
+                f = f0 + int(np.argmax(an.loud_fast[f0:f1]))
+                times = [(f * an.step, f * an.step)]
         elif at == "big_chord_last_fifth":
             # The biggest chord in the closing fifth: the most voices, then the loudest, then the longest.
             f0 = 0.8 * an.duration

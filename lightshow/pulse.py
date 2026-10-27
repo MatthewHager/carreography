@@ -1,13 +1,13 @@
 """The beat layer: makes the audience feel the pulse under all the choreography.
 
 Concert lighting keeps a show readable by splitting the rig: the fixtures with the most visual mass
-bump on the beat, the rest carry the effects. Here the headlights of all three cars are the beat
+bump on the beat, the rest carry the effects. Here the headlights of every car are the beat
 layer wherever the music is lively and its pulse is clear; every move keeps the signatures, DRLs,
 fogs, turns, markers and the truck's bar. Hits are short and hard (about 120 ms, never more than a
 third of the beat) with real darkness between them, because a pulse needs an off state to read.
 
 Accents follow the bar, with the downbeat the biggest:
-    downbeat (1)    every headlight on all three cars, plus a flash of the truck's bar
+    downbeat (1)    every headlight on every car, plus a flash of the truck's bar
     beat 3          every headlight
     beats 2 and 4   the two Ys' headlights only
     off-beats       the truck's inner beams (frenzy only)
@@ -72,8 +72,8 @@ def _position(an):
 
 def apply(cars, an, phrases):
     """Lay the beat layer over the choreography (after the moves and drums, before the cues)."""
-    ys = [c for c in cars if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
+    ys = M.sides(cars)
+    ct = M.centre_truck(cars)
     beats = np.asarray(an.beats, float)
     if len(beats) < 4:
         return {}
@@ -166,7 +166,7 @@ def _build_pulse(cars, an, ph, beats):
     Ys' headlights on every beat; then every car; the last bar in eighths; then half a beat of
     black, and the build's own landing hits the next downbeat. The build move keeps its shape on
     the feature lamps (signatures, DRLs, fogs, the bar)."""
-    ys = [c for c in cars if not c.is_ct]
+    ys = M.sides(cars)
     for c in cars:
         c.set(HEADS, ph.t0, ph.t1, 0)
     b = beats[(beats >= ph.t0 - 0.01) & (beats < ph.t1)]

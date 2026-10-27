@@ -1,4 +1,4 @@
-"""Print every closure command in a built show, in time order, across the three cars.
+"""Print every closure command in a built show, in time order, across the cars.
 
     .venv312/bin/python tools/motor_log.py 01_toccata_and_fugue [liftgate|windows|mirrors|port]
 

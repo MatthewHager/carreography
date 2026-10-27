@@ -1,4 +1,4 @@
-// preview3d (adapted from tesla-lightshow-studio, AGPL-3.0): the three-car
+// preview3d (adapted from tesla-lightshow-studio, AGPL-3.0): the
 // lineup stands in a driving aisle, the stall rows and planted islands ahead
 // of and behind it. The lamp poles cast no real lights (too costly for an
 // iPad); their pools of light are painted into the asphalt shader instead,

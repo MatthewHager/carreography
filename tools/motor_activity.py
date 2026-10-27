@@ -15,13 +15,13 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build import show_cars                             # noqa: E402
 from closure_audit import commands                     # noqa: E402
 from lightshow import channels as C                     # noqa: E402
 from lightshow.fseq import read_fseq                    # noqa: E402
 from lightshow.motors import LIFTGATE_CLOSE_S, LIFTGATE_OPEN_S, MIRROR_S, PORT_S, WINDOW_S  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-CARS = ("Car1_ModelY_Left", "Car2_Cybertruck_Center", "Car3_ModelY_Right")
 GROUPS = {"lid": [C.LIFTGATE], "windows": list(C.WINDOWS), "mirrors": list(C.MIRRORS), "port": [C.CHARGE_PORT]}
 
 
@@ -44,10 +44,10 @@ def moving(col, step, open_s, close_s):
 
 def activity(show):
     any_move, rows = None, {g: [] for g in GROUPS}
-    for car in CARS:
-        f, step_ms = read_fseq(ROOT / "output" / show / car / "LightShow" / f"{show}.fseq")
+    for car, vehicle in show_cars(show):
+        f, step_ms = read_fseq(car / "LightShow" / f"{show}.fseq")
         step = step_ms / 1000
-        kind = "cybertruck" if "Cybertruck" in car else "modely"
+        kind = vehicle.kind
         travel = {C.LIFTGATE: (LIFTGATE_OPEN_S[kind], LIFTGATE_CLOSE_S), C.CHARGE_PORT: (PORT_S, PORT_S)}
         if any_move is None:
             any_move = np.zeros(len(f), bool)
@@ -73,7 +73,7 @@ def activity(show):
 
 if __name__ == "__main__":
     shows = sys.argv[1:] or sorted(p.name for p in (ROOT / "output").iterdir()
-                                   if p.name[:2].isdigit() and p.name[:2] != "00" and (p / CARS[0]).exists())
+                                   if p.name[:2].isdigit() and p.name[:2] != "00" and show_cars(p.name))
     print("per car averages: seconds moving, commands used/limit (windows and mirrors: per window/mirror)")
     for s in shows:
         activity(s)

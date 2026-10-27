@@ -1,5 +1,5 @@
 // The 3D view: renderer, night parking lot, camera presets, bloom, and the
-// three cars of the lineup with their glow sprites. Renderer and post setup
+// cars of the lineup with their glow sprites. Renderer and post setup
 // follow tesla-lightshow-studio's CarScene.ts (AGPL-3.0), tuned for iPad
 // Safari: devicePixelRatio capped at 1.5, no real-time lights from the cars,
 // bloom at reduced resolution and switched off automatically when slow.
@@ -110,6 +110,10 @@ export class Viewer {
     return this.cars.length > 0;
   }
 
+  get carCount(): number {
+    return this.cars.length;
+  }
+
   setCars(cars: CarRig[]): void {
     for (const c of this.cars) c.dispose();
     this.cars = cars;
@@ -127,6 +131,7 @@ export class Viewer {
       zs.push(z);
     }
     const mid = (zs[0]! + zs[n - 1]!) / 2;
+    this.halfSpan = Math.max(3, (zs[0]! - zs[n - 1]!) / 2 + Math.max(...widths) + 1.35);
     cars.forEach((car, i) => {
       const offset = (i - (n - 1) / 2) / Math.max(1, (n - 1) / 2); // -1 .. 1
       const forward = 1 - Math.abs(offset); // 1 at the centre
@@ -155,7 +160,9 @@ export class Viewer {
           cv.width = 512; cv.height = 128;
           const g = cv.getContext('2d')!;
           g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, 0, 512, 128);
-          g.fillStyle = color; g.font = 'bold 64px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+          let px = 64;
+          do g.font = `bold ${px--}px sans-serif`; while (g.measureText(text).width > 490 && px > 24);
           g.fillText(text, 256, 64);
           const tex = new THREE.CanvasTexture(cv);
           const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
@@ -164,7 +171,7 @@ export class Viewer {
           car.group.add(sp);
           this.labels.push(sp);
         };
-        tag(car.name.replace(/_/g, ' '), '#ffffff', car.bounds.halfLength * 0.2, car.bounds.height + 0.9, 0);
+        tag(carLabel(car.name), '#ffffff', car.bounds.halfLength * 0.2, car.bounds.height + 0.9, 0);
         // Tesla's mesh: x forward, y up, z right; the vehicle's left (driver's side) is -z,
         // which is on the crowd's right when they face the front.
         tag('VEH LEFT', '#ff6a6a', car.bounds.halfLength + 0.3, 0.9, -car.bounds.halfWidth * 0.9, 1.2);
@@ -207,15 +214,18 @@ export class Viewer {
     this.tween = { from: this.camera.position.clone(), to, tFrom: this.controls.target.clone(), tTo, start: performance.now() };
   }
 
-  /** A preset's camera position, pulled back on narrow screens so all three cars fit. */
+  /** Half the lineup's width (m): about 5.2 for three cars. */
+  private halfSpan = 5.2;
+
+  /** A preset's camera position, pulled back on narrow screens (or for a long lineup) so every car fits. */
   private fitted(p: CameraPreset): THREE.Vector3 {
     const pos = new THREE.Vector3(...p.position);
     const target = new THREE.Vector3(...p.target);
     const offset = pos.clone().sub(target);
     const halfV = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const halfH = Math.atan(Math.tan(halfV) * this.camera.aspect);
-    // The lineup is about 10 m wide and 7 m deep.
-    const need = 5.2 / Math.tan(Math.min(halfH, halfV * 1.6)) + 2.5;
+    // The lineup is 2 * halfSpan wide and about 7 m deep.
+    const need = this.halfSpan / Math.tan(Math.min(halfH, halfV * 1.6)) + 2.5;
     if (offset.length() < need) offset.setLength(need);
     return target.add(offset);
   }
@@ -296,4 +306,12 @@ export class Viewer {
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
+}
+
+/** "Car2_ModelY_CenterLeft" -> "2 · Model Y · center left": the car's USB folder name, for people. */
+function carLabel(name: string): string {
+  const m = /^Car(\d+)_([A-Za-z]+)_([A-Za-z]+)$/.exec(name);
+  if (!m) return name.replace(/_/g, ' ');
+  const words = (w: string) => w.replace(/([a-z])([A-Z])/g, '$1 $2');
+  return `${m[1]} · ${words(m[2]!)} · ${words(m[3]!).toLowerCase()}`;
 }

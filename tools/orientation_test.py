@@ -1,9 +1,9 @@
 """Calibration show for the viewer and the cars: lights march crowd-left to crowd-right.
 
-0-6 s   the six stage slots in order (left Y crowd-left half, left Y crowd-right half, truck
-        crowd-left heads, truck crowd-right heads, right Y ..., right Y ...), one second each
-6-9 s   the truck bar sweeps crowd-left to crowd-right
-9-12 s  each car in turn: crowd-left headlight 0.5 s, then crowd-right headlight 0.5 s
+0-6 s   every car's two halves in order (car 1's crowd-left half, car 1's crowd-right half, car 2 ...)
+6-9 s   the centre Cybertruck's bar sweeps crowd-left to crowd-right (if the lineup has one)
+9-12 s  each car in turn: crowd-left headlight, then crowd-right headlight
+The lineup is setlist.json's.
 Writes output/00_orientation_test/ like a normal show (silent audio) and registers it.
 """
 
@@ -15,7 +15,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from build import setlist_lineup                        # noqa: E402
 from lightshow import channels as C                     # noqa: E402
+from lightshow import moves as M                        # noqa: E402
 from lightshow.choreo import make_lineup                # noqa: E402
 from lightshow.fseq import write_fseq                   # noqa: E402
 
@@ -26,19 +28,22 @@ STEP = 0.02
 
 
 def main():
-    cars = make_lineup("YCY", int(DUR / STEP), STEP)
+    cars = make_lineup(setlist_lineup(), int(DUR / STEP), STEP)
     slots = [(c, s) for c in cars for s in ("L", "R")]
+    per = 6.0 / len(slots)
     for k, (car, side) in enumerate(slots):
-        car.light(car.heads(side) + car.accents(side), k * 1.0, k * 1.0 + 0.9)
-    ct = cars[1]
-    n = ct.fr(9.0) - ct.fr(6.0)
-    leds = np.arange(len(C.FRONT_BAR))
-    centre = np.linspace(0, len(leds) - 1, n)
-    ct.pixels(C.FRONT_BAR, 6.0, np.exp(-((leds[None, :] - centre[:, None]) / 2.5) ** 2))
+        car.light(car.heads(side) + car.accents(side), k * per, (k + 0.9) * per)
+    ct = M.centre_truck(cars)
+    if ct is not None:
+        n = ct.fr(9.0) - ct.fr(6.0)
+        leds = np.arange(len(C.FRONT_BAR))
+        centre = np.linspace(0, len(leds) - 1, n)
+        ct.pixels(C.FRONT_BAR, 6.0, np.exp(-((leds[None, :] - centre[:, None]) / 2.5) ** 2))
+    per = 3.0 / len(cars)
     for k, car in enumerate(cars):
-        t = 9.0 + k * 1.0
-        car.light(car.heads("L"), t, t + 0.45)
-        car.light(car.heads("R"), t + 0.5, t + 0.95)
+        t = 9.0 + k * per
+        car.light(car.heads("L"), t, t + 0.45 * per)
+        car.light(car.heads("R"), t + 0.5 * per, t + 0.95 * per)
     out = ROOT / "output" / NAME
     out.mkdir(parents=True, exist_ok=True)
     wav = out / f"{NAME}.wav"

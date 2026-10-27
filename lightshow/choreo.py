@@ -37,6 +37,7 @@ from . import motors
 from . import cues as CUE
 from . import lamps as LAMPS
 from . import lyrics as LY
+from . import vehicles as VEH
 
 PURPLE = (110, 0, 200)
 ORANGE = (255, 70, 0)
@@ -207,14 +208,10 @@ class Car:
 
 
 def make_lineup(layout, n_frames, step):
-    """One Car per letter, crowd-left to right: Y = 2025+ Model Y ("Juniper", front light bar),
-    y = 2020-2024 Model Y, C = Cybertruck."""
-    kinds = {"Y": "modely", "y": "modely", "C": "cybertruck"}
-    names = {"Y": "ModelY", "y": "ModelY", "C": "Cybertruck"}
-    sides = {0: "Left", len(layout) - 1: "Right"}
-    return [Car(kinds[k], f"Car{i + 1}_{names[k]}_{sides.get(i, 'Center')}", float(i), n_frames, step,
-                juniper=(k == "Y"))
-            for i, k in enumerate(layout)]
+    """One Car per letter, crowd-left to right (lightshow/vehicles.py): Y = 2025+ Model Y
+    ("Juniper", front light bar), y = 2020-2024 Model Y, C = Cybertruck."""
+    return [Car(v.kind, name, float(i), n_frames, step, juniper=v.juniper)
+            for i, (name, v, _) in enumerate(VEH.cars(layout))]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -256,21 +253,7 @@ def _ceiling_at(an, t):
     return section_at(secs, t).ceiling
 
 
-def _stage(cars, pitch, lo, hi):
-    """Pitch -> stage slot. Outer cars take the low and high ends (two sides each); the
-    Cybertruck's continuous bar takes the middle 40% of the range so runs sweep across it.
-    Returns (car, side, within) where `within` is 0..1 along the truck bar (None otherwise)."""
-    pos = float(np.clip((pitch - lo) / max(hi - lo, 1e-9), 0, 1))
-    n = len(cars)
-    if n == 3 and cars[1].is_ct:
-        if pos < 0.30:
-            return cars[0], ("L" if pos < 0.15 else "R"), None
-        if pos < 0.70:
-            return cars[1], ("L" if pos < 0.5 else "R"), (pos - 0.30) / 0.40
-        return cars[2], ("L" if pos < 0.85 else "R"), None
-    idx = min(n - 1, int(pos * n))
-    within = pos * n - idx
-    return cars[idx], ("L" if within < 0.5 else "R"), (within if cars[idx].is_ct else None)
+_stage = M.slot_for      # pitch -> (car, side, position along the centre truck's bar)
 
 
 def _slots_between(cars, low, high, lo, hi):
@@ -286,10 +269,11 @@ def _slots_between(cars, low, high, lo, hi):
     return order[min(ia, ib): max(ia, ib) + 1], a, b
 
 
-def choreograph(an: Analysis, layout="YCY", use_liftgate=True, name=None, style=None):
+def choreograph(an: Analysis, layout="YCY", use_liftgate=True, name=None, style=None, driver=None):
     """Phrase-level choreography: one whole-stage move per musical phrase (see moves.py), shaped
     by the form map (form.py) and the song's cue sheet (cues.py). style="legato" (slow, flowing
-    music with no beat to follow, e.g. Ave Maria) uses legato.py for the lights instead."""
+    music with no beat to follow, e.g. Ave Maria) uses legato.py for the lights instead. driver says
+    what carries the rhythm ("organ", "orchestra", "band", "vocal_band"; see cues.DRIVERS)."""
     cars = make_lineup(layout, an.n_frames, an.step)
     words = getattr(an, "lyric_words", None)
     phrases = segment(an.events, cuts_at=[l[0] for l in LY.lines(words)] if words else None)
@@ -303,7 +287,7 @@ def choreograph(an: Analysis, layout="YCY", use_liftgate=True, name=None, style=
             for sec in an.sections:
                 if sec.t0 < c["t1"] and sec.t1 > c["t0"]:
                     sec.ceiling = int(c["value"])
-    an.driver = CUE.driver(name) if name else "orchestra"
+    an.driver = driver or (CUE.driver(name) if name else "orchestra")
     # Durations in the moves (a bar, a sixteenth) come from the tempo: make it the tracked beats'
     # own spacing so a bar-long sweep ends on the next downbeat rather than drifting off it.
     from . import tempo as TEMPO
@@ -346,7 +330,7 @@ def choreograph(an: Analysis, layout="YCY", use_liftgate=True, name=None, style=
 
 
 # ---- The choreographer -------------------------------------------------------------------------
-# A formation says who does what for one phrase: "unison" (one move, all three cars) or "split"
+# A formation says who does what for one phrase: "unison" (one move, every car) or "split"
 # (the two Model Ys do one move while the Cybertruck does another). The chooser matches the
 # formation to the phrase's gesture and intensity, keeps variety (never the same formation twice
 # running, unison and split alternating), and gives repeated material the same formation.
@@ -356,7 +340,7 @@ def choreograph(an: Analysis, layout="YCY", use_liftgate=True, name=None, style=
 UNISON_FIGURATION = ["lr_notes", "rotation", "mirror", "keyboard", "wave", "converge", "call_response",
                      "relay", "pinball", "syncopate", "lr_beat", "march", "cascade", "tug_of_war", "antiphony",
                      "checker", "beam", "lr_channel"]
-# Moves where the three cars pass something between them (the ones with the most impact).
+# Moves where the cars pass something between them (the ones with the most impact).
 COLLAB = {"wave", "converge", "relay", "pinball", "syncopate", "expand_contract", "fill_stage", "out_in", "rotation",
           "lr_notes", "lr_beat", "call_response", "march", "cascade", "tug_of_war", "bounce_build", "antiphony", "motif",
           "checker", "beam", "lr_channel", "implode", "fade_cross"} | {m for m, i in CAT.UNISON.items() if i.collab}
@@ -650,55 +634,18 @@ def _darkness_guard(cars, an, phrases):
 def _play_phrases(cars, an, phrases):
     beat_len = 60.0 / max(an.tempo, 40)
     plan = _choose_plan(an, phrases)
-    ys = [c for c in cars if not c.is_ct]
-    ct = next((c for c in cars if c.is_ct), None)
-    unison = {
-        "motif": lambda ph: M.motif(cars, an, ph),
+    ys = M.sides(cars)
+    ct = M.centre_truck(cars)
+    # Unison moves are moves.<name>(cars, an, ph); the ones that need more are listed here.
+    special = {
         "keyboard": lambda ph: M.keyboard(cars, an, ph, heads=_tier_at(an, ph.t0) >= 2),
-        "lr_notes": lambda ph: M.lr_notes(cars, an, ph),
-        "lr_beat": lambda ph: M.lr_beat(cars, an, ph),
-        "rotation": lambda ph: M.rotation(cars, an, ph),
-        "mirror": lambda ph: M.mirror(cars, an, ph),
         "out_in": lambda ph: M.out_in(cars, an, ph, reverse=(ph.index % 2 == 1)),
-        "meter": lambda ph: M.meter(cars, an, ph),
-        "pulse": lambda ph: M.pulse(cars, an, ph),
         "block": lambda ph: M.block(cars, an, ph, beat_len),
-        "cadence": lambda ph: M.cadence(cars, an, ph),
-        "shimmer": lambda ph: M.shimmer(cars, an, ph),
-        "wave": lambda ph: M.wave(cars, an, ph),
-        "converge": lambda ph: M.converge(cars, an, ph),
-        "heartbeat": lambda ph: M.heartbeat(cars, an, ph),
-        "call_response": lambda ph: M.call_response(cars, an, ph),
-        "relay": lambda ph: M.relay(cars, an, ph),
-        "pinball": lambda ph: M.pinball(cars, an, ph),
-        "syncopate": lambda ph: M.syncopate(cars, an, ph),
-        "expand_contract": lambda ph: M.expand_contract(cars, an, ph),
-        "rain": lambda ph: M.rain(cars, an, ph),
-        "fill_stage": lambda ph: M.fill_stage(cars, an, ph),
-        "march": lambda ph: M.march(cars, an, ph),
-        "cascade": lambda ph: M.cascade(cars, an, ph),
-        "tug_of_war": lambda ph: M.tug_of_war(cars, an, ph),
-        "bounce_build": lambda ph: M.bounce_build(cars, an, ph),
-        "antiphony": lambda ph: M.antiphony(cars, an, ph),
-        "checker": lambda ph: M.checker(cars, an, ph),
-        "beam": lambda ph: M.beam(cars, an, ph),
-        "lr_channel": lambda ph: M.lr_channel(cars, an, ph),
-        "implode": lambda ph: M.implode(cars, an, ph),
-        "fade_cross": lambda ph: M.fade_cross(cars, an, ph),
-        "curtain": lambda ph: M.curtain(cars, an, ph),
-        "breathe_wash": lambda ph: M.breathe_wash(cars, an, ph),
-        "marquee": lambda ph: M.marquee(cars, an, ph),
-        "crossing": lambda ph: M.crossing(cars, an, ph),
-        "shockwave": lambda ph: M.shockwave(cars, an, ph),
-        "sparkle": lambda ph: M.sparkle(cars, an, ph),
-        "sunrise": lambda ph: M.sunrise(cars, an, ph),
-        "scanner": lambda ph: M.scanner(cars, an, ph),
-        "accelerando": lambda ph: M.accelerando(cars, an, ph),
-        "ping_pong": lambda ph: M.ping_pong(cars, an, ph),
-        "metronome": lambda ph: M.metronome(cars, an, ph),
-        "stripes": lambda ph: M.stripes(cars, an, ph),
-        "flutter": lambda ph: M.flutter(cars, an, ph),
     }
+
+    def unison(name):
+        return special.get(name) or (lambda ph: getattr(M, name)(cars, an, ph))
+
     sides = {
         "y_keyboard": lambda ph: M.y_keyboard(ys, an, ph, weight=min(2, max(0, _tier_at(an, ph.t0)))),
         "y_ripple_in": lambda ph: M.y_ripple(ys, an, ph, inward=True),
@@ -765,11 +712,12 @@ def _play_phrases(cars, an, phrases):
             c.soft = SOFT.get(ph.mood) if (info is None or info.grid not in ("build", "self")) else None
         try:
             if play.t1 - play.t0 >= 0.5 and play.b > play.a or play is ph:
-                if f[0] == "unison" or not ys or ct is None:
-                    unison[f[1] if f[0] == "unison" else "keyboard"](play)
+                if f[0] == "unison" or not ys:
+                    unison(f[1] if f[0] == "unison" else "keyboard")(play)
                 else:
                     sides[f[1]](play)
-                    centre[f[2]](play)
+                    if ct is not None:              # no Cybertruck: every car plays the side cars' part
+                        centre[f[2]](play)
         finally:
             an.events = saved
             an.pace = None
@@ -807,8 +755,8 @@ def _on_grid(an, t):
 
 
 def _apply_cues(cars, an, cues):
-    ct = next((c for c in cars if c.is_ct), None)
-    ys = [c for c in cars if not c.is_ct]
+    ct = M.centre_truck(cars)
+    ys = M.sides(cars)
     for action, c in cues:
         t0, t1 = c["t0"], c["t1"]
         if action in ("hit", "lightning", "ping"):
@@ -854,7 +802,7 @@ def _drums(cars, an):
     """Band songs: the kit is the rhythm. Kicks (low onsets of the drums stem) hit every car's
     headlights, snares (strong high onsets) hit both Ys' accents mirrored, hats (weak high onsets)
     tick the markers - all gated by the section's ceiling so quiet sections stay quiet."""
-    ys = [c for c in cars if not c.is_ct]
+    ys = M.sides(cars)
     for t, strength in an.bass:
         t = float(t)
         mood = MD.mood_at(an, t)
@@ -928,19 +876,6 @@ def _tidy(car, min_on=5, min_off=3):
                 col[s1:min(len(col), e0 + min_off)] = 0
 
 
-def _idle_glow(cars, an):
-    """(Unused.) Something always lit once the music is going: fogs on older Ys, a faint truck bar."""
-    for a, b in _runs(an.tier >= 1):
-        t0, t1 = a * an.step, b * an.step
-        for car in cars:
-            if car.is_ct:
-                n = b - a
-                car.pixels(C.FRONT_BAR, t0, np.full((n, len(C.FRONT_BAR)), 0.08))
-                car.pixels(C.REAR_BAR, t0, np.full((n, len(C.REAR_BAR)), 0.08))
-            elif not car.juniper:        # (a Juniper's fogs are its bar's centre: no constant glow)
-                car.light(car.fogs(), t0, t1)
-
-
 def _play_notes(cars, an, lead_in):
     """The keyboard. Every transcribed event gets a light; which *expression* draws it depends on
     the texture of the passage (see texture.label_phrases):
@@ -961,7 +896,7 @@ def _play_notes(cars, an, lead_in):
         return
     lo, hi = an.pitch_lo, an.pitch_hi
     strong = ev.amp >= np.quantile(ev.amp, 0.75)
-    ct = next((c for c in cars if c.is_ct), None)
+    ct = M.centre_truck(cars)
     for i in range(len(ev)):
         t = float(ev.t[i])
         if t < lead_in:
@@ -1080,8 +1015,8 @@ def _x_block(cars, ct, ev, i, lo, hi, strong, tier, beat_len=0.5):
         if hold > 0.8:
             car.light(car.accents(side), t + hold, t + hold + 0.6, C.OFF_500)
     if ct is not None and any(c.is_ct for c, _ in slots):
-        w0 = a[2] if a[0].is_ct else (0.0 if a[0].x < ct.x else 1.0)
-        w1 = b[2] if b[0].is_ct else (0.0 if b[0].x < ct.x else 1.0)
+        w0 = a[2] if a[0] is ct else (0.0 if a[0].x < ct.x else 1.0)
+        w1 = b[2] if b[0] is ct else (0.0 if b[0].x < ct.x else 1.0)
         _bar_span(ct, t, hold, min(w0, w1), max(w0, w1), 0.5 + 0.5 * amp)
 
 
@@ -1148,7 +1083,7 @@ def _bass(cars, an, lead_in):
 
 def _highs(cars, an, lead_in):
     """Bright transients strobe the markers and turn signals on alternating outer cars."""
-    outer = [c for c in cars if not c.is_ct] or cars
+    outer = M.sides(cars) or cars
     k = 0
     for t, strength in an.highs:
         if t < lead_in or _tier_at(an, t) < 2 or strength < 0.25:
@@ -1156,7 +1091,7 @@ def _highs(cars, an, lead_in):
         car = outer[k % len(outer)]
         k += 1
         car.flash(car.markers() + car.turns(), t, 0.06 + 0.04 * strength)
-        ct = next((c for c in cars if c.is_ct), None)
+        ct = M.centre_truck(cars)
         if ct is not None and strength > 0.5:
             n = ct.fr(t + 0.12) - ct.fr(t)
             sparkle = (np.random.default_rng(int(t * 1000)).random(len(C.REAR_BAR)) < 0.3) * strength
@@ -1207,8 +1142,8 @@ def _chases(cars, an, lead_in):
 
 def _builds(cars, an):
     """Crescendos: lights accumulate from the outside in; the Cybertruck pops at the top."""
-    ct = next((c for c in cars if c.is_ct), None)
-    outer = [c for c in cars if not c.is_ct]
+    ct = M.centre_truck(cars)
+    outer = M.sides(cars)
     for a, b in _runs(an.build > 0):
         t0, t1 = a * an.step, b * an.step
         p = an.build[a:b]

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 // App shell: show list, audio playback and sync, scrub bar, camera presets,
-// and building the three cars from Tesla's meshes.
+// and building the lineup (1 to 5 cars) from Tesla's meshes.
 
 import './style.css';
 import { readFseq } from './core/fseq';
@@ -13,6 +13,8 @@ import { CAMERA_PRESETS, Viewer } from './viewer';
 interface ShowCar {
   name: string;
   kind: CarKind;
+  /** Which body to draw (lightshow/vehicles.py); without it the Model Y menu decides. */
+  body?: 'modely2025' | 'modely2020' | 'cybertruck';
   fseq: string;
 }
 interface ShowEntry {
@@ -27,6 +29,11 @@ const params = new URLSearchParams(location.search);
 const ROOT = (
   params.get('root') ?? document.querySelector('meta[name="show-root"]')?.getAttribute('content') ?? '../../'
 ).replace(/\/?$/, '/');
+/** The show list: ?manifest=<url of a shows.json> (paths in it are relative to it, e.g. a build
+ *  from webapp/ or build.py --out), else the project's preview/shows.json (paths relative to ROOT). */
+const MANIFEST = new URL(params.get('manifest') ?? ROOT + 'preview/shows.json', location.href);
+const BASE = params.get('manifest') ? MANIFEST : new URL(ROOT, location.href);
+const showUrl = (path: string) => new URL(path, BASE).href;
 const PAINT: Record<CarKind, string> = { modely: '#e9eaec', cybertruck: '#b9bcc0' };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -225,7 +232,8 @@ const labelsBox = $<HTMLInputElement>('labels');
 labelsBox.checked = params.get('labels') === '1';
 labelsBox.addEventListener('change', () => viewer.setLabels(labelsBox.checked));
 viewer.onAutoBloomOff = () => console.info('Bloom switched off: frames were slow');
-// The event's Model Ys are 2025+ ("Juniper", front light bar); ?ybody=mesh shows an older one.
+// Model Ys whose show doesn't say which they are: 2025+ ("Juniper", front light bar) unless
+// ?ybody=mesh asks for a 2020-24 one.
 const initialY = params.get('ybody') === 'mesh' ? 'mesh' : 'refresh';
 yBodySelect.value = initialY;
 yBodySelect.addEventListener('change', async () => {
@@ -238,7 +246,7 @@ yBodySelect.addEventListener('change', async () => {
 /** A show file's bytes. A published copy (claude.ai pages serve no binary types) keeps each one
  *  gzipped and base64-encoded as `<name>.fseq.gz.b64.txt`. */
 async function fetchShowFile(path: string): Promise<Uint8Array> {
-  const res = await fetch(ROOT + path, { cache: 'no-cache' });
+  const res = await fetch(showUrl(path), { cache: 'no-cache' });
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
   if (!path.endsWith('.gz.b64.txt')) return new Uint8Array(await res.arrayBuffer());
   const packed = Uint8Array.from(atob((await res.text()).trim()), (ch) => ch.charCodeAt(0));
@@ -264,27 +272,35 @@ async function loadAssets(): Promise<void> {
   assets = { modelS, cybertruck };
 }
 
+function bodyOf(c: ShowCar): YBody {
+  if (c.body === 'modely2020') return 'mesh';
+  if (c.body === 'modely2025') return 'refresh';
+  return yBodySelect.value as YBody;
+}
+
 async function ensureRigs(show: ShowEntry): Promise<void> {
-  const yBody = yBodySelect.value as YBody;
-  const key = show.cars.map((c) => c.kind).join(',') + '|' + yBody;
+  // The Model Y menu only matters for Model Ys whose show doesn't name their body.
+  yBodySelect.hidden = !show.cars.some((c) => c.kind === 'modely' && !c.body);
+  const key = show.cars.map((c) => `${c.kind}:${bodyOf(c)}`).join(',');
   if (key === rigKey) return;
   setStatus('Building cars…');
   await new Promise((r) => setTimeout(r, 30));
   rigKey = key;
   rigs = show.cars.map(
-    (c) => new CarRig(c.kind, c.name, yBody, c.kind === 'cybertruck' ? assets.cybertruck : assets.modelS, PAINT[c.kind]),
+    (c) => new CarRig(c.kind, c.name, bodyOf(c), c.kind === 'cybertruck' ? assets.cybertruck : assets.modelS, PAINT[c.kind]),
   );
   const first = !viewer.hasCars;
+  const resized = rigs.length !== viewer.carCount;
   viewer.setCars(rigs);
-  if (!cooler) {
-    // The candy station: a cyber cooler with dry ice and lights, in front of the lineup,
-    // a step to the crowd's left of the truck so it does not hide the truck's nose.
+  if (!cooler && params.get('cooler') === '1') {
+    // ?cooler=1: a cyber cooler with dry ice and lights in front of the lineup (a candy station),
+    // a step to the crowd's left of centre so it does not hide the middle car's nose.
     cooler = new CoolerFog();
     viewer.scene.add(cooler.group);
+    cooler.group.position.set(4.6, 0, 1.1);
+    cooler.group.rotation.y = 0;   // long side parallel to the lineup, open chest toward the crowd
   }
-  cooler.group.position.set(4.6, 0, 1.1);
-  cooler.group.rotation.y = 0;   // long side parallel to the lineup, open chest toward the crowd
-  if (first) viewer.flyTo(params.get('cam') ?? '3/4', true);
+  if (resized) viewer.flyTo(params.get('cam') ?? '3/4', first);   // a longer or shorter lineup: refit
   (window as unknown as { __rigs: CarRig[] }).__rigs = rigs;
 }
 
@@ -339,7 +355,7 @@ async function loadShow(name: string): Promise<void> {
   // http.server can't answer range requests and Safari insists on them.
   setStatus('Loading audio…', 0);
   try {
-    const bytes = await fetchWithProgress(ROOT + show.audio, (f) => token === loadToken && setStatus('Loading audio…', f));
+    const bytes = await fetchWithProgress(showUrl(show.audio), (f) => token === loadToken && setStatus('Loading audio…', f));
     if (token !== loadToken) return;
     audioUrl = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
     audio.src = audioUrl;
@@ -364,8 +380,8 @@ function fail(err: unknown): void {
 
 async function main(): Promise<void> {
   setStatus('Loading show list…');
-  const res = await fetch(ROOT + 'preview/shows.json', { cache: 'no-cache' });
-  if (!res.ok) throw new Error(`preview/shows.json: HTTP ${res.status}`);
+  const res = await fetch(MANIFEST.href, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`${MANIFEST.pathname}: HTTP ${res.status}`);
   shows = (await res.json()) as ShowList;
   for (const name of Object.keys(shows)) {
     const o = document.createElement('option');
