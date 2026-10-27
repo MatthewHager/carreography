@@ -51,6 +51,8 @@ interface LampRule {
   color: THREE.Color;
   lens: THREE.Color;
   gain?: number;
+  /** Move the lit lamp this far out along its surface (m): for lamps the app sets inside a housing. */
+  proud?: number;
 }
 interface BarRule {
   node: string;
@@ -66,6 +68,11 @@ interface ModelRules {
   portLed?: string;
   /** A charge port door with no clip in the app: hinge this node by hand. */
   portDoor?: string;
+  /**
+   * Mirrors the app doesn't animate (the 2025+ Model Y): the pieces inside this box (car frame,
+   * metres; |z| from the centre line) are cut out of these meshes and folded back about their base.
+   */
+  foldMirrors?: { nodes: RegExp; x: [number, number]; y: [number, number]; absZ: number; deg: number };
   /** The headlight beams start at this lamp node. */
   beamFrom: string;
 }
@@ -99,14 +106,17 @@ const RULES: Record<AppModelId, ModelRules> = {
       { node: 'Right_Turn_Signal_On', ids: (c) => [c.x > 1.9 ? 'rightFrontTurn' : 'rightSideRepeater'], color: A, lens: COLORS.lensAmber },
       { node: 'Back_Left_Turn_Signal_On', ids: fixed('leftRearTurn'), color: A, lens: COLORS.lensAmber },
       { node: 'Back_Right_Turn_Signal_On', ids: fixed('rightRearTurn'), color: A, lens: COLORS.lensAmber },
-      { node: 'Brake_Lights_On', ids: each('Tail'), color: R, lens: COLORS.lensRear, gain: 3 },
-      { node: 'Parking_Lights_On', ids: fixed('brakeLights'), color: R, lens: COLORS.lensRear },
+      // The tail lamps, and the high centre brake light at the top of the liftgate.
+      { node: 'Brake_Lights_On', ids: (c) => (c.y > 1.3 ? ['brakeLights'] : [`${sideOf(c)}Tail`]), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Parking_Lights_On', ids: fixed('brakeLights'), color: R, lens: COLORS.lensRear, gain: 8, proud: 0.015 },
       { node: 'Reverse Light On', ids: fixed('reverseLights'), color: W, lens: COLORS.lensFront },
       { node: 'Fog_Light_On', ids: fixed('rearFog'), color: R, lens: COLORS.lensRear },
     ],
     bars: [],
     closures: { liftgate: 'TrunkAnimation', chargePort: 'ChargeportAnimation', ...WINDOWS },
     portLed: 'Charge_Port_Cover',
+    // The mirror cap is its own mesh; the housing and glass are part of the door's meshes.
+    foldMirrors: { nodes: /^(Skullcap_[LR]F_Paint|Front_(Left|Right)_Door)/, x: [0.56, 0.88], y: [0.98, 1.25], absZ: 0.945, deg: 62 },
     beamFrom: 'Headlights_On',
   },
   // 2020-24 Model Y: one DRL/signature lamp per side (channels 4-6 OR'd into it).
@@ -115,8 +125,9 @@ const RULES: Record<AppModelId, ModelRules> = {
       { node: 'Headlights', ids: (c, r) => (c.x > 1.5 ? innerOuter('OuterMainBeam', 'InnerMainBeam')(c, r) : undefined), color: W, lens: COLORS.lensFront },
       { node: 'DRL', ids: (c) => ['Signature', 'Channel4', 'Channel5', 'Channel6'].map((b) => `${sideOf(c)}${b}`), color: W, lens: COLORS.lensFront },
       { node: 'Fog_Lights_Front', ids: each('FrontFog'), color: W, lens: COLORS.lensFront },
-      { node: 'Left_Turn_Signal', ids: (c) => [c.x > 1.5 ? 'leftFrontTurn' : c.x < -1.5 ? 'leftRearTurn' : 'leftSideRepeater'], color: A, lens: COLORS.lensAmber },
-      { node: 'Right_Turn_Signal', ids: (c) => [c.x > 1.5 ? 'rightFrontTurn' : c.x < -1.5 ? 'rightRearTurn' : 'rightSideRepeater'], color: A, lens: COLORS.lensAmber },
+      // The front corner amber is the turn signal and the side marker (one lamp on the car).
+      { node: 'Left_Turn_Signal', ids: (c) => (c.x > 1.5 ? ['leftFrontTurn', 'leftSideMarker'] : [c.x < -1.5 ? 'leftRearTurn' : 'leftSideRepeater']), color: A, lens: COLORS.lensAmber },
+      { node: 'Right_Turn_Signal', ids: (c) => (c.x > 1.5 ? ['rightFrontTurn', 'rightSideMarker'] : [c.x < -1.5 ? 'rightRearTurn' : 'rightSideRepeater']), color: A, lens: COLORS.lensAmber },
       // North American cars signal from the red tail lamps.
       { node: 'Brake_Lights_Left', ids: fixed('leftTail', 'brakeLights', 'leftRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
       { node: 'Brake_Lights_Right', ids: fixed('rightTail', 'brakeLights', 'rightRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
@@ -211,7 +222,7 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
         list.push(...t.p);
       }
       for (const [key, positions] of buckets) {
-        const mesh = carFrameMesh(src, positions, b.car, lensMaterial(rule.lens));
+        const mesh = carFrameMesh(src, positions, b.car, lensMaterial(rule.lens), rule.proud);
         b.lightMesh(mesh, key.split('+'), rule.color, rule.gain ?? 5);
       }
       src.visible = false;
@@ -241,6 +252,7 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
       mixer.update(0);
     });
   }
+  if (rules.foldMirrors) foldMirrors(b, root, toCar, rules.foldMirrors);
   if (rules.portDoor) {
     const door = root.getObjectByName(rules.portDoor);
     if (door) {
@@ -280,6 +292,22 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
   reverse.target.position.set(body.min.x - 4.5, 0, 0);
   b.car.add(reverse, reverse.target);
   b.beam(['reverseLights'], reverse, 30);
+  // The licence plate light: the plate itself glows (it moves with a liftgate it's mounted on);
+  // without a plate mesh, a lit panel where the app marks the plate.
+  const plates = [...named('Plate_US'), ...named('Plate_US2')].filter((m) => m.material instanceof THREE.MeshStandardMaterial);
+  for (const plate of plates) {
+    plate.material = (plate.material as THREE.MeshStandardMaterial).clone();
+    b.lightMesh(plate, ['licensePlate'], W, 0.6);
+  }
+  const marker = plates.length ? undefined : root.getObjectByName('Plate_Marker');
+  if (marker) {
+    const at = marker.getWorldPosition(new THREE.Vector3()).applyMatrix4(toCar);
+    if (at.x < 0) b.light(b.car, ['licensePlate'], W, new THREE.Color('#9a9a9a'), [0.01, 0.13, 0.3], [at.x - 0.012, at.y, at.z], 0.6);
+  }
+  // The Cybertruck's aux park channel is the light inside the frunk: seen when the frunk is open.
+  if (id === 'cybertruck') {
+    b.light(b.car, ['leftAuxPark'], W, COLORS.lensFront, [0.4, 0.01, 0.08], [body.max.x - 0.55, 0.95, 0], 3);
+  }
   b.cabinLight.position.set(body.max.x * 0.25, body.max.y * 0.6, 0);
   b.car.add(b.cabinLight);
 
@@ -289,6 +317,89 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
     halfWidth: Math.max(-body.min.z, body.max.z),
     cabinGain: 1.5,
   };
+}
+
+/**
+ * Cuts the mirror out of the meshes it's modelled in and hinges it at its base on the door: closed
+ * (folded) it swings back along the body, as Tesla's mirrors do. Each piece keeps its material.
+ */
+function foldMirrors(b: Builder, root: THREE.Object3D, toCar: THREE.Matrix4, spec: NonNullable<ModelRules['foldMirrors']>): void {
+  const sources: THREE.Mesh[] = [];
+  root.traverse((o) => {
+    if (o instanceof THREE.Mesh && o.visible && (spec.nodes.test(o.name) || spec.nodes.test(o.parent?.name ?? ''))) sources.push(o);
+  });
+  for (const side of ['left', 'right'] as Side[]) {
+    const s = side === 'left' ? -1 : 1;
+    const pieces: { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[] = [];
+    let base = new THREE.Vector3();
+    let baseN = 0;
+    let innermost = Infinity;
+    for (const src of sources) {
+      const m = new THREE.Matrix4().multiplyMatrices(toCar, src.matrixWorld);
+      const geo = src.geometry.index ? src.geometry.toNonIndexed() : src.geometry;
+      const pos = geo.getAttribute('position');
+      const inside: boolean[] = [];
+      const v = new THREE.Vector3();
+      for (let i = 0; i + 2 < pos.count; i += 3) {
+        const c = new THREE.Vector3();
+        for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, i + k).applyMatrix4(m));
+        c.divideScalar(3);
+        const hit = c.z * s > spec.absZ && c.x >= spec.x[0] && c.x <= spec.x[1] && c.y >= spec.y[0] && c.y <= spec.y[1];
+        inside.push(hit);
+        if (hit) {
+          innermost = Math.min(innermost, Math.abs(c.z));
+          if (Math.abs(c.z) < spec.absZ + 0.03) {
+            base.add(c);
+            baseN++;
+          }
+        }
+      }
+      if (!inside.some(Boolean)) continue;
+      pieces.push({ geometry: bakeTriangles(geo, m, inside, true), material: src.material });
+      src.geometry = bakeTriangles(geo, new THREE.Matrix4(), inside, false); // the door without it
+    }
+    if (!pieces.length) continue;
+    // The hinge: where the mirror's stalk meets the door.
+    base = baseN ? base.divideScalar(baseN) : new THREE.Vector3((spec.x[0] + spec.x[1]) / 2, (spec.y[0] + spec.y[1]) / 2, s * innermost);
+    base.z = s * innermost;
+    const pivot = new THREE.Group();
+    pivot.position.copy(base);
+    b.car.add(pivot);
+    for (const piece of pieces) {
+      piece.geometry.translate(-base.x, -base.y, -base.z);
+      const mesh = new THREE.Mesh(piece.geometry, piece.material);
+      mesh.frustumCulled = false;
+      pivot.add(mesh);
+    }
+    // Unfolded at 1 (the closure's rest); folding swings the glass back toward the rear.
+    const fold = THREE.MathUtils.degToRad(spec.deg);
+    b.closure(`${side}Mirror`, (p) => (pivot.rotation.y = (side === 'right' ? -1 : 1) * (1 - THREE.MathUtils.clamp(p, 0, 1)) * fold), pivot);
+  }
+}
+
+/**
+ * The triangles of a non-indexed geometry where `keep[i]` is `want`, with every attribute; positions
+ * and normals moved by `m` (identity keeps the source's own space).
+ */
+function bakeTriangles(geo: THREE.BufferGeometry, m: THREE.Matrix4, keep: boolean[], want: boolean): THREE.BufferGeometry {
+  const out = new THREE.BufferGeometry();
+  const normalMatrix = new THREE.Matrix3().getNormalMatrix(m);
+  const v = new THREE.Vector3();
+  for (const [name, attr] of Object.entries(geo.attributes)) {
+    const a = attr as THREE.BufferAttribute;
+    const data: number[] = [];
+    for (let t = 0; t < keep.length; t++) {
+      if (keep[t] !== want) continue;
+      for (let k = 0; k < 3; k++) {
+        const i = t * 3 + k;
+        if (name === 'position') data.push(...v.fromBufferAttribute(a, i).applyMatrix4(m).toArray());
+        else if (name === 'normal') data.push(...v.fromBufferAttribute(a, i).applyMatrix3(normalMatrix).normalize().toArray());
+        else for (let c = 0; c < a.itemSize; c++) data.push(a.getComponent(i, c));
+      }
+    }
+    out.setAttribute(name, new THREE.Float32BufferAttribute(data, a.itemSize, a.normalized));
+  }
+  return out;
 }
 
 interface CarTri {
@@ -333,12 +444,28 @@ function zRange(tris: CarTri[]): Spread {
  * A mesh from car-frame positions, placed under `src`'s parent with a fixed transform from the
  * parent's resting pose, so it follows the parent when a closure animation moves it.
  */
-function carFrameMesh(src: THREE.Mesh, positions: number[], car: THREE.Object3D, material: THREE.Material): THREE.Mesh {
+function carFrameMesh(src: THREE.Mesh, positions: number[], car: THREE.Object3D, material: THREE.Material, proud = 0): THREE.Mesh {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.computeVertexNormals();
+  if (proud) {
+    // Out toward the viewer: along each face's normal, flipped to point away from the car's middle.
+    const pos = geo.getAttribute('position');
+    const nrm = geo.getAttribute('normal');
+    const p = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      p.fromBufferAttribute(pos, i);
+      n.fromBufferAttribute(nrm, i);
+      if (n.dot(p.clone().setY(0)) < 0) n.negate();
+      pos.setXYZ(i, p.x + n.x * proud, p.y + n.y * proud, p.z + n.z * proud);
+    }
+  }
   const mesh = new THREE.Mesh(geo, material);
-  const parent = src.parent ?? car;
+  // Under the source's nearest shown ancestor: the app hides its "lamp on" nodes, and a lamp on a
+  // liftgate or frunk lid still has to move with it.
+  let parent: THREE.Object3D = src.parent ?? car;
+  while (!parent.visible && parent.parent) parent = parent.parent;
   mesh.matrixAutoUpdate = false;
   mesh.matrix.copy(parent.matrixWorld).invert().multiply(car.matrixWorld);
   mesh.frustumCulled = false;
@@ -361,6 +488,14 @@ function nightLot(m: THREE.Material): void {
     m.roughness = Math.max(m.roughness, 0.35);
     if (!m.map && m.color.getHSL({ h: 0, s: 0, l: 0 }).l < 0.35) m.color.set('#b9bcc0');
   }
+  // The app's mirror-like clear coat and glass catch the moon as a pinpoint that reads as a lit lamp
+  // on a dark lot: spread the highlight so only the show's lights look like lights.
+  // (The viewer's own bodies use roughness 0.5-0.6 and no clear coat for the same reason.)
+  if (m instanceof THREE.MeshPhysicalMaterial && m.clearcoat > 0) {
+    m.clearcoat = Math.min(m.clearcoat, 0.3);
+    m.clearcoatRoughness = Math.max(m.clearcoatRoughness, 0.5);
+  }
+  m.roughness = Math.max(m.roughness, m.transparent ? 0.45 : 0.5);
 }
 
 function lensMaterial(lens: THREE.Color): THREE.MeshStandardMaterial {
