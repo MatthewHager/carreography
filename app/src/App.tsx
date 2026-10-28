@@ -15,12 +15,22 @@ import { PlayerBar } from '@/app/PlayerBar';
 import type { Show } from '@/app/show';
 import { SongDrop } from '@/app/SongDrop';
 import { Stage } from '@/app/Stage';
+import { parseLineup } from '@/engine/vehicles';
 
 const params = new URLSearchParams(location.search);
 
+/** The ?lineup= of the link, or YCY when it names a car we don't know. */
+function startLineup(): string {
+  try {
+    return parseLineup(params.get('lineup') ?? 'YCY');
+  } catch {
+    return 'YCY';
+  }
+}
+
 export default function App() {
   const player = useMemo(() => new Player(), []);
-  const [lineup, setLineup] = useState(params.get('lineup') ?? 'YCY');
+  const [lineup, setLineup] = useState(startLineup);
   const [paints, setPaints] = useState<string[]>([]);
   const [song, setSong] = useState<File | null>(null);
   const [show, setShow] = useState<Show | null>(null);

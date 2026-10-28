@@ -513,8 +513,8 @@ export function falconDoors(cars: Car[], an: Analysis): void {
       const openAt = land - FALCON_OPEN_S - LID_OPEN_MARGIN_S;
       const danceEnd = land + np.clip(holdUntil - land, LID_DANCE_MIN_S, FALCON_DANCE_S);
       const closeAt = danceEnd + 0.3;
-      // after the windows' opening Open, and shut a little before the end
-      if (openAt < 0.7 + WINDOW_S + 0.5 || closeAt + FALCON_CLOSE_S > end - 1.0) continue;
+      // after the windows' opening Open, and shut in time for their last Open (finishWindows) to follow
+      if (openAt < 0.7 + WINDOW_S + 0.5 || closeAt + FALCON_CLOSE_S + 0.5 > end - 2.0) continue;
       for (const door of [C.L_FALCON, C.R_FALCON]) {
         c.closure(door, openAt, openAt + 0.5, C.CLOSURE_OPEN);
         c.closure(door, land, danceEnd, C.CLOSURE_DANCE);
