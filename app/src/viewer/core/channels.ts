@@ -4,10 +4,6 @@
 // (teslamotors/light-show, xlights/tesla_xlights_show_folder.zip). See
 // docs/research/01-tesla-lightshow-format.md for details.
 
-export const CHANNEL_COUNT = 200;
-/** Older shows use a 48-channel layout; the car still accepts these. */
-export const LEGACY_CHANNEL_COUNT = 48;
-
 /**
  * How the car interprets a channel's byte value.
  * - boolean: on above 50%, off otherwise
@@ -131,20 +127,8 @@ ROWS.push(
   ...rgbRows(191, 'leftRearAccent', 'Left Rear Accent'),
 );
 
-export const CHANNELS: readonly ChannelDef[] = ROWS.map(([num, id, name, kind, info]) => ({
-  id,
-  index: num - 1,
-  name,
-  kind,
-  ...(info ? { closure: info } : {}),
-}));
-
 export const CHANNELS_BY_ID: ReadonlyMap<string, ChannelDef> = new Map(
-  CHANNELS.map((c) => [c.id, c]),
-);
-
-export const CHANNELS_BY_INDEX: ReadonlyMap<number, ChannelDef> = new Map(
-  CHANNELS.map((c) => [c.index, c]),
+  ROWS.map(([num, id, name, kind, info]) => [id, { id, index: num - 1, name, kind, ...(info ? { closure: info } : {}) }]),
 );
 
 export function channel(id: string): ChannelDef {

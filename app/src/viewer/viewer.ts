@@ -10,7 +10,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { buildLot, lotEnvironment, type Lot } from './car/lot';
+import { buildLot, lotEnvironment } from './car/lot';
 import { shadowTexture } from './car/kit';
 import { GlowLayer } from './glow';
 import type { CarRig } from './rig';
@@ -32,14 +32,14 @@ export const CAMERA_PRESETS: CameraPreset[] = [
 const MAX_DPR = 1.5;
 
 export class Viewer {
-  readonly renderer: THREE.WebGLRenderer;
-  readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(36, 1, 0.1, 250);
-  readonly controls: OrbitControls;
+  private readonly renderer: THREE.WebGLRenderer;
+  private readonly scene = new THREE.Scene();
+  private readonly camera = new THREE.PerspectiveCamera(36, 1, 0.1, 250);
+  private readonly controls: OrbitControls;
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
   private readonly glow = new GlowLayer();
-  private readonly lot: Lot;
+  private readonly disposeLot: () => void;
   private readonly lineup = new THREE.Group();
   private cars: CarRig[] = [];
   private bloomOn = true;
@@ -49,11 +49,9 @@ export class Viewer {
   private dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
   /** Called every frame before rendering (the app updates the show time here). */
   onTick: (() => void) | undefined;
-  /** Called when the viewer turns bloom off by itself because frames are slow. */
-  onAutoBloomOff: (() => void) | undefined;
   private perf = { frames: 0, time: 0, armed: false, checked: false };
-  fps = 0;
-  private fpsAcc = { frames: 0, since: performance.now() };
+  // The car names and sides over each car (?labels=1), to check the crowd's left and right.
+  private readonly labelsOn = new URLSearchParams(location.search).get('labels') === '1';
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -76,7 +74,7 @@ export class Viewer {
     moon.position.set(-4, 8, 5);
     this.scene.add(moon);
 
-    this.lot = buildLot(this.scene);
+    this.disposeLot = buildLot(this.scene);
     this.scene.add(this.lineup);
     this.scene.add(this.glow.points);
 
@@ -146,58 +144,10 @@ export class Viewer {
       shadow.rotation.x = -Math.PI / 2;
       shadow.position.y = 0.006;
       car.group.add(shadow);
+      if (this.labelsOn) addLabels(car);
     });
     this.lineup.updateMatrixWorld(true);
     this.glow.setEntries(cars.flatMap((c) => c.glowEntries));
-    // Labels (the "Labels" checkbox, or ?labels=1): the car's name as the crowd sees it (= which
-    // USB stick it gets) and which physical side is the vehicle's LEFT (driver's side) - on the
-    // crowd's right when facing the front.
-    this.labels = [];
-    {
-      cars.forEach((car) => {
-        const tag = (text: string, color: string, x: number, y: number, z: number, w = 2.2) => {
-          const cv = document.createElement('canvas');
-          cv.width = 512; cv.height = 128;
-          const g = cv.getContext('2d')!;
-          g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, 0, 512, 128);
-          g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
-          let px = 64;
-          do g.font = `bold ${px--}px sans-serif`; while (g.measureText(text).width > 490 && px > 24);
-          g.fillText(text, 256, 64);
-          const tex = new THREE.CanvasTexture(cv);
-          const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-          sp.position.set(x, y, z); sp.scale.set(w, w / 4, 1); sp.renderOrder = 20;
-          sp.visible = this.labelsOn;
-          car.group.add(sp);
-          this.labels.push(sp);
-        };
-        tag(carLabel(car.name), '#ffffff', car.bounds.halfLength * 0.2, car.bounds.height + 0.9, 0);
-        // Tesla's mesh: x forward, y up, z right; the vehicle's left (driver's side) is -z,
-        // which is on the crowd's right when they face the front.
-        tag('VEH LEFT', '#ff6a6a', car.bounds.halfLength + 0.3, 0.9, -car.bounds.halfWidth * 0.9, 1.2);
-        tag('VEH RIGHT', '#6ab4ff', car.bounds.halfLength + 0.3, 0.9, car.bounds.halfWidth * 0.9, 1.2);
-      });
-    }
-  }
-
-  setBloom(on: boolean): void {
-    this.bloomOn = on;
-  }
-
-  private labels: THREE.Sprite[] = [];
-  private labelsOn = new URLSearchParams(location.search).get('labels') === '1';
-
-  setLabels(on: boolean): void {
-    this.labelsOn = on;
-    for (const sp of this.labels) sp.visible = on;
-  }
-
-  get bloomEnabled(): boolean {
-    return this.bloomOn;
-  }
-
-  setReflections(on: boolean): void {
-    this.lot.setReflections(on);
   }
 
   flyTo(name: string, instant = false): void {
@@ -243,7 +193,7 @@ export class Viewer {
     const now = performance.now();
     const dt = Math.min(0.25, (now - this.last) / 1000);
     this.last = now;
-    this.trackPerf(dt, now);
+    this.trackPerf(dt);
     this.onTick?.();
     if (this.tween) {
       const t = Math.min(1, (now - this.tween.start) / 800);
@@ -259,12 +209,8 @@ export class Viewer {
     else this.renderer.render(this.scene, this.camera);
   }
 
-  private trackPerf(dt: number, now: number): void {
-    this.fpsAcc.frames++;
-    if (now - this.fpsAcc.since > 1000) {
-      this.fps = (this.fpsAcc.frames * 1000) / (now - this.fpsAcc.since);
-      this.fpsAcc = { frames: 0, since: now };
-    }
+  /** A device that can't keep up loses the bloom rather than the frame rate. */
+  private trackPerf(dt: number): void {
     if (!this.perf.armed || this.perf.checked) return;
     this.perf.frames++;
     // Skip the first second (shader compiles, texture uploads).
@@ -272,15 +218,11 @@ export class Viewer {
     this.perf.time += dt;
     if (this.perf.frames >= 240) {
       this.perf.checked = true;
-      const avg = this.perf.time / (this.perf.frames - 60);
-      if (avg > 1 / 28 && this.bloomOn) {
-        this.bloomOn = false;
-        this.onAutoBloomOff?.();
-      }
+      if (this.perf.time / (this.perf.frames - 60) > 1 / 28) this.bloomOn = false;
     }
   }
 
-  resize(): void {
+  private resize(): void {
     this.size = { w: this.container.clientWidth, h: this.container.clientHeight };
     const w = Math.max(1, this.size.w);
     const h = Math.max(1, this.size.h);
@@ -289,7 +231,6 @@ export class Viewer {
     this.composer.setSize(w, h);
     // Bloom at CSS-pixel resolution (its first mip is half of that).
     this.bloom.setSize(w, h);
-    this.lot.setSize(w * this.dpr, h * this.dpr);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     const gl = this.renderer.getContext();
@@ -301,11 +242,34 @@ export class Viewer {
   dispose(): void {
     cancelAnimationFrame(this.raf);
     for (const c of this.cars) c.dispose();
-    this.lot.dispose();
+    this.disposeLot();
     this.controls.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
+}
+
+/** Over a car: its name as the crowd sees it (= which USB drive it gets), and which physical side is the
+ * vehicle's left (driver's side), on the crowd's right when they face the front. */
+function addLabels(car: CarRig): void {
+  const tag = (text: string, color: string, x: number, y: number, z: number, w = 2.2) => {
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 128;
+    const g = cv.getContext('2d')!;
+    g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, 0, 512, 128);
+    g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+    let px = 64;
+    do g.font = `bold ${px--}px sans-serif`; while (g.measureText(text).width > 490 && px > 24);
+    g.fillText(text, 256, 64);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
+    sp.position.set(x, y, z); sp.scale.set(w, w / 4, 1); sp.renderOrder = 20;
+    car.group.add(sp);
+  };
+  const { halfLength, halfWidth, height } = car.bounds;
+  tag(carLabel(car.name), '#ffffff', halfLength * 0.2, height + 0.9, 0);
+  // Tesla's mesh: x forward, y up, z right; the vehicle's left is -z.
+  tag('VEH LEFT', '#ff6a6a', halfLength + 0.3, 0.9, -halfWidth * 0.9, 1.2);
+  tag('VEH RIGHT', '#6ab4ff', halfLength + 0.3, 0.9, halfWidth * 0.9, 1.2);
 }
 
 /** "Car2_ModelY_CenterLeft" -> "2 · Model Y · center left": the car's USB folder name, for people. */

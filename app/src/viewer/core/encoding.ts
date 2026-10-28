@@ -36,20 +36,13 @@ export const RAMP_MS: Readonly<Record<LightCommand, number>> = {
   on: 0,
 };
 
-export type ClosureCommand = 'idle' | 'open' | 'dance' | 'close' | 'stop';
-
-export const CLOSURE_BYTES: Readonly<Record<ClosureCommand, number>> = {
-  idle: 0, // empty timeline
-  open: 63, // 25%, xLights hotkey Q
-  dance: 127, // 50%, hotkey A
-  close: 191, // 75%, hotkey Z
-  stop: 255, // 100%, hotkey F
-};
+type ClosureCommand = 'idle' | 'open' | 'dance' | 'close' | 'stop';
 
 /**
  * Reads a closure byte back as a command. Shows made in xLights only ever
- * contain the exact values above; for anything else we pick the nearest
- * value. How the car itself treats in-between values is undocumented.
+ * contain the exact values (idle 0, open 63, dance 127, close 191, stop 255:
+ * 0, 25, 50, 75 and 100%); for anything else we pick the nearest value. How
+ * the car itself treats in-between values is undocumented.
  */
 export function decodeClosure(byte: number): ClosureCommand {
   if (byte < 32) return 'idle';
@@ -57,9 +50,4 @@ export function decodeClosure(byte: number): ClosureCommand {
   if (byte < 160) return 'dance';
   if (byte < 224) return 'close';
   return 'stop';
-}
-
-/** Lights without brightness control are on when brightness is above 50%. */
-export function isOn(byte: number): boolean {
-  return byte > 127;
 }

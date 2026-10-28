@@ -12,7 +12,6 @@ export interface GlowHandle {
 
 export interface Builder {
   car: THREE.Group;
-  cabinLight: THREE.PointLight;
   light(
     parent: THREE.Object3D,
     ids: string[],
@@ -40,7 +39,6 @@ export interface BuiltBody {
   halfLength: number;
   height: number;
   halfWidth: number;
-  cabinGain?: number;
   /** This car's copies of the model's paint materials (none on the Cybertruck: stainless). */
   paints?: THREE.MeshStandardMaterial[];
 }

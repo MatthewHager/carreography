@@ -39,7 +39,6 @@ export function Stage({ lineup, paints, show, player, camera, onMissing }: Props
       setNoGl(true);
       return;
     }
-    v.setBloom(true);
     v.onTick = () => {
       const t = player.now();
       for (const r of rigs.current) r.setFrame(Math.floor(t / STEP_S), t);
@@ -108,8 +107,7 @@ function applyShow(rigs: CarRig[], show: Show | null) {
   rigs.forEach((rig, i) => {
     const car = show?.cars[i];
     rig.setSimulation(car ? simulate({
-      channelCount: CHANNELS, frameCount: show!.nFrames, stepTimeMs: STEP_S * 1000, minorVersion: 0,
-      uniqueId: 0n, variableHeaders: [], data: car.frames,
+      channelCount: CHANNELS, frameCount: show!.nFrames, stepTimeMs: STEP_S * 1000, data: car.frames,
     }, rig.profile) : undefined);
   });
 }

@@ -1,12 +1,14 @@
 // Turns raw show bytes into what a specific car will physically do, frame by
 // frame: how bright each light is (following Tesla's ramp rules) and where
-// each closure is (following approximate travel times). The 3D preview and
-// the composer both draw from this.
+// each closure is (following approximate travel times). The 3D preview draws
+// from this.
 
 import { channel, CHANNELS_BY_ID } from './channels';
 import { decodeClosure, LIGHT_BYTES, RAMP_MS, type LightCommand } from './encoding';
 import type { FseqFile } from './fseq';
 import type { VehicleProfile } from './vehicles';
+
+type Frames = Pick<FseqFile, 'frameCount' | 'channelCount' | 'stepTimeMs' | 'data'>;
 
 export interface ClosureTrack {
   /** 0 = closed, 1 = fully open. Includes the dance motion. */
@@ -26,7 +28,7 @@ export interface Simulation {
 const LIGHT_COMMANDS = Object.entries(LIGHT_BYTES) as [LightCommand, number][];
 
 /** Nearest ramp command for a byte. xLights only writes the exact values. */
-export function decodeLight(byte: number): LightCommand {
+function decodeLight(byte: number): LightCommand {
   let best: LightCommand = 'off';
   let bestDistance = Infinity;
   for (const [command, value] of LIGHT_COMMANDS) {
@@ -44,7 +46,7 @@ const DANCE_PERIOD_S = { window: 2, other: 4 };
 /** How far a dancing closure swings away from fully open (or down, for windows). */
 const DANCE_DEPTH = 0.35;
 
-export function simulate(show: FseqFile, vehicle: VehicleProfile): Simulation {
+export function simulate(show: Frames, vehicle: VehicleProfile): Simulation {
   const { frameCount, channelCount, data, stepTimeMs } = show;
   const byteAt = (frame: number, index: number) =>
     index < channelCount ? data[frame * channelCount + index]! : 0;
@@ -102,24 +104,16 @@ function channel4Leader(id: string): string | undefined {
   return match ? `${match[1]}Channel4` : undefined;
 }
 
-/** Where a closure rests (0 closed .. 1 open, dance motion aside) at the start of a frame. */
-export function closurePositionAt(show: FseqFile, id: string, frame: number): number {
-  if (frame <= 0) return id.endsWith('Mirror') ? 1 : 0;
-  const byteAt = (f: number, index: number) => (index < show.channelCount ? show.data[f * show.channelCount + index]! : 0);
-  return simulateClosure({ ...show, frameCount: frame }, id, byteAt).rest[frame - 1]!;
-}
-
 function simulateClosure(
-  show: FseqFile,
+  show: Frames,
   id: string,
   byteAt: (frame: number, index: number) => number,
   seconds?: [number, number],
-): ClosureTrack & { rest: Float32Array } {
+): ClosureTrack {
   const { frameCount, stepTimeMs } = show;
   const def = channel(id);
   const info = seconds ? { ...def.closure!, openSeconds: seconds[0], closeSeconds: seconds[1] } : def.closure!;
   const position = new Float32Array(frameCount);
-  const rest = new Float32Array(frameCount);
   const dancing = new Uint8Array(frameCount);
   const isWindow = id.endsWith('Window');
   // The charge port's "dance" flashes its LED instead of moving the door.
@@ -164,7 +158,6 @@ function simulateClosure(
       danceStartFrame = -1;
       position[f] = base;
     }
-    rest[f] = base;
   }
-  return { position, dancing, rest };
+  return { position, dancing };
 }
