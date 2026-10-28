@@ -3,9 +3,7 @@
 
 import type { Analysis } from './analysis';
 import { sectionAt } from './form';
-
-/** Python's a[i] for an index that may be negative. */
-const at = <T>(a: ArrayLike<T>, i: number): T => a[i < 0 ? a.length + i : i];
+import { at } from './np';
 
 /** Intensity tier at t, capped by the form map's ceiling for that section (the arc). */
 export function tierAt(an: Analysis, t: number): number {

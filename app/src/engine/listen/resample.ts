@@ -1,6 +1,6 @@
-// Our own resampler. Every gap between the browser and Python in the spikes came from resampling
-// (browsers resample while decoding, each its own way), so the app decodes at the file's rate and
-// comes down to 22050 Hz here, as librosa.load(sr=22050) does: channels averaged, then resampled.
+// Our own resampler. Browsers resample while decoding, each its own way, and that moved beats; so the
+// app decodes at the file's rate and comes down to 22050 Hz here, as librosa.load(sr=22050) does:
+// channels averaged, then resampled.
 // A Kaiser-windowed sinc, zero-phase (timing is unchanged), lowpass at 0.97 of the output Nyquist.
 
 export const SR = 22050;

@@ -1,61 +1,53 @@
-// What the listening side hands the choreographer: the song's beats, notes, loudness and form on the
-// show's 20 ms frame grid. The fields follow the Python Analysis (lightshow/audio.py) one for one, so
-// a song exported by tools/export_bridge.py loads straight in.
+// What the listening side (listen/audio.ts) hands the choreographer: the song's beats, notes, loudness
+// and form, with per-frame curves on the show's 20 ms grid. fromBridge reads the same thing from the
+// analyses the Python version exported for bridge.test.ts.
 
 /** Transcribed note events (a key press or a chord), one entry per onset group (texture.ts). */
 export interface Events {
   t: number[];
   dur: number[];
-  n: number[];          // distinct pitch classes
   low: number[];        // midi
   high: number[];
   top: number[];        // melodic pitch
   amp: number[];
   kind: number[];       // 0 single note, 1 dyad, 2 chord, 3 big chord
-  trill: number[];
-  arrival: number[];
-  runDir: number[];
-  density: number[];
-  phrase: string[];     // texture label per event (texture.PHRASES)
-  phraseIdx: number[];
+  trill: number[];      // 1 inside a rapid two-note alternation
+  arrival: number[];    // 1 on a strong chord that lands after a run or a rest
+  density: number[];    // events in the surrounding second
+  phrase: string[];     // the texture of the passage each event is in (texture.labelPhrases)
 }
 
 /** A stretch of the form map (form.ts). */
 export interface Section {
   t0: number;
   t1: number;
-  letter: string;
+  letter: string;       // sections with the same letter are the same material
   energy: number;
-  ceiling: number;
-  repeatOf: number;
+  ceiling: number;      // the most intense tier the section may reach (0..3)
+  repeatOf: number;     // index of the first section with this letter, or -1
   index: number;
-  nth: number;
+  nth: number;          // how many times the letter was heard before
   tempo: number;
   beats: number[];
 }
 
-/** A phrase: the unit a move is chosen for (phrases.ts). The choreographer adds mood, move, pace... */
+/** A phrase: the unit a move is chosen for (phrases.ts), events [a, b). The choreographer adds its
+ * mood, energy and pace (mood.ts) and the move it plays. */
 export interface Phrase {
   a: number;
   b: number;
   t0: number;
   t1: number;
   gesture: string;
-  n: number;
-  density: number;
-  up: number;
-  lo: number;
+  density: number;      // notes per second
+  up: number;           // share of rising steps in the melody
+  lo: number;           // the melody's lowest and highest pitch
   hi: number;
-  hold: number;
-  afterRest: boolean;
-  index: number;
-  sub: unknown[];
+  index: number;        // the phrase's number among those with its gesture
   mood?: string;
   move?: string;
   pace?: number;
   energy?: number;
-  clarity?: number;
-  pulse?: string;
 }
 
 /** One sung line of the lyrics, timed by line only (LRCLIB): when it starts and stops, and what it says. */
@@ -72,40 +64,31 @@ export interface Analysis {
   tempo: number;
   beats: number[];
   downbeats: number[];
-  notes: number[][];     // rows: time, strength 0..1, position 0..1
-  bass: number[][];      // rows: time, strength
-  highs: number[][];
-  hits: number[];
-  sustain: boolean[];    // per frame
+  bass: number[][];      // rows: time, strength 0..1 (kick, timpani, low brass)
+  highs: number[][];     // rows: time, strength 0..1 (cymbals, string attacks)
+  hits: number[];        // the strongest accents, at least 0.5 s apart
   intensity: number[];   // per frame 0..1
   build: number[];       // per frame 0..1 progress through a crescendo
   tier: number[];        // per frame 0..3
   loudFast: number[];    // per frame 0..1
   events: Events;
-  pitchLo: number;
+  pitchLo: number;       // the song's melodic range, mapped across the stage
   pitchHi: number;
-  beatScore: number;
+  beatScore: number;     // the onset curve on the beats over its mean (2 and up: a beat to follow)
   sections: Section[];
-  climax: number;
-  pulseEnv: number[];
+  pulseEnv: number[];    // the onset strength curve, one value per pulseHop seconds
   pulseHop: number;
-  lyricWords: [number, number, string][] | null;     // Whisper's words (the Python analyses only)
   lyricLines?: LyricLine[] | null;                   // LRCLIB's lines, lined up with this recording
+  lyricWords?: [number, number, string][] | null;    // only in the frozen Python analyses (see lyrics.ts)
   // set while choreographing
   phrases?: Phrase[];
-  cuePeaks?: [number, number, number | null, boolean][];
+  cuePeaks?: [number, number, number | null, boolean][];   // the cue sheet's peaks: time, build, hold, final
   driver?: string;
-  pace?: unknown;
-  energy?: unknown;
-  pulseGaps?: Phrase[];
-  pulseStats?: unknown;
-  beatFollow?: unknown;
-  beatsTracked?: unknown;
-  beatsSnapMs?: unknown;
-  beatsPhaseMoved?: unknown;
+  pace?: number | null;  // the current phrase's seconds between hits, for the beat moves (mood.ts)
+  energy?: Float64Array; // per frame 0..1 (mood.energyCurve)
 }
 
-export interface BridgeMeta {
+interface BridgeMeta {
   name: string;
   lineup: string;
   style: string | null;
@@ -121,11 +104,11 @@ function camelKeys<T>(o: Json): T {
   return Object.fromEntries(Object.entries(o).map(([k, v]) => [camel(k), v])) as T;
 }
 
-/** An analysis.json written by tools/export_bridge.py. */
+/** An analysis.json from cache/bridge (written by the Python version, tag python-final): its fields are
+ * the Analysis's in snake_case, with the song's name, lineup, style and driver alongside. */
 export function fromBridge(json: { meta: BridgeMeta; analysis: Json }): { meta: BridgeMeta; an: Analysis } {
   const a = camelKeys<Analysis & Json>(json.analysis);
   a.events = camelKeys<Events>(json.analysis.events as Json);
   a.sections = ((json.analysis.sections as Json[]) ?? []).map((s) => camelKeys<Section>(s));
-  a.notes = a.notes ?? [];
   return { meta: json.meta, an: a };
 }

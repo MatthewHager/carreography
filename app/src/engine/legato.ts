@@ -28,16 +28,16 @@ import type { Car } from './car';
 import * as M from './moves';
 import { argsort, clip, convolveSame, interp, max, mean, percentile, runs } from './np';
 
-export const RES = 0.25;                                  // seconds per control step
-export const LAYER_PCT = [12, 40, 70, 90];                 // loudness percentiles at which layers 1-4 come in
-export const HYST = 0.04;                                  // ...and go out this much lower
-export const MIN_DWELL = 2.5;                              // seconds a layer stays once it changes
+const RES = 0.25;                                  // seconds per control step
+const LAYER_PCT = [12, 40, 70, 90];                 // loudness percentiles at which layers 1-4 come in
+const HYST = 0.04;                                  // ...and go out this much lower
+const MIN_DWELL = 2.5;                              // seconds a layer stays once it changes
 
 /**
  * Loudness 0-1 on a RES grid: the intensity curve smoothed over ~3 s, ranked within the song
  * and blended with its level below the song's peak (so a quiet song still breathes).
  */
-export function loudness(an: Analysis): Float64Array {
+function loudness(an: Analysis): Float64Array {
   const step = an.step;
   const k = Math.max(1, Math.trunc(3.0 / step));
   const sm = convolveSame(an.intensity, new Float64Array(k).fill(1 / k));
@@ -58,7 +58,7 @@ export function loudness(an: Analysis): Float64Array {
 }
 
 /** [start, end] of the audible music: the first and last moments within 30 dB of the peak. */
-export function musicSpan(an: Analysis): [number, number] {
+function musicSpan(an: Analysis): [number, number] {
   const db = new Float64Array(an.intensity.length);
   for (let i = 0; i < db.length; i++) db[i] = 20 * Math.log10(Math.max(an.intensity[i], 1e-4));
   const lim = max(db) - 30;
@@ -77,7 +77,7 @@ export function musicSpan(an: Analysis): [number, number] {
  * Layer count (0-4) per RES step, with hysteresis and a minimum dwell; the thresholds are
  * percentiles of the song's own loudness, so every song uses its whole range.
  */
-export function layers(L: ArrayLike<number>, live: ArrayLike<boolean>): Int32Array {
+function layers(L: ArrayLike<number>, live: ArrayLike<boolean>): Int32Array {
   const liveL: number[] = [];
   for (let i = 0; i < L.length; i++) if (live[i]) liveL.push(L[i]);
   const up = liveL.length ? LAYER_PCT.map((p) => percentile(liveL, p)) : [0.2, 0.4, 0.6, 0.8];
@@ -98,17 +98,17 @@ export function layers(L: ArrayLike<number>, live: ArrayLike<boolean>): Int32Arr
   return out;
 }
 
-export function glow(car: Car, chs: readonly number[], t0: number, t1: number, up: number = C.ON_2000,
-  down: number = C.OFF_2000, downS = 2.0): void {
+/** The lamps ramp up (over 2 s, or as `up` says) and stay on from t0 to t1, then fade over 2 s. */
+function glow(car: Car, chs: readonly number[], t0: number, t1: number, up: number = C.ON_2000): void {
   car.light(chs, t0, t1, up);
-  car.light(chs, t1, t1 + downS, down);
+  car.light(chs, t1, t1 + 2.0, C.OFF_2000);
 }
 
 /**
  * Stage position 0-1 (crowd's left to right) of the melody on a RES grid, NaN where no melody
  * sounds: the top notes of the transcription, gliding from one note to the next.
  */
-export function melodyPath(an: Analysis, t0: number, t1: number, n: number): Float64Array {
+function melodyPath(an: Analysis, t0: number, t1: number, n: number): Float64Array {
   const ev = an.events;
   const pos = new Float64Array(n).fill(NaN);
   if (ev === undefined || ev === null || !ev.t.length) return pos;
@@ -142,16 +142,9 @@ export function melodyPath(an: Analysis, t0: number, t1: number, n: number): Flo
   return out;
 }
 
-export interface LegatoResult {
-  start: number;
-  end: number;
-  layers: Int32Array;
-}
-
 /** All the lights for a legato song (the motors are scheduled separately, as for any song). */
-export function choreograph(cars: Car[], an: Analysis): LegatoResult {
+export function choreograph(cars: Car[], an: Analysis): void {
   const ct = M.centreTruck(cars);
-  const order = [...cars].sort((p, q) => p.x - q.x);
   const [start, end] = musicSpan(an);
   let L = loudness(an);
   const n = L.length;
@@ -160,8 +153,7 @@ export function choreograph(cars: Car[], an: Analysis): LegatoResult {
   const live: boolean[] = [];
   for (let i = 0; i < n; i++) live.push(tt[i] >= start && tt[i] < end);
   L = L.map((v, i) => (live[i] ? v : 0));
-  const layersLive = layers(L, live);
-  const lay = layersLive.map((v, i) => (live[i] ? v : -1));
+  const lay = layers(L, live).map((v, i) => (live[i] ? v : -1));
 
   // 1. the bed, layer by layer
   const groups: [number, (c: Car) => readonly number[]][] = [
@@ -198,14 +190,14 @@ export function choreograph(cars: Car[], an: Analysis): LegatoResult {
 
   // 2. the swoop: the melody gliding across the stage
   const path = melodyPath(an, start, end, n);
-  const stage = path.map((v) => v * 2 * order.length);    // two slots per car (its left and right), crowd-left to right
-  for (let slot = 0; slot < 2 * order.length; slot++) {
-    const car = order[Math.floor(slot / 2)];
+  const stage = path.map((v) => v * 2 * cars.length);    // two slots per car (its left and right), crowd-left to right
+  for (let slot = 0; slot < 2 * cars.length; slot++) {
+    const car = cars[Math.floor(slot / 2)];
     const side = slot % 2 === 0 ? 'L' : 'R';
     if (car === ct) continue;
     const here = Array.from(stage, (v) => !Number.isNaN(v) && Math.floor(v) === slot);
     for (const [a, b] of runs(here)) {
-      if ((b - a) * RES >= 0.5) glow(car, car.inner(side), a * RES, b * RES + 0.25, C.ON_1000, C.OFF_2000);
+      if ((b - a) * RES >= 0.5) glow(car, car.inner(side), a * RES, b * RES + 0.25, C.ON_1000);
     }
   }
   if (ct !== null) {
@@ -214,7 +206,7 @@ export function choreograph(cars: Car[], an: Analysis): LegatoResult {
     const frameT = new Float64Array(m);
     for (let i = 0; i < m; i++) frameT[i] = f0 * ct.step + i * ct.step;
     const s = interp(frameT, tt, stage.map((v) => (Number.isNaN(v) ? -10 : v)));
-    const k = 2 * order.indexOf(ct);                        // the truck's two slots: k and k + 1
+    const k = 2 * cars.indexOf(ct);                        // the truck's two slots: k and k + 1
     const nLed = C.FRONT_BAR.length;
     const spot: Float64Array[] = [];
     for (let i = 0; i < m; i++) {
@@ -247,5 +239,4 @@ export function choreograph(cars: Car[], an: Analysis): LegatoResult {
     const lit = c.everything().filter((ch) => c.get(row, ch) > 0);
     if (lit.length) c.light(lit, end, Math.min(an.duration, end + 2.0), C.OFF_2000);
   }
-  return { start, end, layers: lay };
 }

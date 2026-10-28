@@ -10,16 +10,14 @@
 import type { Section } from './analysis';
 import { chromaCqt } from './listen/cqt';
 import {
-  agglomerative, beatTrackY, framesToTime, HOP, mfcc, normalizeColumns, spectrum, sync, type Spectrum,
+  agglomerative, beatTrackY, framesToTime, mfcc, normalizeColumns, SR, sync, type Spectrum,
 } from './listen/dsp';
 import { clip, mean, mean32, round } from './np';
 
-/** The form map of `y` (mono, 22050 Hz): its sections and the index of the climax. `spec` reuses the
- * spectrum audio.ts already took of the same samples. */
-export function analyzeForm(y: Float32Array, sr: number, intensity: ArrayLike<number>, step: number,
-  duration: number, spec?: Spectrum): { sections: Section[]; climax: number } {
-  const hop = HOP;
-  const s = spec ?? spectrum(y);
+/** The form map of `y` (mono, 22050 Hz): its sections, from the spectrum audio.ts already took of the
+ * same samples. */
+export function analyzeForm(y: Float32Array, intensity: ArrayLike<number>, step: number, duration: number,
+  s: Spectrum): Section[] {
   const T = s.T;
   const chroma = chromaCqt(y, s.tuning);
   const mf = mfcc(s.mel128, T);
@@ -34,7 +32,7 @@ export function analyzeForm(y: Float32Array, sr: number, intensity: ArrayLike<nu
   let k = clip(round(duration / 22.0), 3, 14);
   k = Math.min(k, nc - 1);
   const raw = agglomerative(X, 25, nc, k);
-  const bt = beatFrames.map((f) => framesToTime(f, sr, hop));
+  const bt = beatFrames.map((f) => framesToTime(f));
   const bounds = [...new Set([0, ...raw])].sort((a, b) => a - b);
   const colMean = (b: number, e: number) => {
     const out = new Float64Array(25), row = new Float32Array(Math.max(0, Math.min(e, nc) - b));
@@ -120,19 +118,19 @@ export function analyzeForm(y: Float32Array, sr: number, intensity: ArrayLike<nu
 
   // Per-section tempo and beats, so beat-locked moves survive tempo changes.
   for (const s of sections) {
-    const a = Math.trunc(s.t0 * sr), b = Math.trunc(s.t1 * sr);
+    const a = Math.trunc(s.t0 * SR), b = Math.trunc(s.t1 * SR);
     const seg = y.subarray(a, Math.max(a, b));
-    if (seg.length > sr * 3) {
+    if (seg.length > SR * 3) {
       try {
         const { tempo, beats } = beatTrackY(seg);
         s.tempo = tempo;
-        s.beats = beats.map((f) => framesToTime(f, sr, hop) + s.t0);
+        s.beats = beats.map((f) => framesToTime(f) + s.t0);
       } catch {
-        // as Python: a section the tracker can't read keeps no tempo
+        // a section the tracker can't read keeps no tempo
       }
     }
   }
-  return { sections, climax: climax.index };
+  return sections;
 }
 
 export function sectionAt(sections: Section[], t: number): Section {

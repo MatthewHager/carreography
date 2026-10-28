@@ -24,9 +24,9 @@ export interface Piece {
   dims: readonly number[];
 }
 
-export type Outputs = Record<string, Float32Array>;
+type Outputs = Record<string, Float32Array>;
 
-export interface RunOptions {
+interface RunOptions {
   backend?: Backend;              // default: bestBackend()
   bytes?: ArrayBuffer;            // the model file, instead of fetching model.url
   onProgress?: (fraction: number) => void;
@@ -39,7 +39,7 @@ const nav = typeof navigator !== 'undefined' ? navigator : undefined;
  * memory as well as the cores: one worker per 4 GB where the browser tells (Chromium's deviceMemory),
  * two on other computers, and none on phones and tablets, whose browsers close a tab that takes too
  * much. Two workers get most of the speed: a 7-minute song's beats take 39 s with two, 27 s with four. */
-export function poolSize(): number {
+function poolSize(): number {
   const cores = Math.max(1, (nav?.hardwareConcurrency || 2) - 1);
   const gb = (nav as Navigator & { deviceMemory?: number } | undefined)?.deviceMemory;
   const mobile = !!nav && (/Mobi|Android|iPhone|iPad/.test(nav.userAgent)
@@ -58,7 +58,7 @@ const withoutGpu = (): Backend => (typeof Worker !== 'undefined' && poolSize() >
 
 /** WebGPU when the browser gives a real (not software) adapter, else a worker pool when there are cores
  * and memory for one. */
-export function bestBackend(): Promise<Backend> {
+function bestBackend(): Promise<Backend> {
   best ??= (async (): Promise<Backend> => {
     const gpu = nav && 'gpu' in nav ? nav.gpu : undefined;
     const adapter = gpu ? await gpu.requestAdapter().catch(() => null) : null;

@@ -1,8 +1,8 @@
-// Polyphonic note transcription with Spotify's basic-pitch (nmp.onnx, the ICASSP 2022 model), with the
-// settings lightshow/transcribe.py uses. The windowing and the note decoding follow basic_pitch's Python
-// (inference.predict, note_creation.output_to_notes_polyphonic), so the same samples give the same
-// notes; the decoding is a typed-array port that takes well under a second, where the npm package's
-// takes minutes (its melodia trick rescans every frame for the maximum after each note).
+// Polyphonic note transcription with Spotify's basic-pitch (nmp.onnx, the ICASSP 2022 model). The
+// windowing and the note decoding follow the basic_pitch package (inference.predict,
+// note_creation.output_to_notes_polyphonic), so the same samples give the same notes. The decoding is a
+// typed-array port that takes well under a second, where the npm package's takes minutes (its melodia
+// trick rescans every frame for the maximum after each note).
 
 import { runPieces, type Backend, type Piece } from './infer';
 import { SR } from './resample';
@@ -16,7 +16,8 @@ const FPS = Math.floor(SR / FFT_HOP);           // 86, as basic_pitch rounds it
 const ANNOT_FRAMES = FPS * 2;                   // output frames per window
 const NB = 88, MIDI_OFFSET = 21;
 
-// transcribe.py: onset_threshold 0.5, frame_threshold 0.3, minimum_note_length 58 ms, 40-4200 Hz
+// the settings the shows are tuned to: onset_threshold 0.5, frame_threshold 0.3, minimum_note_length
+// 58 ms, 40-4200 Hz
 const ONSET_THRESH = 0.5, FRAME_THRESH = 0.3, ENERGY_TOL = 11;
 const MIN_NOTE_FRAMES = Math.round((58 / 1000) * (SR / FFT_HOP));   // 5
 const MIN_FREQ = 40, MAX_FREQ = 4200;
@@ -27,7 +28,7 @@ const MODEL = {
   outputs: ['StatefulPartitionedCall:1', 'StatefulPartitionedCall:2'],   // note (frames), onset
 };
 
-export interface NoteOptions {
+interface NoteOptions {
   onProgress?: (fraction: number) => void;
   backend?: Backend;
   model?: ArrayBuffer;   // the .onnx file's bytes, instead of fetching it
@@ -72,7 +73,7 @@ function frameTime(f: number): number {
 
 /** output_to_notes_polyphonic (infer_onsets and the melodia trick on), then frames to seconds.
  * frames and onsets are T x 88, row-major; they are not modified. */
-export function notesFromActivations(framesIn: Float32Array, onsetsIn: Float32Array, T: number): number[][] {
+function notesFromActivations(framesIn: Float32Array, onsetsIn: Float32Array, T: number): number[][] {
   const frames = framesIn.slice(), onsets = onsetsIn.slice();
 
   // constrain_frequency
@@ -139,7 +140,7 @@ export function notesFromActivations(framesIn: Float32Array, onsetsIn: Float32Ar
   }
 
   // The melodia trick: notes grown from the strongest energy left, until none is above the threshold.
-  // Energy only ever drops to 0, so Python's repeated argmax visits the cells above the threshold in
+  // Energy only ever drops to 0, so basic_pitch's repeated argmax visits the cells above the threshold in
   // descending order (ties: the first in row-major order), skipping those already cleared.
   const cand: number[] = [];
   for (let i = 0; i < rem.length; i++) if (rem[i] > FRAME_THRESH) cand.push(i);

@@ -1,8 +1,11 @@
-// The handful of numpy behaviours the choreography relies on, reproduced exactly where they decide a
-// frame: Python's round-half-to-even, numpy's quantile interpolation, its pairwise float sums, interp,
-// linspace and arange. Arrays are plain number[] or Float64Array.
+// The arithmetic the choreography decides frames with, done exactly as numpy does it. The shows were
+// first made by the Python version (tag python-final), and bridge.test.ts holds this code to them byte
+// for byte, so a sum, a median or a rounding here must land on the same float: Python's
+// round-half-to-even, numpy's quantile interpolation, its pairwise sums (and float32 ones), interp,
+// linspace, arange, its argsort's order for ties. Don't "simplify" the order of operations.
+// Arrays are plain number[] or Float64Array.
 
-export type Arr = ArrayLike<number>;
+type Arr = ArrayLike<number>;
 
 /** Python's round() / numpy's rint: halves go to the even neighbour. */
 export function round(x: number): number {
@@ -10,6 +13,31 @@ export function round(x: number): number {
   const d = x - f;
   if (d === 0.5) return f % 2 === 0 ? f : f + 1;
   return Math.round(x);
+}
+
+/** numpy's round(x, decimals): rint(x * 10**d) / 10**d. */
+export function roundTo(x: number, d: number): number {
+  const f = 10 ** d;
+  return round(x * f) / f;
+}
+
+/** Python's round(x, ndigits): the exact binary value rounded to d decimals, ties to even. A tie is
+ * exact only when x * 2^(d + 1) is an odd integer; then numpy's rounding gives the same answer. */
+export function pyRound(x: number, d: number): number {
+  const tie = Number.isInteger(x * 2 ** (d + 1)) && !Number.isInteger(x * 2 ** d);
+  return tie ? roundTo(x, d) : Number(x.toFixed(d));
+}
+
+/** a[i], counting from the end for a negative i (Python's indexing). */
+export function at<T>(a: ArrayLike<T>, i: number): T {
+  return a[i < 0 ? a.length + i : i];
+}
+
+/** Python's % (the sign of the divisor), also numpy's float remainder. */
+export function pymod(a: number, b: number): number {
+  let m = a % b;
+  if (m !== 0 && (b < 0) !== (m < 0)) m += b;
+  return m;
 }
 
 /** numpy's pairwise summation of a[start .. start+n) (used by sum and mean on float arrays). */
@@ -88,7 +116,7 @@ export function quantile(a: Arr, q: number): number {
   return quantileSorted(sorted(a), q);
 }
 
-export function quantileSorted(s: Arr, q: number): number {
+function quantileSorted(s: Arr, q: number): number {
   const n = s.length;
   const v = (n - 1) * q;
   let lo = Math.floor(v);
@@ -118,7 +146,7 @@ export function median(a: Arr): number {
 }
 
 /** np.interp for one x (xp ascending). */
-export function interp1(x: number, xp: Arr, fp: Arr): number {
+function interp1(x: number, xp: Arr, fp: Arr): number {
   const n = xp.length;
   if (x > xp[n - 1]) return fp[n - 1];
   if (x < xp[0]) return fp[0];
@@ -161,8 +189,7 @@ export function linspace(start: number, stop: number, num: number): Float64Array
 }
 
 /** np.arange(start, stop, step) for floats: numpy fills start + i * ((start + step) - start). */
-export function arange(start: number, stop?: number, step = 1): Float64Array {
-  if (stop === undefined) [start, stop] = [0, start];
+export function arange(start: number, stop: number, step: number): Float64Array {
   const n = Math.max(0, Math.ceil((stop - start) / step));
   const out = new Float64Array(n);
   if (n === 0) return out;
@@ -206,7 +233,7 @@ export function clip(x: number, lo: number, hi: number): number {
 // numpy turns each output into a BLAS ddot of a window of `a` with the reversed kernel. OpenBLAS's
 // ddot (arm64, contiguous) adds the first n & -4 products into two separate accumulators (a product
 // and then an add, no fusing), adds the two, and folds the 0-3 leftover products in with fused
-// multiply-adds. Reproduced here so tied loudness values stay tied (and rank) exactly as in Python.
+// multiply-adds. Reproduced here so tied loudness values stay tied (and rank) as in the Python version.
 
 const bits = new DataView(new ArrayBuffer(8));
 
@@ -246,7 +273,7 @@ function toDouble(m: bigint, e: number): number {
 }
 
 /** a * b + c with a single rounding (a hardware fused multiply-add). */
-export function fma(a: number, b: number, c: number): number {
+function fma(a: number, b: number, c: number): number {
   const [ma, ea] = decompose(a), [mb, eb] = decompose(b), [mc, ec] = decompose(c);
   const mp = ma * mb, ep = ea + eb;
   if (mp === 0n) return a * b + c;

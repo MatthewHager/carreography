@@ -1,6 +1,6 @@
-// numpy's default_rng (PCG64 seeded through SeedSequence), bit for bit, so the "random" twinkles in
-// a show are the same ones the Python version drew. Only the calls the choreography makes are here:
-// random(), integers(high) and choice(n, size, replace=false). Ported from numpy 1.26
+// numpy's default_rng (PCG64 seeded through SeedSequence), bit for bit, so the "random" twinkles in a
+// show are the same ones the Python version (tag python-final) drew. Only the calls the choreography
+// makes are here: random(), integers(high) and choice(n, size, replace=false). Ported from numpy 1.26
 // (bit_generator.pyx, pcg64.h, distributions.c, _generator.pyx).
 
 const M32 = 0xffffffffn;

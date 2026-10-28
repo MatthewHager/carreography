@@ -1,9 +1,9 @@
-// The librosa 0.11 subset the analysis uses (sr 22050, hop 512, n_fft 2048), ported from the spike that
-// checked it against librosa (spikes/features/lib/port.js). Matrices are row-major (rows x T) typed
-// arrays. librosa keeps its spectrograms and onset envelopes in float32, and the thresholds that pick
-// onsets and beats see float32 values, so those are rounded with Math.fround where numpy would.
+// The librosa 0.11 subset the analysis uses (sr 22050, hop 512, n_fft 2048), checked against librosa
+// when it was written. Matrices are row-major (rows x T) typed arrays. librosa keeps its spectrograms
+// and onset envelopes in float32, and the thresholds that pick onsets and beats see float32 values, so
+// those are rounded with Math.fround where numpy would.
 
-import { median, median32, mean32, sum32 } from '../np';
+import { median, median32, mean32, round, sum32 } from '../np';
 import { realFft } from './fft';
 
 export const SR = 22050;
@@ -22,8 +22,8 @@ export function hann(n: number): Float64Array {
 }
 
 /** librosa.frames_to_time. */
-export function framesToTime(f: number, sr = SR, hop = HOP): number {
-  return (f * hop) / sr;
+export function framesToTime(f: number): number {
+  return (f * HOP) / SR;
 }
 
 // ---------- mel ----------
@@ -69,14 +69,13 @@ function melBasis(nMels: number, fmax: number, sr = SR, nFft = N_FFT): SparseRow
 
 export interface Spectrum {
   T: number;
-  mel96: Float32Array | null;    // (96 x T) power, fmax 8000 (audio.py's melspectrogram)
+  mel96: Float32Array | null;    // (96 x T) power, fmax 8000 (the onsets and beats in audio.ts)
   mel128: Float32Array;          // (128 x T) power, fmax sr/2 (librosa's default, for mfcc and beat_track(y))
-  centroid: Float64Array | null; // spectral_centroid
   rms: Float32Array | null;      // feature.rms
   tuning: number;                // estimate_tuning(bins_per_octave=36), as chroma_cqt estimates it
 }
 
-/** Everything audio.py and form.py read off the n_fft 2048 / hop 512 STFT (centered, zero padded), in one
+/** Everything audio.ts and form.ts read off the n_fft 2048 / hop 512 STFT (centered, zero padded), in one
  * pass. `full: false` gives only mel128 (beat tracking a section). */
 export function spectrum(y: Float32Array, full = true): Spectrum {
   const nFft = N_FFT, hop = HOP, half = nFft / 2, nb = half + 1;
@@ -84,11 +83,9 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
   const win = hann(nFft), fft = realFft(nFft);
   const m96 = full ? melBasis(96, 8000) : null, m128 = melBasis(128, SR / 2);
   const mel96 = full ? new Float32Array(96 * T) : null, mel128 = new Float32Array(128 * T);
-  const centroid = full ? new Float64Array(T) : null, rms = full ? new Float32Array(T) : null;
+  const rms = full ? new Float32Array(T) : null;
   const buf = new Float64Array(nFft), re = new Float64Array(nb), im = new Float64Array(nb);
-  const P = new Float64Array(nb), S = new Float64Array(nb), freqs = new Float64Array(nb);
-  const val = 1 / (nFft * (1 / SR));
-  for (let k = 0; k < nb; k++) freqs[k] = k * val;
+  const P = new Float64Array(nb), S = new Float64Array(nb);
   const pitches: number[] = [], mags: number[] = [];
   const bands: [SparseRow[], Float32Array][] = m96 && mel96 ? [[m96, mel96], [m128, mel128]] : [[m128, mel128]];
   for (let t = 0; t < T; t++) {
@@ -101,15 +98,11 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
     }
     if (rms) rms[t] = f32(Math.sqrt(f32(ss / nFft)));
     fft.forward(buf, re, im);
-    let msum = 0, fsum = 0;
     for (let k = 0; k < nb; k++) {
       const r = f32(re[k]), i = f32(im[k]), m = f32(Math.sqrt(r * r + i * i));   // np.abs of the complex64 STFT
       S[k] = m;
       P[k] = f32(m * m);
-      msum += m;
-      fsum += m * freqs[k];
     }
-    if (centroid) centroid[t] = fsum / (msum < TINY32 ? 1 : msum);
     if (full) piptrack(S, pitches, mags);
     for (const [basis, dst] of bands) {
       for (let b = 0; b < basis.length; b++) {
@@ -120,7 +113,7 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
       }
     }
   }
-  return { T, mel96, mel128, centroid, rms, tuning: full ? pitchTuning(pitches, mags, 36) : 0 };
+  return { T, mel96, mel128, rms, tuning: full ? pitchTuning(pitches, mags, 36) : 0 };
 }
 
 /** librosa.piptrack on one magnitude frame (fmin 150, fmax 4000, threshold 0.1): appends the picked
@@ -214,7 +207,7 @@ export function onsetStrength(S: Float32Array, T: number, r0: number, r1: number
 }
 
 /** librosa.util.peak_pick. */
-export function peakPick(x: ArrayLike<number>, preMax: number, postMax: number, preAvg: number, postAvg: number,
+function peakPick(x: ArrayLike<number>, preMax: number, postMax: number, preAvg: number, postAvg: number,
   delta: number, wait: number): number[] {
   const N = x.length, peaks: number[] = [];
   const mx = (a: number, b: number) => {
@@ -336,7 +329,7 @@ export function localTempo(env: Float32Array): Float64Array {
 }
 
 /** librosa.feature.tempo(onset_envelope=env): one tempo for the whole envelope. */
-export function globalTempo(env: Float32Array): number {
+function globalTempo(env: Float32Array): number {
   const { bpms, logprior } = tempoPrior(), acc = new Float64Array(AC_SIZE);
   eachTempogramFrame(env, (_, ac) => {
     for (let l = 0; l < AC_SIZE; l++) acc[l] += ac[l];
@@ -347,18 +340,13 @@ export function globalTempo(env: Float32Array): number {
 
 // ---------- beats ----------
 
-const roundHalfEven = (x: number) => {
-  const f = Math.floor(x);
-  return x - f === 0.5 ? (f % 2 === 0 ? f : f + 1) : Math.round(x);
-};
-
 /** librosa.beat.beat_track(onset_envelope=env, bpm=...) with tightness 100 and trimming: the beat frames
  * of the dynamic-programming tracker (Ellis 2007). `bpm` is one tempo or one per frame. */
 export function beatTrack(env: Float32Array, bpm: number | Float64Array, tightness = 100): number[] {
   const N = env.length;
   if (!env.some((v) => v !== 0)) return [];
   const frameRate = SR / HOP;
-  const fpb = (i: number) => roundHalfEven((frameRate * 60.0) / (typeof bpm === 'number' ? bpm : bpm[i]));
+  const fpb = (i: number) => round((frameRate * 60.0) / (typeof bpm === 'number' ? bpm : bpm[i]));
 
   // onsets over their (float32, ddof 1) standard deviation
   const m = mean32(env), dev = new Float32Array(N);
@@ -399,7 +387,7 @@ export function beatTrack(env: Float32Array, bpm: number | Float64Array, tightne
   for (let i = 0; i < N; i++) {
     const f = fpb(i), logF = Math.log(f);
     let best = -Infinity, at = -1;
-    for (let loc = i - roundHalfEven(f / 2); loc > i - 2 * f - 1; loc--) {
+    for (let loc = i - round(f / 2); loc > i - 2 * f - 1; loc--) {
       if (loc < 0) break;
       const score = cum[loc] - tightness * (Math.log(i - loc) - logF) ** 2;
       if (score > best) {
@@ -449,7 +437,7 @@ export function beatTrack(env: Float32Array, bpm: number | Float64Array, tightne
 
 /** librosa.onset.onset_strength(y=...) as beat_track computes it: the median flux of the 128-band mel
  * spectrogram in dB. */
-export function medianOnsets(mel128: Float32Array, T: number): Float32Array {
+function medianOnsets(mel128: Float32Array, T: number): Float32Array {
   return onsetStrength(powerToDb(mel128, 1.0), T, 0, 128, { aggregate: 'median' });
 }
 

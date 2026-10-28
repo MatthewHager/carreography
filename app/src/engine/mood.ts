@@ -17,14 +17,15 @@
 
 import type { Analysis, Events, Phrase } from './analysis';
 import { ceilingAt } from './arc';
+import { frameSpan } from './phrases';
 import { argsort, clip, convolveSame, diff, max, mean, median } from './np';
 import { clarity } from './pulse';
+import { beatLen } from './tempo';
 
-export const MOODS = ['calm', 'groove', 'drive', 'frenzy'] as const;
-export const BEATS_PER_HIT: Record<string, number> = { calm: 4, groove: 2, drive: 1, frenzy: 0.5 };
-export const MIN_GAP_S: Record<string, number> = { calm: 1.5, groove: 0.7, drive: 0.0, frenzy: 0.0 };   // never faster than this
+const BEATS_PER_HIT: Record<string, number> = { calm: 4, groove: 2, drive: 1, frenzy: 0.5 };
+const MIN_GAP_S: Record<string, number> = { calm: 1.5, groove: 0.7, drive: 0.0, frenzy: 0.0 };   // never faster than this
 
-export function rank(x: ArrayLike<number>): Float64Array {
+function rank(x: ArrayLike<number>): Float64Array {
   const order = argsort(argsort(x));
   const d = Math.max(x.length - 1, 1);
   const out = new Float64Array(x.length);
@@ -33,7 +34,7 @@ export function rank(x: ArrayLike<number>): Float64Array {
 }
 
 /** Per-frame energy 0..1. */
-export function energyCurve(an: Analysis): Float64Array {
+function energyCurve(an: Analysis): Float64Array {
   const step = an.step;
   const n = an.intensity.length;
   const win = Math.max(1, Math.trunc(3.0 / step));
@@ -73,19 +74,17 @@ export function energyCurve(an: Analysis): Float64Array {
 }
 
 /** Set ph.energy, ph.mood and ph.pace (seconds between hits) on every phrase. */
-export function assign(an: Analysis, phrases: Phrase[]): Phrase[] {
+export function assign(an: Analysis, phrases: Phrase[]): void {
   const e = energyCurve(an);
   an.energy = e;
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   for (const ph of phrases) {
-    const a = Math.trunc(ph.t0 / an.step);
-    const b = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
-    ph.clarity = clarity(an, ph.t0, ph.t1);
+    const [a, b] = frameSpan(an, ph);
     ph.energy = b > a && a < e.length ? mean(e, a, Math.min(b, e.length)) : NaN;
     ph.mood = moodFor(ph.energy);
     // a steady, clearly struck beat keeps a phrase out of "calm" (Thriller's quiet groove intro),
     // but rhythm alone never pushes it higher - the dynamics still come from the music's energy
-    if (ph.mood === 'calm' && ph.clarity >= 4.0 && (an.driver ?? '') !== 'organ') ph.mood = 'groove';
+    if (ph.mood === 'calm' && clarity(an, ph.t0, ph.t1) >= 4.0 && (an.driver ?? '') !== 'organ') ph.mood = 'groove';
     ph.pace = paceS(ph.mood, beat);
   }
   // A trill or a dense run in a lively section is frenzy material whatever the loudness says.
@@ -102,17 +101,16 @@ export function assign(an: Analysis, phrases: Phrase[]): Phrase[] {
       ph.pace = paceS(ph.mood, beat);
     }
   }
-  return phrases;
 }
 
-export function moodFor(energy: number): string {
+function moodFor(energy: number): string {
   if (energy < 0.36) return 'calm';
   if (energy < 0.55) return 'groove';
   if (energy < 0.78) return 'drive';
   return 'frenzy';
 }
 
-export function paceS(mood: string, beat: number): number {
+function paceS(mood: string, beat: number): number {
   const k = BEATS_PER_HIT[mood];
   let p = k * beat;
   while (p < MIN_GAP_S[mood]) p *= 2;
@@ -120,8 +118,8 @@ export function paceS(mood: string, beat: number): number {
 }
 
 export function moodAt(an: Analysis, t: number): string {
-  const e = an.energy as Float64Array | undefined | null;
-  if (e === undefined || e === null) return 'drive';
+  const e = an.energy;
+  if (!e) return 'drive';
   return moodFor(e[Math.min(e.length - 1, Math.max(0, Math.trunc(t / an.step)))]);
 }
 

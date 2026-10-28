@@ -31,15 +31,15 @@ import * as C from './channels';
 import type { Car } from './car';
 import { clip, mean, u8 } from './np';
 
-export const RAMP_STEP = new Map<number, number>([
+const RAMP_STEP = new Map<number, number>([
   [C.ON_500, +0.04], [C.ON_1000, +0.02], [C.ON_2000, +0.01],
   [C.OFF_500, -0.04], [C.OFF_1000, -0.02], [C.OFF_2000, -0.01],
 ]);
-export const BAR_ON = 0.35;        // a pixel flash at least this bright switches its bar section on
-export const END_LEDS = 15;        // the share of the 60-pixel picture each outer end stands for
+const BAR_ON = 0.35;        // a pixel flash at least this bright switches its bar section on
+const END_LEDS = 15;        // the share of the 60-pixel picture each outer end stands for
 
 /** 0..1 brightness of one lamp channel per 20 ms frame, following Tesla's ramp codes. */
-export function lampLevel(col: ArrayLike<number>): Float64Array {
+function lampLevel(col: ArrayLike<number>): Float64Array {
   const out = new Float64Array(col.length);
   let ramp = false;
   for (let i = 0; i < col.length; i++) if (RAMP_STEP.has(col[i])) { ramp = true; break; }
@@ -59,7 +59,8 @@ export function lampLevel(col: ArrayLike<number>): Float64Array {
 }
 
 /** Translate a Model Y's lamp writes to the Juniper's lamps (see the module notes). */
-export function juniperOutput(car: Car, blend = 6): void {
+export function juniperOutput(car: Car): void {
+  const blend = 6;                                       // LEDs over which the left half fades into the right
   const f = car.frames;
   const N = C.N_CHANNELS;
   const nF = car.nFrames;

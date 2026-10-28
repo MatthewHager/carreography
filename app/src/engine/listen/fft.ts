@@ -80,7 +80,7 @@ export class ComplexFft {
 }
 
 /** Real DFT of length n (a power of two, at least 2): bins 0 .. n/2, as numpy's rfft. */
-export class RealFft {
+class RealFft {
   readonly n: number;
   private readonly half: ComplexFft;
   private readonly zr: Float64Array;

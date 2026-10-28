@@ -1,12 +1,17 @@
-// Lyric-driven cues. For the sung songs the words are the choreographer's script: a line of lyric is
-// a phrase, and certain words call specific pictures - "eyes glowing red" turns every interior red,
-// "scream" is lightning, "pumpkin" goes orange, a chant of "Halloween, Halloween..." pings across
-// the cars.
+// Lyric-driven moments: a sung line starts a phrase, and certain words call specific pictures - a
+// colour word tints every interior, "scream" is lightning, a chant pings across the cars.
+//
+// Two sources of timing, two sets of rules:
+//   lines  (lineCues, below) a song dropped into the app: LRCLIB's lines, timed by line only, and
+//          general rules that work for any song
+//   words  (lyricCues) Whisper's word times and per-song rules (LYRIC_RULES). Only the analyses the
+//          Python version exported (cache/bridge, tag python-final) carry words; the app never does.
+//          They are kept so that bridge.test.ts's shows stay byte-identical.
 
 import type { Analysis, LyricLine } from './analysis';
 import type { Resolved } from './cues';
 
-export type Word = [number, number, string];
+type Word = [number, number, string];
 
 const ORANGE = [255, 90, 0];
 const RED = [255, 0, 0];
@@ -46,7 +51,7 @@ interface Rule {
 //   lightning  three strobes on each matched word
 //   chant   consecutive repeats of the word ping across the cars, one car per word
 //   solo    only the named cars for the span of the line
-export const LYRIC_RULES: Record<string, Rule[]> = {
+const LYRIC_RULES: Record<string, Rule[]> = {
   '02_this_is_halloween': [
     { match: 'eyes glowing red|glowing red', do: 'color', color: RED, hold: 2.5, span: 'line' },
     { match: '\\bred\\b', do: 'color', color: RED, hold: 1.5 },
@@ -82,9 +87,9 @@ export const LYRIC_RULES: Record<string, Rule[]> = {
 };
 
 /** Resolve the song's lyric rules against the timed words -> [action, params]. */
-export function lyricCues(name: string, ws: Word[] | null): [string, Resolved][] {
+export function lyricCues(name: string, ws: Word[]): [string, Resolved][] {
   const rules = LYRIC_RULES[name] ?? [];
-  if (!rules.length || !ws || !ws.length) return [];
+  if (!rules.length || !ws.length) return [];
   let out: [string, Resolved][] = [];
   const cue = (t0: number, t1: number, extra: Partial<Resolved> = {}): Resolved => ({ at: '', do: '', t0, t1, ...extra });
   for (const [lstart, lend, text] of lines(ws)) {
@@ -125,9 +130,7 @@ export function lyricCues(name: string, ws: Word[] | null): [string, Resolved][]
 }
 
 // ---- Any song: lyric moments from timed lines ----------------------------------------------------
-// The per-song rules above need Whisper's word times, which only the Python analyses have. A song
-// dropped into the browser gets LRCLIB's lines, timed by line only, and the general moments below: the
-// show reacts to what a line says, from the line's start to its end.
+// The show reacts to what a line says, from the line's start to its end.
 
 const BLUE = [0, 60, 255];
 const GOLD = [255, 170, 0];
@@ -137,7 +140,7 @@ const PINK = [255, 30, 120];
 /** The words that make a picture: whole words in any case, a trailing * takes any ending.
  *   color      the interiors take the colour while the line is sung
  *   lightning  three strobes on the line's strongest attack */
-export const LYRIC_WORDS: { do: 'color' | 'lightning'; color?: number[]; words: string[] }[] = [
+const LYRIC_WORDS: { do: 'color' | 'lightning'; color?: number[]; words: string[] }[] = [
   { do: 'color', color: RED, words: ['red', 'blood*', 'crimson', 'scarlet', 'fire', 'flame*', 'burn*', 'devil*'] },
   { do: 'color', color: ORANGE, words: ['orange*', 'pumpkin*', 'amber', 'jack-o-lantern*'] },
   { do: 'color', color: GREEN, words: ['green', 'emerald*', 'slime*', 'goblin*', 'zombie*'] },

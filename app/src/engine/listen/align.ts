@@ -18,6 +18,7 @@
 
 import type { LyricLine } from '../analysis';
 import { sungFor } from '../lyrics';
+import { hann } from './dsp';
 import { realFft } from './fft';
 import type { Candidate } from './lrclib';
 
@@ -37,7 +38,7 @@ export function vocalCurve(left: Float32Array, right: Float32Array, sr: number):
   const n = left.length, hop = Math.round(sr * STEP), nFrames = Math.floor(n / hop) + 1;
   const fft = realFft(N_FFT), half = N_FFT / 2;
   const k0 = Math.ceil((F_LO * N_FFT) / sr), k1 = Math.min(half, Math.floor((F_HI * N_FFT) / sr));
-  const win = Float64Array.from({ length: N_FFT }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N_FFT));
+  const win = hann(N_FFT);
   const m = new Float64Array(N_FFT), s = new Float64Array(N_FFT);
   const mr = new Float64Array(half + 1), mi = new Float64Array(half + 1);
   const sr_ = new Float64Array(half + 1), si = new Float64Array(half + 1);
@@ -78,7 +79,7 @@ export function vocalCurve(left: Float32Array, right: Float32Array, sr: number):
 }
 
 /** For each slide of the lines (frames, -max..max), the curve's mean over the time they're sung. */
-export function slideScores(curve: Float64Array, lines: LyricLine[], maxShift: number): Float64Array {
+function slideScores(curve: Float64Array, lines: LyricLine[], maxShift: number): Float64Array {
   const n = curve.length;
   let mean = 0;
   for (const v of curve) mean += v / n;
@@ -103,7 +104,7 @@ const bestShift = (scores: Float64Array, maxShift: number) => {
   return best - maxShift;
 };
 
-export interface Alignment {
+interface Alignment {
   offset: number;                 // seconds to add to LRCLIB's times
   by: 'voice' | 'length';         // found in the audio, or LRCLIB's times kept for a same-length release
   agree: number;                  // thirds of the lines that agreed with the slide (0-3)

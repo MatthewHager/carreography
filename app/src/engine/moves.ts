@@ -1,34 +1,23 @@
 // The move library: whole-stage choreography for one phrase at a time, seen from the front.
 //
 // Stage, left to right as the crowd sees it: left Model Y (two sides), Cybertruck (two headlight
-// sides plus a continuous 60-LED bar), right Model Y (two sides) — six slots and a bar.
+// sides plus a continuous 60-LED bar), right Model Y (two sides) - six slots and a bar. In another
+// lineup "the truck" is the centre Cybertruck and "the Ys" are the other cars (centreTruck, sides).
 //
-//   keyboard    lowest note on the left, highest on the right, one flash per note (the phrase's own
-//               pitch range is stretched across the stage, so every phrase uses every car)
-//   lr_notes    zigzag figuration: notes above the phrase's middle hit the right Y, below hit the
-//               left Y, the truck's bar tracks the pitch
-//   lr_beat     left Y / right Y alternate on the beat; notes only tick on the truck bar
-//   rotation    left, centre, right, left... one car per note
-//   mirror      low notes light both Ys together, high notes light the truck (symmetry)
-//   out_in      a crescendo: the lit region grows from the outer corners toward the truck, which
-//               pops at the end
-//   in_out      the reverse: from the truck outward
-//   meter       loudness: the truck bar fills from the centre with the volume, the Ys join as it rises;
-//               notes tick as comets
-//   pulse       slow notes: each held for its length with a soft release
-//   block       chords: every slot the chord spans, held
-//   all_on      a beat of black, then everything, released with a ramp
-//   shimmer     trills
-//   motif       the Toccata's mordent-and-run: quick notes on the truck, the run sweeps the stage,
-//               the landing note holds on the car it lands on while every interior glow
-//
-// A line-by-line port of lightshow/moves.py: the same analysis gives the same frames.
+// What each move looks like is in catalog.ts (and MOVES.md); the tables at the end (UNISON, SIDE,
+// CENTRE) are how the choreographer finds a move by its name.
 
 import type { Analysis, Events, Phrase } from './analysis';
 import type { Car, Side } from './car';
 import * as C from './channels';
-import { arange, argmin, clip, cumsum, diff, linspace, mean, median, quantile, round, searchsorted, sum } from './np';
+import {
+  arange, argmin, at, clip, cumsum, diff, linspace, mean, median, pymod, pyRound, quantile, round, roundTo,
+  searchsorted, sum,
+} from './np';
+import { barLen, beatLen } from './tempo';
+import { tierAt } from './arc';
 import { pacedGrid } from './mood';
+import { frameSpan } from './phrases';
 import { Rng } from './rng';
 
 const ON = C.ON, OFF_500 = C.OFF_500, ON_500 = C.ON_500, OFF_1000 = C.OFF_1000;
@@ -39,46 +28,6 @@ type Rows = Float64Array[];
 type Level = number | ArrayLike<number>;
 /** A phrase as far as the time-grid helpers need one (the choreographer also passes stand-ins). */
 type Span = Pick<Phrase, 't0' | 't1'>;
-
-// --- Python/numpy behaviour the moves rely on ---------------------------------------------------
-
-/** a[i] with Python's negative indexing. */
-function at<T>(a: ArrayLike<T>, i: number): T {
-  return a[i < 0 ? a.length + i : i];
-}
-
-/** Python's % (the sign of the divisor), also numpy's float remainder. */
-function pymod(a: number, b: number): number {
-  let m = a % b;
-  if (m !== 0 && (b < 0) !== (m < 0)) m += b;
-  return m;
-}
-
-/** np.round(x, decimals): rint(x * 10**d) / 10**d. */
-function npRoundTo(x: number, d: number): number {
-  const f = 10 ** d;
-  return round(x * f) / f;
-}
-
-/** Python's round(x, ndigits) for a float: the correctly rounded decimal, ties to even. */
-function pyRoundTo(x: number, d: number): number {
-  if (!Number.isFinite(x) || Math.abs(x) >= 1e21) return x;
-  const exact = Math.abs(x).toFixed(100);       // the exact binary value in decimal
-  const dot = exact.indexOf('.');
-  const tail = exact.slice(dot + 1 + d);
-  let s = Math.abs(x).toFixed(d);                // ties round away from zero here
-  if (/^50*$/.test(tail)) {
-    const kept = exact.slice(0, dot + 1 + d).replace('.', '');
-    const last = Number(kept[kept.length - 1]);
-    if (last % 2 === 0) s = exact.slice(0, dot + (d ? 1 + d : 0));   // the even neighbour is below
-  }
-  const v = Number(s);
-  return x < 0 ? -v : v;
-}
-
-function nps(x: number): number {
-  return x > 0 ? 1 : x < 0 ? -1 : 0;
-}
 
 /** n rows of BAR values from fn(frame, led). */
 function rows(n: number, fn: (f: number, k: number) => number, w = BAR): Rows {
@@ -91,12 +40,12 @@ function rows(n: number, fn: (f: number, k: number) => number, w = BAR): Rows {
   return out;
 }
 
-/** The same row n times (np.repeat(row[None, :], n, 0)). */
+/** The same row n times. */
 function repeatRow(row: Float64Array, n: number): Rows {
   return Array.from({ length: Math.max(0, n) }, () => row);
 }
 
-/** Each frame's value across the whole bar (np.repeat(env[:, None], BAR, 1)). */
+/** Each frame's value across the whole bar. */
 function repeatCol(env: ArrayLike<number>, w = BAR): Rows {
   return Array.from({ length: env.length }, (_, f) => new Float64Array(w).fill(env[f]));
 }
@@ -130,7 +79,7 @@ const posOf = (p: number, lo: number, hi: number, top = 1) => clip((p - lo) / Ma
 // --- helpers -----------------------------------------------------------------------------------
 
 /** Every (car, side) on the stage, crowd-left to right. */
-export function slots6(cars: Car[]): [Car, LR][] {
+function slots6(cars: Car[]): [Car, LR][] {
   const out: [Car, LR][] = [];
   for (const c of cars) for (const s of ['L', 'R'] as const) out.push([c, s]);
   return out;
@@ -158,11 +107,11 @@ export function sides(cars: Car[]): Car[] {
   return out.length ? out : [...cars];   // a lone truck plays both parts
 }
 
-export const CENTRE_SHARE = 4 / 3;   // the centrepiece's share of the pitch range against a side car's (40% vs 30% of 3)
+const CENTRE_SHARE = 4 / 3;   // the centrepiece's share of the pitch range against a side car's (40% vs 30% of 3)
 
 /** Pitch -> (car, side, position along a truck's bar or null): low notes on the crowd's left, high on
  * the right; the centrepiece truck's bar takes a wider share so runs sweep across it. */
-export function slotFor(cars: Car[], pitch: number, lo: number, hi: number): [Car, LR, number | null] {
+function slotFor(cars: Car[], pitch: number, lo: number, hi: number): [Car, LR, number | null] {
   const pos = clip((pitch - lo) / Math.max(hi - lo, 1e-9), 0, 1);
   const ct = centreTruck(cars);
   const widths = cars.map((c) => (c === ct ? CENTRE_SHARE : 1.0));
@@ -175,7 +124,7 @@ export function slotFor(cars: Car[], pitch: number, lo: number, hi: number): [Ca
   return [car, w < 0.5 ? 'L' : 'R', car.isCt ? w : null];   // any truck plays its bar
 }
 
-export function comet(car: Car, t: number, pos: number, dur: number, amp = 1.0, width = 6) {
+function comet(car: Car, t: number, pos: number, dur: number, amp = 1.0, width = 6) {
   const n = Math.max(2, car.fr(t + dur) - car.fr(t));
   const shape = new Float64Array(BAR);
   for (let k = 0; k < BAR; k++) {
@@ -187,7 +136,7 @@ export function comet(car: Car, t: number, pos: number, dur: number, amp = 1.0, 
 }
 
 /** Light `level` (0..1) of the bar, growing from the centre (or from both edges inward). */
-export function barFill(car: Car, t: number, dur: number, level: Level, fromCentre = true,
+function barFill(car: Car, t: number, dur: number, level: Level, fromCentre = true,
   env: ArrayLike<number> | null = null) {
   let n = Math.max(1, car.fr(t + dur) - car.fr(t));
   const scalar = typeof level === 'number';
@@ -209,30 +158,26 @@ export function barFlash(car: Car, t: number, dur: number, level = 1.0) {
 /** Mirror a side for the car on the crowd's right, so "L" means *outer* on both outer cars.
  * Used wherever a side is picked by rhythm or alternation rather than by pitch position; the
  * stage-wide sweeps (keyboard, wave, motif) keep true left-to-right order. */
-export function msd(car: Car, side: LR, cars: Car[] | null = null): LR {
-  let centre = 1.0;
-  if (cars !== null) {
-    let s = 0;
-    for (const c of cars) s += c.x;
-    centre = s / cars.length;
-  }
-  if (car.x > centre) return side === 'L' ? 'R' : 'L';
+function msd(car: Car, side: LR, cars: Car[]): LR {
+  let s = 0;
+  for (const c of cars) s += c.x;
+  if (car.x > s / cars.length) return side === 'L' ? 'R' : 'L';
   return side;
 }
 
 /** One slot flash: accents (Y) / side marker + headlight side (truck). */
-export function hit(car: Car, side: Side, t: number, dur: number, heads = true, value = ON) {
-  const chs = [...car.accents(side), ...(heads || car.isCt ? car.heads(side) : [])];
-  car.light(chs, t, t + dur, value);
+function hit(car: Car, side: Side, t: number, dur: number, heads = true) {
+  car.light([...car.accents(side), ...(heads || car.isCt ? car.heads(side) : [])], t, t + dur);
 }
 
-export function flashLen(ev: Events, i: number, fastCut = 9.0): number {
-  const d = ev.dur[i];
-  return ev.density[i] >= fastCut ? 0.08 : clip(d, 0.1, 0.2);
+/** How long a note's flash lasts: its length within 0.1-0.2 s, and a blip in a fast run (9 notes a
+ * second or more). */
+function flashLen(ev: Events, i: number): number {
+  return ev.density[i] >= 9.0 ? 0.08 : clip(ev.dur[i], 0.1, 0.2);
 }
 
 /** Pitch bounds used to spread this phrase across the stage. */
-export function phraseRange(ph: Pick<Phrase, 'lo' | 'hi'>, _an?: Analysis): [number, number] {
+function phraseRange(ph: Pick<Phrase, 'lo' | 'hi'>): [number, number] {
   if (ph.hi - ph.lo >= 12) return [ph.lo, ph.hi];
   const mid = (ph.lo + ph.hi) / 2;
   return [mid - 6, mid + 6];
@@ -240,8 +185,8 @@ export function phraseRange(ph: Pick<Phrase, 'lo' | 'hi'>, _an?: Analysis): [num
 
 // --- moves -------------------------------------------------------------------------------------
 
-export function keyboard(cars: Car[], an: Analysis, ph: Phrase, heads = false) {
-  const ev = an.events, [lo, hi] = phraseRange(ph, an);
+function keyboard(cars: Car[], an: Analysis, ph: Phrase, heads = false) {
+  const ev = an.events, [lo, hi] = phraseRange(ph);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = flashLen(ev, i);
     const voices = ev.kind[i] === 0 ? [ev.top[i]] : [ev.top[i], ev.low[i]];
@@ -257,12 +202,12 @@ export function keyboard(cars: Car[], an: Analysis, ph: Phrase, heads = false) {
   }
 }
 
-export function lrNotes(cars: Car[], an: Analysis, ph: Phrase) {
+function lrNotes(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const ct = centreTruck(cars);
   const outer = sides(cars);
   const med = median(ev.top.slice(ph.a, ph.b));
-  const [lo, hi] = phraseRange(ph, an);
+  const [lo, hi] = phraseRange(ph);
   // In band songs a note only strobes a Y when it sits on a beat subdivision (eighths); the rest
   // ride on the truck's bar, so the sides read as rhythm, not as blinking.
   const band = an.driver === 'band' || an.driver === 'vocal_band';
@@ -289,29 +234,28 @@ export function lrNotes(cars: Car[], an: Analysis, ph: Phrase) {
   }
 }
 
-export function lrBeat(cars: Car[], an: Analysis, ph: Phrase) {
+function lrBeat(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const ct = centreTruck(cars);
   const outer = sides(cars);
   const beats = within(an.beats, ph.t0 - 0.05, ph.t1);
-  const downs = new Set(an.downbeats.map((d) => npRoundTo(d, 3)));
+  const downs = new Set(an.downbeats.map((d) => roundTo(d, 3)));
   beats.forEach((b, k) => {
     const car = outer[k % outer.length];
     hit(car, 'L', b, 0.14, true);
     hit(car, 'R', b, 0.14, true);
-    if (downs.has(pyRoundTo(b, 3)) && ct !== null) barFlash(ct, b, 0.3);
+    if (downs.has(pyRound(b, 3)) && ct !== null) barFlash(ct, b, 0.3);
   });
-  const [lo, hi] = phraseRange(ph, an);
+  const [lo, hi] = phraseRange(ph);
   if (ct !== null) {
     for (let i = ph.a; i < ph.b; i++) comet(ct, ev.t[i], posOf(ev.top[i], lo, hi), 0.2, 0.7);
   }
 }
 
-export function rotation(cars: Car[], an: Analysis, ph: Phrase, order: number[] | null = null) {
+function rotation(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
-  const ord = order && order.length ? order : cars.map((_, i) => i);
   for (let k = 0, i = ph.a; i < ph.b; k++, i++) {
-    const car = at(cars, ord[k % ord.length]);
+    const car = cars[k % cars.length];
     const t = ev.t[i], d = flashLen(ev, i);
     const side = msd(car, k % 2 === 0 ? 'L' : 'R', cars);
     hit(car, side, t, d, true);
@@ -319,7 +263,7 @@ export function rotation(cars: Car[], an: Analysis, ph: Phrase, order: number[] 
   }
 }
 
-export function mirror(cars: Car[], an: Analysis, ph: Phrase) {
+function mirror(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const ct = centreTruck(cars);
   const outer = sides(cars);
@@ -345,11 +289,11 @@ export function mirror(cars: Car[], an: Analysis, ph: Phrase) {
 /** A crescendo: participation grows from the Ys' outer corners inward to the truck. Every note
  * ticks (short flashes) in whatever part of the stage is active; the truck bar fills toward the
  * centre; the truck's headlights join only in the last stage; a beat of black, then the pop. */
-export function outIn(cars: Car[], an: Analysis, ph: Phrase, reverse = false) {
-  const ev = an.events, [lo, hi] = phraseRange(ph, an);
+function outIn(cars: Car[], an: Analysis, ph: Phrase, reverse = false) {
+  const ev = an.events, [lo, hi] = phraseRange(ph);
   const ct = centreTruck(cars);
   const ys = sides(cars);
-  const f0 = Math.trunc(ph.t0 / an.step), f1 = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
+  const [f0, f1] = frameSpan(an, ph);
   const e = an.intensity.slice(f0, f1);
   const L = e.length;
   const rising = L > 10 && mean(e, L - Math.ceil(L / 4), L) > mean(e, 0, Math.floor(L / 4)) * 1.15;
@@ -406,14 +350,14 @@ export function outIn(cars: Car[], an: Analysis, ph: Phrase, reverse = false) {
   land(cars, an, ph, ct, rising || landsOnHold(an, ph));
 }
 
-export function landsOnHold(an: Analysis, ph: Phrase): boolean {
+function landsOnHold(an: Analysis, ph: Phrase): boolean {
   const ev = an.events;
   return at(ev.dur, ph.b - 1) >= 0.8 || (ph.b < nEvents(ev) && ev.kind[ph.b] >= 2 && ev.t[ph.b] - ph.t1 < 0.6);
 }
 
 /** The top of a build: a beat of black, the pop, and if the music lands on a held chord,
  * everything stays on for the chord and releases with it. */
-export function land(cars: Car[], an: Analysis, ph: Phrase, ct: Car | null, pop: boolean) {
+function land(cars: Car[], an: Analysis, ph: Phrase, ct: Car | null, pop: boolean) {
   if (!pop) return;
   const ev = an.events;
   const last = at(ev.dur, ph.b - 1);
@@ -434,7 +378,7 @@ export function land(cars: Car[], an: Analysis, ph: Phrase, ct: Car | null, pop:
 
 /** an.loud_fast over the phrase, stretched to 0..1 (or a flat 0.5 when it barely moves). */
 function loudness(an: Analysis, ph: Phrase): Float64Array {
-  const f0 = Math.trunc(ph.t0 / an.step), f1 = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
+  const [f0, f1] = frameSpan(an, ph);
   const e = Float64Array.from(an.loudFast.slice(f0, f1));
   let lo = Infinity, hi = -Infinity;
   for (const v of e) {
@@ -445,7 +389,7 @@ function loudness(an: Analysis, ph: Phrase): Float64Array {
   return ptp > 0.05 ? e.map((v) => (v - lo) / Math.max(ptp, 1e-6)) : e.fill(0.5);
 }
 
-export function meter(cars: Car[], an: Analysis, ph: Phrase) {
+function meter(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const ct = centreTruck(cars);
   const e = loudness(an, ph);         // fast loudness: the bar breathes with every note and swell
@@ -463,7 +407,7 @@ export function meter(cars: Car[], an: Analysis, ph: Phrase) {
   }
   // Every note still ticks: a comet on the bar, and a short keyboard tick on the Ys' accents,
   // so the Ys read the melody while the truck reads the volume.
-  const [lo, hi] = phraseRange(ph, an);
+  const [lo, hi] = phraseRange(ph);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i];
     const [car, side, w] = slotFor(cars, ev.top[i], lo, hi);
@@ -475,8 +419,8 @@ export function meter(cars: Car[], an: Analysis, ph: Phrase) {
   }
 }
 
-export function pulse(cars: Car[], an: Analysis, ph: Phrase) {
-  const ev = an.events, [lo, hi] = phraseRange(ph, an);
+function pulse(cars: Car[], an: Analysis, ph: Phrase) {
+  const ev = an.events, [lo, hi] = phraseRange(ph);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = clip(ev.dur[i], 0.15, 1.5);
     const [car, side, w] = slotFor(cars, ev.top[i], lo, hi);
@@ -490,8 +434,8 @@ export function pulse(cars: Car[], an: Analysis, ph: Phrase) {
   }
 }
 
-export function block(cars: Car[], an: Analysis, ph: Phrase, beatLen: number) {
-  const ev = an.events, [lo, hi] = phraseRange(ph, an);
+function block(cars: Car[], an: Analysis, ph: Phrase, beatLen: number) {
+  const ev = an.events, [lo, hi] = phraseRange(ph);
   const ct = centreTruck(cars);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], dur = ev.dur[i];
@@ -541,12 +485,12 @@ export function allOn(cars: Car[], t: number, hold: number, blackout = true) {
   }
 }
 
-export function cadence(cars: Car[], an: Analysis, ph: Phrase) {
+function cadence(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   for (let i = ph.a; i < ph.b; i++) allOn(cars, ev.t[i], clip(ev.dur[i], 0.3, 1.5), i === ph.a);
 }
 
-export function shimmer(cars: Car[], an: Analysis, ph: Phrase) {
+function shimmer(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const ct = centreTruck(cars);
   const [car] = slotFor(cars, median(ev.top.slice(ph.a, ph.b)), an.pitchLo, an.pitchHi);
@@ -564,7 +508,7 @@ export function shimmer(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** Mordent-and-run: quick ornament on the truck, the run sweeps the stage toward where it
  * lands, and the landing note holds on that car while every interior glow. */
-export function motif(cars: Car[], an: Analysis, ph: Phrase) {
+function motif(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const ct = centreTruck(cars);
   const idx: number[] = [];
@@ -618,7 +562,7 @@ export function motif(cars: Car[], an: Analysis, ph: Phrase) {
 // truck in the middle. Signature, DRL and inner beams can ramp (500/1000/2000 ms), the rest snap.
 
 /** All Y lamps left to right across the stage: [(car, channels), ...]. */
-export function yLine(ys: Car[]): [Car, number[]][] {
+function yLine(ys: Car[]): [Car, number[]][] {
   const out: [Car, number[]][] = [];
   for (const c of ys) for (const lp of c.lamps()) out.push([c, lp]);
   return out;
@@ -627,8 +571,8 @@ export function yLine(ys: Car[]): [Car, number[]][] {
 /** Keyboard on the sides only, pitch spread over the 16 Y lamps. `weight` sets how much of
  * the car each note lights: 0 one lamp, 1 the signature + DRL of that side, 2 the whole half-car
  * (so a note reads from the crowd in a loud section). */
-export function yKeyboard(ys: Car[], an: Analysis, ph: Phrase, weight = 1) {
-  const ev = an.events, [lo, hi] = phraseRange(ph, an);
+function yKeyboard(ys: Car[], an: Analysis, ph: Phrase, weight = 1) {
+  const ev = an.events, [lo, hi] = phraseRange(ph);
   const line = yLine(ys);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = flashLen(ev, i);
@@ -645,7 +589,7 @@ export function yKeyboard(ys: Car[], an: Analysis, ph: Phrase, weight = 1) {
 /** On every beat a ripple runs through each Y's lamps, mirrored on the two cars: inward
  * (toward the truck) or outward. The ripple spans half a beat, so it starts on the beat and
  * finishes on the "and" whatever the tempo. */
-export function yRipple(ys: Car[], an: Analysis, ph: Phrase, inward = true) {
+function yRipple(ys: Car[], an: Analysis, ph: Phrase, inward = true) {
   for (const b of within(an.beats, ph.t0, ph.t1)) {
     const lampDt = beatAt(an, b) / 2 / 8;
     for (const c of ys) {
@@ -658,8 +602,8 @@ export function yRipple(ys: Car[], an: Analysis, ph: Phrase, inward = true) {
 }
 
 /** Slow mirrored swells on the ramping lamps (signature + DRL), the two Ys in antiphase. */
-export function yBreathe(ys: Car[], an: Analysis, ph: Phrase, period: number | null = null) {
-  const p = period || Math.max(2.0, (4 * 60.0) / Math.max(an.tempo, 40));
+function yBreathe(ys: Car[], an: Analysis, ph: Phrase) {
+  const p = Math.max(2.0, barLen(an));
   const [onV, offV] = p < 3.0 ? [ON_500, OFF_500] : [C.ON_1000, OFF_1000];
   ys.forEach((c, k) => {
     let t = ph.t0 + (k % 2 ? p / 2 : 0);
@@ -674,7 +618,7 @@ export function yBreathe(ys: Car[], an: Analysis, ph: Phrase, period: number | n
 
 /** Amber turn signals tick on the off-beats (mirrored on the two cars) under a keyboard of
  * the melody on the signature and DRL lamps. */
-export function yTurnTicks(ys: Car[], an: Analysis, ph: Phrase) {
+function yTurnTicks(ys: Car[], an: Analysis, ph: Phrase) {
   yKeyboard(ys, an, ph, 1);
   const beats = within(an.beats, ph.t0, ph.t1);
   for (let k = 0; k < beats.length - 1; k++) {
@@ -687,7 +631,7 @@ export function yTurnTicks(ys: Car[], an: Analysis, ph: Phrase) {
 }
 
 /** Low-mounted fog lights thump on low notes. */
-export function yBassFogs(ys: Car[], an: Analysis, ph: Phrase) {
+function yBassFogs(ys: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   for (let i = ph.a; i < ph.b; i++) {
     if (ev.low[i] <= 48 && ev.kind[i] <= 1) for (const c of ys) c.flash(c.fogs(), ev.t[i], 0.1);
@@ -695,8 +639,8 @@ export function yBassFogs(ys: Car[], an: Analysis, ph: Phrase) {
 }
 
 /** Chords on the sides: the lamps spanned by the chord, held; big chords take all 16. */
-export function yChords(ys: Car[], an: Analysis, ph: Phrase, beatLen: number) {
-  const ev = an.events, [lo, hi] = phraseRange(ph, an);
+function yChords(ys: Car[], an: Analysis, ph: Phrase, beatLen: number) {
+  const ev = an.events, [lo, hi] = phraseRange(ph);
   const line = yLine(ys);
   const n = line.length;
   for (let i = ph.a; i < ph.b; i++) {
@@ -717,36 +661,37 @@ export function yChords(ys: Car[], an: Analysis, ph: Phrase, beatLen: number) {
 
 // --- Cybertruck moves (the centre) --------------------------------------------------------------
 
-/** A comet scanning the bar over n frames: Gaussian blobs of the given width along `centre`. */
-function sweep(centre: ArrayLike<number>, width: number, scale = 1): Rows {
-  return rows(centre.length, (f, k) => {
+/** A comet crossing the bar over n frames, left to right (ltr) or back: a Gaussian blob `width` LEDs
+ * wide. */
+function sweep(n: number, ltr: boolean, width: number, scale = 1): Rows {
+  const centre = ltr ? linspace(0, BAR - 1, n) : linspace(BAR - 1, 0, n);
+  return rows(n, (f, k) => {
     const x = (k - centre[f]) / width;
-    return scale === 1 ? Math.exp(-(x * x)) : scale * Math.exp(-(x * x));
+    return scale * Math.exp(-(x * x));
   });
 }
 
 /** A comet scans the bar left to right on one beat and back on the next (tempo-locked). */
-export function ctScan(ct: Car, an: Analysis, ph: Phrase) {
+function ctScan(ct: Car, an: Analysis, ph: Phrase) {
   const beats = within(an.beats, ph.t0, ph.t1 + 0.5);
   for (let k = 0; k < beats.length - 1; k++) {
     const b0 = beats[k], b1 = Math.min(beats[k + 1], ph.t1);
     const n = Math.max(2, ct.fr(b1) - ct.fr(b0));
-    const centre = k % 2 === 0 ? linspace(0, BAR - 1, n) : linspace(BAR - 1, 0, n);
-    ct.pixels(C.FRONT_BAR, b0, sweep(centre, 4));
+    ct.pixels(C.FRONT_BAR, b0, sweep(n, k % 2 === 0, 4));
   }
 }
 
 /** Each beat: the bar fills from both edges to the centre and fades, like a breath in. */
-export function ctEdgePulse(ct: Car, an: Analysis, ph: Phrase) {
+function ctEdgePulse(ct: Car, an: Analysis, ph: Phrase) {
   for (const b of within(an.beats, ph.t0, ph.t1)) {
-    const dur = Math.min(0.4, Math.max(0.2, (60.0 / Math.max(an.tempo, 40)) * 0.8));
+    const dur = Math.min(0.4, Math.max(0.2, beatLen(an) * 0.8));
     const n = Math.max(2, ct.fr(b + dur) - ct.fr(b));
     barFill(ct, b, dur, linspace(0, 1, n), false, linspace(1, 0.3, n));
   }
 }
 
 /** The truck's ramping lights breathe slowly: outer beams swell over 2 s, the bar follows. */
-export function ctSwell(ct: Car, _an: Analysis, ph: Phrase) {
+function ctSwell(ct: Car, _an: Analysis, ph: Phrase) {
   const period = Math.max(3.0, Math.min(8.0, ph.t1 - ph.t0));
   let t = ph.t0;
   while (t < ph.t1 - 0.5) {
@@ -761,8 +706,8 @@ export function ctSwell(ct: Car, _an: Analysis, ph: Phrase) {
 }
 
 /** Every note as a comet at its pitch position on the bar; headlights only on strong notes. */
-export function ctComets(ct: Car, an: Analysis, ph: Phrase) {
-  const ev = an.events, [lo, hi] = phraseRange(ph, an);
+function ctComets(ct: Car, an: Analysis, ph: Phrase) {
+  const ev = an.events, [lo, hi] = phraseRange(ph);
   const q = quantile(ev.amp, 0.8);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i];
@@ -772,7 +717,7 @@ export function ctComets(ct: Car, an: Analysis, ph: Phrase) {
   }
 }
 
-export function ctMeter(ct: Car, an: Analysis, ph: Phrase) {
+function ctMeter(ct: Car, an: Analysis, ph: Phrase) {
   const e = loudness(an, ph);
   barFill(ct, ph.t0, ph.t1 - ph.t0, e.map((v) => 0.2 + 0.75 * v), true);
 }
@@ -781,11 +726,11 @@ export function ctMeter(ct: Car, an: Analysis, ph: Phrase) {
 
 /** Once per bar a single light travels the whole stage: through the left Y's 8 lamps, across
  * the truck bar as a comet, through the right Y's lamps; direction alternates each bar. */
-export function wave(cars: Car[], an: Analysis, ph: Phrase) {
+function wave(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
   const downs = within(an.downbeats, ph.t0, ph.t1);
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+  const bar = barLen(an);
   downs.forEach((d, k) => {
     const span = Math.min(bar, ph.t1 - d);
     let stations: ([Car, number[]] | null)[] = [];
@@ -800,8 +745,7 @@ export function wave(cars: Car[], an: Analysis, ph: Phrase) {
       if (st === null) {
         if (ct !== null) {
           const n = Math.max(2, ct.fr(t + per * 2) - ct.fr(t));
-          const centre = k % 2 === 0 ? linspace(0, BAR - 1, n) : linspace(BAR - 1, 0, n);
-          ct.pixels(C.FRONT_BAR, t, sweep(centre, 4));
+          ct.pixels(C.FRONT_BAR, t, sweep(n, k % 2 === 0, 4));
         }
       } else {
         st[0].light(st[1], t, t + Math.max(0.1, per * 1.5));
@@ -811,7 +755,7 @@ export function wave(cars: Car[], an: Analysis, ph: Phrase) {
 }
 
 /** Every beat: both Ys ripple inward, then the truck bar closes from the edges to the centre. */
-export function converge(cars: Car[], an: Analysis, ph: Phrase) {
+function converge(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
   yRipple(ys, an, ph, true);
@@ -827,7 +771,7 @@ export function converge(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** Two quick pulses per bar on every car's headlights, with the truck bar thumping; the
  * ominous move for slow, dark passages. */
-export function heartbeat(cars: Car[], an: Analysis, ph: Phrase) {
+function heartbeat(cars: Car[], an: Analysis, ph: Phrase) {
   for (const d of grid(an, ph, 'downbeats')) {
     for (const dt of [0.0, beatAt(an, d) / 4]) {
       for (const c of cars) {
@@ -839,7 +783,7 @@ export function heartbeat(cars: Car[], an: Analysis, ph: Phrase) {
 }
 
 /** The sides play the first half of the phrase, the truck answers with the second half. */
-export function callResponse(cars: Car[], an: Analysis, ph: Phrase) {
+function callResponse(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const ys = sides(cars);
   const ct = centreTruck(cars);
@@ -857,11 +801,11 @@ export function callResponse(cars: Car[], an: Analysis, ph: Phrase) {
 // --- Round three: showing off the cars' sync -----------------------------------------------
 
 /** A stop on the stage's line of lights: a car's lamp, or segment k of the truck's bar. */
-export type Station = { car: Car; chs: number[] } | { bar: number };
+type Station = { car: Car; chs: number[] } | { bar: number };
 
 /** Every light on the stage in crowd order: left Y lamps, the truck bar (as a token), right Y
  * lamps. Returns [stations, ct] where the bar is split into 6 segments. */
-export function stations(cars: Car[]): [Station[], Car | null] {
+function stations(cars: Car[]): [Station[], Car | null] {
   const out: Station[] = [];
   const ys = sides(cars);
   const ct = centreTruck(cars);
@@ -872,8 +816,9 @@ export function stations(cars: Car[]): [Station[], Car | null] {
   return [out, ct];
 }
 
-export function barSegment(ct: Car, t: number, dur: number, k: number, n = 6, level = 1.0) {
-  const a = Math.trunc((k * BAR) / n), b = Math.trunc(((k + 1) * BAR) / n);
+/** Segment k of the bar's six (crowd-left first), fading over `dur`. */
+function barSegment(ct: Car, t: number, dur: number, k: number, level = 1.0) {
+  const a = Math.trunc((k * BAR) / 6), b = Math.trunc(((k + 1) * BAR) / 6);
   const m = Math.max(2, ct.fr(t + dur) - ct.fr(t));
   const mask = new Float64Array(BAR);
   mask.fill(level, a, b);
@@ -882,11 +827,11 @@ export function barSegment(ct: Car, t: number, dur: number, k: number, n = 6, le
 }
 
 /** The crowd-left ("L") or crowd-right half of the bar, fading over `dur`. */
-export function barHalf(ct: Car, t: number, dur: number, side: LR, level = 1.0) {
+function barHalf(ct: Car, t: number, dur: number, side: LR) {
   const m = Math.max(2, ct.fr(t + dur) - ct.fr(t));
   const mask = new Float64Array(BAR);
-  if (side === 'L') mask.fill(level, 0, Math.floor(BAR / 2));
-  else mask.fill(level, Math.floor(BAR / 2));
+  if (side === 'L') mask.fill(1.0, 0, Math.floor(BAR / 2));
+  else mask.fill(1.0, Math.floor(BAR / 2));
   const env = linspace(1, 0.3, m);
   ct.pixels(C.FRONT_BAR, t, rows(m, (f, q) => env[f] * mask[q]));
 }
@@ -894,7 +839,7 @@ export function barHalf(ct: Car, t: number, dur: number, side: LR, level = 1.0) 
 /** One light runs the whole stage one note at a time: through the left Y's lamps, along the
  * truck bar, through the right Y's lamps, and back. Direction follows the run. Best for scale
  * runs and long single-note passages: every note is a step of a single moving light. */
-export function relay(cars: Car[], an: Analysis, ph: Phrase) {
+function relay(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const [st6, ct] = stations(cars);
   const n = st6.length;
@@ -913,7 +858,7 @@ export function relay(cars: Car[], an: Analysis, ph: Phrase) {
     }
     // Change direction when the melody turns, else keep walking; bounce at the ends.
     if (i > ph.a && i + 1 < ph.b) {
-      const step = nps(ev.top[i + 1] - ev.top[i]);
+      const step = Math.sign(ev.top[i + 1] - ev.top[i]);
       if (step !== 0) direction = step;
     }
     pos += direction;
@@ -927,7 +872,7 @@ export function relay(cars: Car[], an: Analysis, ph: Phrase) {
 /** On every beat a light bounces between the outer Ys, passing through the truck: the bar
  * scans in the travel direction and the Y it lands on flashes its whole front. Best for steady,
  * medium-intensity beat passages: pure synchronization on display. */
-export function pinball(cars: Car[], an: Analysis, ph: Phrase) {
+function pinball(cars: Car[], an: Analysis, ph: Phrase) {
   const ys = sides(cars);
   const ct = centreTruck(cars);
   const beats = within(an.beats, ph.t0, ph.t1 + 0.3);
@@ -939,15 +884,14 @@ export function pinball(cars: Car[], an: Analysis, ph: Phrase) {
     }
     if (ct !== null && b1 > b0 + 0.1) {
       const m = Math.max(2, ct.fr(b1) - ct.fr(b0 + 0.05));
-      const centre = k % 2 === 0 ? linspace(0, BAR - 1, m) : linspace(BAR - 1, 0, m);
-      ct.pixels(C.FRONT_BAR, b0 + 0.05, sweep(centre, 3.5));
+      ct.pixels(C.FRONT_BAR, b0 + 0.05, sweep(m, k % 2 === 0, 3.5));
     }
   }
 }
 
 /** Beats/downbeats inside the phrase, or an even grid at the piece's tempo when the tracker
  * has none there (rubato passages), so beat-shaped moves never go dark. */
-export function grid(an: Analysis, ph: Span, kind: 'downbeats' | 'beats' = 'downbeats'): number[] {
+function grid(an: Analysis, ph: Span, kind: 'downbeats' | 'beats' = 'downbeats'): number[] {
   const src = kind === 'downbeats' ? an.downbeats : an.beats;
   let g = within(src, ph.t0 - 0.02, ph.t1);
   if (g.length < 2) {
@@ -974,7 +918,7 @@ export function grid(an: Analysis, ph: Span, kind: 'downbeats' | 'beats' = 'down
       if (g.length === 0) g = [ph.t0];
     }
   }
-  const pace = an.pace as number | null | undefined;   // calm: every 4th beat, groove: every 2nd (mood.py)
+  const pace = an.pace as number | null | undefined;   // calm: every 4th beat, groove: every 2nd (mood.ts)
   if (pace && kind === 'beats' && g.length > 1 && pace > median(diff(g)) * 1.25) g = Array.from(pacedGrid(g, pace));
   return g;
 }
@@ -983,13 +927,13 @@ const subGrids = new WeakMap<Analysis, Map<number, Float64Array>>();
 
 /** Every 1/div-beat point of the tracked beats (sixteenths for div=4), following the music's
  * own beat spacing - not a fixed tempo - so rubato and drift are followed too. Cached. */
-export function subGrid(an: Analysis, div = 4): Float64Array {
+function subGrid(an: Analysis, div = 4): Float64Array {
   let cache = subGrids.get(an);
   if (!cache) subGrids.set(an, (cache = new Map()));
   let g = cache.get(div);
   if (g === undefined) {
     let b: ArrayLike<number> = an.beats;
-    if (b.length < 2) b = arange(0, an.duration, 60.0 / Math.max(an.tempo, 40));
+    if (b.length < 2) b = arange(0, an.duration, beatLen(an));
     const gaps = diff(b);
     const out = new Float64Array(b.length * div);
     for (let i = 0; i + 1 < b.length; i++) for (let j = 0; j < div; j++) out[i * div + j] = b[i] + (gaps[i] * j) / div;
@@ -1002,7 +946,7 @@ export function subGrid(an: Analysis, div = 4): Float64Array {
 }
 
 /** `t` moved to the nearest sixteenth (1/div beat) of the performer-following beat map
- * (tempo.py), and from there onto a note that was actually played, if one starts within an
+ * (tempo.ts), and from there onto a note that was actually played, if one starts within an
  * eighth of that subdivision (at most 40 ms) - continuous quantization: the grid bends with the
  * tempo, and the light lands on the real attack rather than on the theoretical one. */
 export function snap(an: Analysis, t: number, div = 4): number {
@@ -1023,7 +967,7 @@ export function snap(an: Analysis, t: number, div = 4): number {
 /** Length of the tracked beat around time `t` (seconds). */
 export function beatAt(an: Analysis, t: number): number {
   const b = an.beats;
-  const nominal = 60.0 / Math.max(an.tempo, 40);
+  const nominal = beatLen(an);
   if (b.length < 2) return nominal;
   const i = Math.min(Math.max(searchsorted(b, t, 'right'), 1), b.length - 1);
   return Math.min(b[i] - b[i - 1], 1.5 * nominal);       // across a fermata: a normal beat
@@ -1032,7 +976,7 @@ export function beatAt(an: Analysis, t: number): number {
 /** Start times for `n` evenly spread steps over [d, d + span), each snapped to the nearest
  * sixteenth note of the tracked beats - so a sweep across the stage moves in time with the
  * music instead of at an arbitrary rate. Several steps may share a sixteenth. */
-export function qSteps(an: Analysis, d: number, span: number, n: number): number[] {
+function qSteps(an: Analysis, d: number, span: number, n: number): number[] {
   const out: number[] = [];
   for (let i = 0; i < n; i++) out.push(snap(an, d + (i * span) / Math.max(n, 1)));
   return out;
@@ -1041,11 +985,11 @@ export function qSteps(an: Analysis, d: number, span: number, n: number): number
 /** Breathing stage: on one bar the lit region grows from the truck's centre out to the Ys'
  * outer corners, on the next it contracts back. Best for sustained chords and long notes in
  * loud sections, where there are no notes to tick but the sound is big. */
-export function expandContract(cars: Car[], an: Analysis, ph: Phrase) {
+function expandContract(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
   const downs = grid(an, ph, 'downbeats');
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+  const bar = barLen(an);
   downs.forEach((d, k) => {
     const span = Math.min(bar, ph.t1 - d);
     const expanding = k % 2 === 0;
@@ -1070,7 +1014,8 @@ export function expandContract(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** Three stage-wide strobes, 60 ms on / 70 ms off, then black. The Halloween hit: for arrival
  * chords and accents, alternating with the plain all-on. */
-export function lightning(cars: Car[], t: number, flashes = 3) {
+export function lightning(cars: Car[], t: number) {
+  const flashes = 3;
   for (let k = 0; k < flashes; k++) {
     const t0 = t + k * 0.13;
     for (const c of cars) {
@@ -1087,7 +1032,7 @@ export function lightning(cars: Car[], t: number, flashes = 3) {
 
 /** The Ys hit the beats together (mirrored, whole fronts); the truck answers on the off-beats
  * with a bar flash and its headlights. Best for beat-locked loud passages (the band songs). */
-export function syncopate(cars: Car[], an: Analysis, ph: Phrase) {
+function syncopate(cars: Car[], an: Analysis, ph: Phrase) {
   const ys = sides(cars);
   const ct = centreTruck(cars);
   const beats = within(an.beats, ph.t0, ph.t1);
@@ -1108,10 +1053,10 @@ export function syncopate(cars: Car[], an: Analysis, ph: Phrase) {
 /** Twinkle: random LEDs sparkle across the truck bar and the Ys' markers and signatures
  * flicker, denser with the loudness. Best for tremolos, trills and shimmering sustained textures
  * (strings, xylophone), where single notes are not the point. */
-export function rain(cars: Car[], an: Analysis, ph: Phrase) {
+function rain(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
-  const f0 = Math.trunc(ph.t0 / an.step), f1 = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
+  const [f0, f1] = frameSpan(an, ph);
   const rng = new Rng(Math.trunc(ph.t0 * 100));
   const n = f1 - f0;
   if (ct !== null) {
@@ -1139,7 +1084,7 @@ export function rain(cars: Car[], an: Analysis, ph: Phrase) {
 /** Accumulation: one more light comes on with every note, left to right across all three
  * cars, and stays, until the whole stage is lit at the phrase's end; then everything releases.
  * Best for a long crescendo that ends on a hit, as an alternative to the outside-in build. */
-export function fillStage(cars: Car[], an: Analysis, ph: Phrase) {
+function fillStage(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const [st6, ct] = stations(cars);
   const n = st6.length;
@@ -1148,7 +1093,7 @@ export function fillStage(cars: Car[], an: Analysis, ph: Phrase) {
     const t = ev.t[i];
     const idx = Math.min(n - 1, Math.trunc((j / count) * n));
     const st = st6[idx];
-    if ('bar' in st) barSegment(ct as Car, t, ph.t1 - t, st.bar, 6, 0.8);
+    if ('bar' in st) barSegment(ct as Car, t, ph.t1 - t, st.bar, 0.8);
     else st.car.light(st.chs, t, ph.t1);
     // and a tick on the newest light's neighbour so the motion reads
     const nxt = st6[Math.min(n - 1, idx + 1)];
@@ -1163,7 +1108,7 @@ export function fillStage(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** Truck solo: two comets launch from the bar's ends on each chord and collide in the middle
  * with a flash; single notes are plain comets. Best for chordal passages on the truck. */
-export function barCollide(ct: Car, an: Analysis, ph: Phrase) {
+function barCollide(ct: Car, an: Analysis, ph: Phrase) {
   const ev = an.events;
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i];
@@ -1179,7 +1124,7 @@ export function barCollide(ct: Car, an: Analysis, ph: Phrase) {
       barFlash(ct, t + 0.3, 0.2, 1.0);
       ct.flash(ct.heads(), t + 0.3, 0.1);
     } else {
-      const [lo, hi] = phraseRange(ph, an);
+      const [lo, hi] = phraseRange(ph);
       comet(ct, t, posOf(ev.top[i], lo, hi), 0.2);
     }
   }
@@ -1187,10 +1132,10 @@ export function barCollide(ct: Car, an: Analysis, ph: Phrase) {
 
 /** The two Ys trade phrases: one plays a bar of the melody (its lamps by pitch) while the
  * other holds a soft glow, then they swap. Best for antiphonal or conversational passages. */
-export function yWink(ys: Car[], an: Analysis, ph: Phrase) {
-  const ev = an.events, [lo, hi] = phraseRange(ph, an);
+function yWink(ys: Car[], an: Analysis, ph: Phrase) {
+  const ev = an.events, [lo, hi] = phraseRange(ph);
   if (ys.length < 2) return yKeyboard(ys, an, ph);
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+  const bar = barLen(an);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = flashLen(ev, i);
     const who = pymod(Math.trunc((t - ph.t0) / bar), 2);
@@ -1211,9 +1156,7 @@ export function yWink(ys: Car[], an: Analysis, ph: Phrase) {
 
 // --- Round four: whole-lineup collaboration on steady beats ---------------------------------------
 
-const byX = (cars: Car[]) => [...cars].sort((p, q) => p.x - q.x);
-
-/** order + order[-2:0:-1]: the ping-pong order over the lineup. */
+/** The lineup there and back, without repeating the ends: left, centre, right, centre. */
 function pingPongOrder(order: Car[]): Car[] {
   const seq = [...order];
   for (let i = order.length - 2; i >= 1; i--) seq.push(order[i]);
@@ -1223,8 +1166,8 @@ function pingPongOrder(order: Car[]): Car[] {
 /** A single light marches car to car on the beat - left, centre, right, centre, left... - the
  * arriving car's whole front comes on while the car it left ramps off, so it reads as one light
  * travelling, not three blinking. On fast beats it steps every other beat. */
-export function march(cars: Car[], an: Analysis, ph: Phrase) {
-  const seq = pingPongOrder(byX(cars));            // ping-pong order over the lineup
+function march(cars: Car[], an: Analysis, ph: Phrase) {
+  const seq = pingPongOrder(cars);
   let beats = grid(an, ph, 'beats');
   if (beats.length > 1 && median(diff(beats)) < 0.4) beats = every(beats, 2);
   beats.forEach((b, k) => {
@@ -1239,17 +1182,15 @@ export function march(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** Every bar a quick ripple runs across the lineup - left Y, truck, right Y, 120 ms apart - and
  * the next bar runs back. Fast enough to read as a swipe, slow enough to see every car. */
-export function cascade(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
+function cascade(cars: Car[], an: Analysis, ph: Phrase) {
   grid(an, ph, 'downbeats').forEach((d, k) => {
-    const seq = k % 2 === 0 ? order : [...order].reverse();
+    const seq = k % 2 === 0 ? cars : [...cars].reverse();
     seq.forEach((car, j) => {
       const t = d + (beatAt(an, d) / 8) * j;                 // a flam on thirty-second notes
       car.flash([...car.sig(), ...car.drl(), ...car.heads()], t, 0.16);
       if (car.isCt) {
         const n = Math.max(2, car.fr(t + 0.3) - car.fr(t));
-        const centre = k % 2 === 0 ? linspace(0, BAR - 1, n) : linspace(BAR - 1, 0, n);
-        car.pixels(C.FRONT_BAR, t, sweep(centre, 5));
+        car.pixels(C.FRONT_BAR, t, sweep(n, k % 2 === 0, 5));
       }
     });
   });
@@ -1257,7 +1198,7 @@ export function cascade(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** Light fills the stage left to right one slot per beat (six slots: both halves of each car),
  * holds, then drains back right to left; the truck bar fills and empties with it. */
-export function tugOfWar(cars: Car[], an: Analysis, ph: Phrase) {
+function tugOfWar(cars: Car[], an: Analysis, ph: Phrase) {
   const slots = slots6(cars);
   const ct = centreTruck(cars);
   const beats = grid(an, ph, 'beats');
@@ -1271,9 +1212,7 @@ export function tugOfWar(cars: Car[], an: Analysis, ph: Phrase) {
       const end = beats[Math.min(beats.length - 1, k + 2 * n - 1 - j)];
       car.light([...car.accents(side), ...car.heads(side)], start, end);
       if (ct !== null && car.isCt) {
-        barSegment(ct, start, end - start, side === 'L' ? 0 : 3, 6, 0.9);
-        barSegment(ct, start, end - start, side === 'L' ? 1 : 4, 6, 0.9);
-        barSegment(ct, start, end - start, side === 'L' ? 2 : 5, 6, 0.9);
+        for (let q = 0; q < 3; q++) barSegment(ct, start, end - start, (side === 'L' ? 0 : 3) + q, 0.9);
       }
     }
     k += 2 * n;
@@ -1282,11 +1221,10 @@ export function tugOfWar(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** An accelerating ping-pong for a build: the ball crosses the lineup every bar, then every
  * half bar, then every beat, then every half beat, and everything lands together at the end. */
-export function bounceBuild(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
+function bounceBuild(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const span = Math.max(ph.t1 - ph.t0, 1.0);
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   const hop = [0, 1, 2, 1];
   let t = ph.t0;
   let k = 0;
@@ -1294,14 +1232,12 @@ export function bounceBuild(cars: Car[], an: Analysis, ph: Phrase) {
     const u = (t - ph.t0) / span;
     const step = beat * (u < 0.3 ? 4 : u < 0.6 ? 2 : u < 0.85 ? 1 : 0.5);
     const ts = snap(an, t, 2);                    // the hit lands on the beat grid; the clock runs on
-    const car = order[hop[k % 4] % order.length];
+    const car = cars[hop[k % 4] % cars.length];
     car.flash([...car.sig(), ...car.drl(), ...car.heads()], ts, Math.min(0.14, step * 0.6));
     if (ct !== null) {
-      const nxt = order[hop[(k + 1) % 4] % order.length];
-      const goesRight = nxt.x > car.x;
+      const nxt = cars[hop[(k + 1) % 4] % cars.length];
       const m = Math.max(2, ct.fr(ts + step) - ct.fr(ts));
-      const centre = goesRight ? linspace(0, BAR - 1, m) : linspace(BAR - 1, 0, m);
-      ct.pixels(C.FRONT_BAR, ts, sweep(centre, 4, 0.7));
+      ct.pixels(C.FRONT_BAR, ts, sweep(m, nxt.x > car.x, 4, 0.7));
     }
     t += step;
     k += 1;
@@ -1316,12 +1252,12 @@ export function bounceBuild(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** Bar-level call and response: the truck plays a bar of the melody (comets and headlights),
  * then the two Ys answer the next bar in mirror (keyboard on their lamps), and so on. */
-export function antiphony(cars: Car[], an: Analysis, ph: Phrase) {
+function antiphony(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const ys = sides(cars);
   const ct = centreTruck(cars);
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
-  const [lo, hi] = phraseRange(ph, an);
+  const bar = barLen(an);
+  const [lo, hi] = phraseRange(ph);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = flashLen(ev, i);
     const pos = posOf(ev.top[i], lo, hi, 0.999);
@@ -1344,7 +1280,7 @@ export function antiphony(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** Checkerboard across the six slots and the bar: on one beat the even slots are lit (and every
  * other block of the bar), on the next the odd ones - a flickering lattice across the cars. */
-export function checker(cars: Car[], an: Analysis, ph: Phrase) {
+function checker(cars: Car[], an: Analysis, ph: Phrase) {
   const slots = slots6(cars);
   const ct = centreTruck(cars);
   const beats = grid(an, ph, 'beats');
@@ -1366,11 +1302,11 @@ export function checker(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** A searchlight two slots wide sweeps across the stage over each bar, left to right then back,
  * with the bar lighting the part of itself the beam is crossing. */
-export function beam(cars: Car[], an: Analysis, ph: Phrase) {
+function beam(cars: Car[], an: Analysis, ph: Phrase) {
   const slots = slots6(cars);
   const ct = centreTruck(cars);
   const downs = grid(an, ph, 'downbeats');
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+  const bar = barLen(an);
   const n = slots.length;
   downs.forEach((d, k) => {
     const span = Math.min(bar, ph.t1 - d);
@@ -1402,7 +1338,7 @@ export function beam(cars: Car[], an: Analysis, ph: Phrase) {
 
 /** Left channel, right channel: the whole left half of the stage (left Y, the truck's crowd-left
  * headlight and half of the bar) on one beat, the whole right half on the next. */
-export function lrChannel(cars: Car[], an: Analysis, ph: Phrase) {
+function lrChannel(cars: Car[], an: Analysis, ph: Phrase) {
   const ys = sides(cars);
   const ct = centreTruck(cars);
   let beats = grid(an, ph, 'beats');
@@ -1417,7 +1353,7 @@ export function lrChannel(cars: Car[], an: Analysis, ph: Phrase) {
     }
     if (ct !== null) {
       ct.light(ct.heads(left ? 'L' : 'R'), b, b + hold);
-      barHalf(ct, b, hold, left ? 'L' : 'R', 1.0);
+      barHalf(ct, b, hold, left ? 'L' : 'R');
     }
   });
 }
@@ -1425,7 +1361,7 @@ export function lrChannel(cars: Car[], an: Analysis, ph: Phrase) {
 /** Build into the middle, then let go: over the phrase the slots come on from the outer corners
  * inward and stay, the bar fills from both ends, the truck pops at the top, and then everything
  * fades out slowly (2 s ramps) instead of cutting. */
-export function implode(cars: Car[], an: Analysis, ph: Phrase) {
+function implode(cars: Car[], an: Analysis, ph: Phrase) {
   const slots = slots6(cars);
   const ct = centreTruck(cars);
   const n = slots.length;
@@ -1453,7 +1389,7 @@ export function implode(cars: Car[], an: Analysis, ph: Phrase) {
 /** A slow crossfade from one side of the stage to the other on the ramping lamps: the left Y
  * ramps up over a second while the right ramps down, the truck's outer beams follow the louder
  * side, then it swaps every two bars. */
-export function fadeCross(cars: Car[], an: Analysis, ph: Phrase) {
+function fadeCross(cars: Car[], an: Analysis, ph: Phrase) {
   const ys = sides(cars);
   const ct = centreTruck(cars);
   const downs = [...every(grid(an, ph, 'downbeats'), 2), ph.t1];
@@ -1489,16 +1425,12 @@ export function fadeCross(cars: Car[], an: Analysis, ph: Phrase) {
 // (`grid`, which the mood pacing thins to every 2nd/4th beat in calm passages) and spans whole
 // beats or bars, so nothing floats free of the tempo.
 
-export function barLen(an: Analysis): number {
-  return (4 * 60.0) / Math.max(an.tempo, 40);
-}
-
-export function next(g: ArrayLike<number>, k: number, fallback: number): number {
+function next(g: ArrayLike<number>, k: number, fallback: number): number {
   return k + 1 < g.length ? g[k + 1] : g[k] + fallback;
 }
 
 /** The side of an outer car that faces the truck, in crowd terms. */
-export function innerSide(car: Car, cars: Car[]): LR {
+function innerSide(car: Car, cars: Car[]): LR {
   let s = 0;
   for (const c of cars) s += c.x;
   const centre = s / cars.length;
@@ -1510,7 +1442,7 @@ export function innerSide(car: Car, cars: Car[]): LR {
  * DRLs and inner beams - with the headlights punching each downbeat in between; on the last bar the
  * curtain draws closed right to left. The truck's bar opens and closes with it, LED by LED.
  * Suits section starts and sustained, singing material in groove/drive; not strobe-y. */
-export function curtain(cars: Car[], an: Analysis, ph: Phrase) {
+function curtain(cars: Car[], an: Analysis, ph: Phrase) {
   const slots = slots6(cars);
   const n = slots.length;
   const ct = centreTruck(cars);
@@ -1547,16 +1479,15 @@ export function curtain(cars: Car[], an: Analysis, ph: Phrase) {
  * glow up on a 1 s ramp and fade on a 2 s ramp, the cars a beat apart so the breath rolls
  * across the stage and back; the truck's bar swells and ebbs with it. One breath per two bars,
  * started on the downbeats. The calmest collaborative move: intros, quiet verses, held chords. */
-export function breatheWash(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
+function breatheWash(cars: Car[], an: Analysis, ph: Phrase) {
   const downs = grid(an, ph, 'downbeats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   const bar = barLen(an);
   const ds = every(downs, 2);
   for (let k = 0; k < ds.length; k++) {
     const d = ds[k];
     if (d > ph.t1 - 1.0) break;
-    const seq = k % 2 === 0 ? order : [...order].reverse();
+    const seq = k % 2 === 0 ? cars : [...cars].reverse();
     const after = an.beats.filter((x) => x >= d - 0.01);
     seq.forEach((car, j) => {
       const ts = j < after.length ? after[j] : d + j * beat;
@@ -1579,13 +1510,12 @@ export function breatheWash(cars: Car[], an: Analysis, ph: Phrase) {
  * per Y with the truck's between them - every third lamp is lit, and the pattern steps one lamp on
  * each hit, so light crawls across every car; the bar chases in blocks of five LEDs. It turns
  * round every two bars. Steps on the beat grid (every other beat when calm). Groove material. */
-export function marquee(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
+function marquee(cars: Car[], an: Analysis, ph: Phrase) {
   const line: [Car, number[]][] = [];
-  for (const c of order) for (const lamp of c.lamps()) line.push([c, lamp]);
+  for (const c of cars) for (const lamp of c.lamps()) line.push([c, lamp]);
   const ct = centreTruck(cars);
   const hits = grid(an, ph, 'beats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   const perTurn = Math.max(4, Math.trunc(round((2 * barLen(an)) / Math.max(hits.length > 1 ? median(diff(hits)) : beat, 0.1))));
   let phase = 0;
   hits.forEach((b, k) => {
@@ -1607,7 +1537,7 @@ export function marquee(cars: Car[], an: Analysis, ph: Phrase) {
  * two ends of the stage on the downbeat and run toward each other slot by slot, cross at the truck
  * - its bar flares where they pass - and carry on to the far ends. One crossing per bar, two per
  * bar in a frenzy. Big and kinetic: choruses, drive and climax passages, fast runs. */
-export function crossing(cars: Car[], an: Analysis, ph: Phrase) {
+function crossing(cars: Car[], an: Analysis, ph: Phrase) {
   const slots = slots6(cars);
   const n = slots.length;
   const ct = centreTruck(cars);
@@ -1623,7 +1553,7 @@ export function crossing(cars: Car[], an: Analysis, ph: Phrase) {
     const times = qSteps(an, d, span, n);
     for (let s = 0; s < n; s++) {
       const t = times[s];
-      // a Python set {s, n-1-s}: two different slots, lit in either order
+      // slot s and its mirror image
       for (const j of new Set([s, n - 1 - s])) {
         const [car, side] = slots[j];
         car.light([...car.accents(side), ...car.heads(side)], t, t + per * 1.15);
@@ -1683,15 +1613,14 @@ const SPARKLE: Record<string, [number, number, number]> = {   // mood: subdivisi
  * random, quantized to subdivisions of the beat, with sparkles darting along the truck's bar.
  * Calm: one soft twinkle per beat that glows and fades. Frenzy: three sharp ones per sixteenth.
  * For shimmering textures, trills, high bells, magical moments, and the quiet after a climax. */
-export function sparkle(cars: Car[], an: Analysis, ph: Phrase) {
+function sparkle(cars: Car[], an: Analysis, ph: Phrase) {
   const rng = new Rng(pymod(Math.trunc(ph.t0 * 1000), 2 ** 32));
-  const order = byX(cars);
   const lamps: [Car, number[]][] = [];
-  for (const c of order) for (const lamp of c.lamps()) lamps.push([c, lamp]);
+  for (const c of cars) for (const lamp of c.lamps()) lamps.push([c, lamp]);
   const ct = centreTruck(cars);
   const mood = ph.mood ?? 'groove';
   let beats: ArrayLike<number> = within(an.beats, ph.t0, ph.t1);
-  if (beats.length < 2) beats = arange(ph.t0, ph.t1, 60.0 / Math.max(an.tempo, 40));
+  if (beats.length < 2) beats = arange(ph.t0, ph.t1, beatLen(an));
   if (!(mood in SPARKLE)) throw new Error(`sparkle: no mood ${mood}`);
   const [sub, count, hold] = SPARKLE[mood];
   const ticks: number[] = [];
@@ -1716,7 +1645,7 @@ export function sparkle(cars: Car[], an: Analysis, ph: Phrase) {
  * the truck, then the Ys' inner halves, then their outer halves, each on a downbeat - holds, and
  * sets again from the outside in over the last bars. The bar glows from its centre. For the
  * opening and closing of quiet pieces and long held passages: calm only. */
-export function sunrise(cars: Car[], an: Analysis, ph: Phrase) {
+function sunrise(cars: Car[], an: Analysis, ph: Phrase) {
   const slots = slots6(cars);
   const n = slots.length;
   const ct = centreTruck(cars);
@@ -1748,13 +1677,12 @@ export function sunrise(cars: Car[], an: Analysis, ph: Phrase) {
  * sweeps the truck's bar end to end, one sweep per hit interval, and the Y at whichever end it
  * reaches answers with its near headlight - so the sweep bounces off the outer cars like a ball
  * between walls. Ys idle on a dim DRL. Groove/drive; nice for ostinatos and walking basslines. */
-export function scanner(cars: Car[], an: Analysis, ph: Phrase) {
+function scanner(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
-  const order = byX(cars);
   if (ct === null) return wave(cars, an, ph);
   const hits = grid(an, ph, 'beats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
-  for (const y of [order[0], at(order, -1)]) if (!y.isCt) y.light(y.drl(), ph.t0, ph.t1, C.ON_1000);
+  const beat = beatLen(an);
+  for (const y of [cars[0], at(cars, -1)]) if (!y.isCt) y.light(y.drl(), ph.t0, ph.t1, C.ON_1000);
   hits.forEach((b, k) => {
     const dur = Math.max(0.2, next(hits, k, beat) - b);
     const ltr = k % 2 === 0;
@@ -1765,7 +1693,7 @@ export function scanner(cars: Car[], an: Analysis, ph: Phrase) {
       const behind = (q - pos[f]) * (ltr ? -1 : 1);      // >0 behind the eye
       return behind >= 0 ? Math.exp(-behind / 6.0) : Math.exp(behind / 1.5);
     }));
-    const endCar = ltr ? at(order, -1) : order[0];
+    const endCar = ltr ? at(cars, -1) : cars[0];
     if (!endCar.isCt) {
       const side = innerSide(endCar, cars);
       endCar.flash([...endCar.heads(side), ...endCar.accents(side)], b + dur, Math.min(0.25, dur * 0.6));
@@ -1778,8 +1706,8 @@ export function scanner(cars: Car[], an: Analysis, ph: Phrase) {
  * join one at a time (markers, fogs, signatures and DRLs, then headlights) and the truck's bar
  * fills in from both ends. Half a beat of black before the end, then the whole stage lands on the
  * next downbeat. For crescendos and pre-chorus climbs; never in calm passages. */
-export function accelerando(cars: Car[], an: Analysis, ph: Phrase) {
-  const beat = 60.0 / Math.max(an.tempo, 40);
+function accelerando(cars: Car[], an: Analysis, ph: Phrase) {
+  const beat = beatLen(an);
   const ct = centreTruck(cars);
   let beats: ArrayLike<number> = within(an.beats, ph.t0, ph.t1);
   if (beats.length < 4) beats = arange(ph.t0, ph.t1, beat);
@@ -1825,7 +1753,7 @@ export function accelerando(cars: Car[], an: Analysis, ph: Phrase) {
  * signatures - each fading on a 1 s ramp, until only the DRLs glow and fade out. The bar dissolves
  * LED by LED from its ends. Called by the choreographer on the downbeat after a build when the
  * music drops, for `span` seconds (about two bars). */
-export function teardown(cars: Car[], _an: Analysis, t0: number, span: number) {
+export function teardown(cars: Car[], t0: number, span: number) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
   const stages: [number, (c: Car) => number[], Car[]][] = [
@@ -1861,16 +1789,15 @@ export function teardown(cars: Car[], _an: Analysis, t0: number, span: number) {
 /** Ping-pong lead (Cyber Symphony): the two Ys trade hits half a beat apart - one on the beat,
  * the other on the "and" - and the lead swaps every bar, while the truck's bar answers on each
  * downbeat. Reads as a rally between the outer cars. Groove/drive. */
-export function pingPong(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
-  const ys = order.filter((c) => !c.isCt);
+function pingPong(cars: Car[], an: Analysis, ph: Phrase) {
+  const ys = cars.filter((c) => !c.isCt);
   const ct = centreTruck(cars);
   if (ys.length < 2) return lrBeat(cars, an, ph);
   const beats = grid(an, ph, 'beats');
-  const downs = new Set(an.downbeats.map((d) => npRoundTo(d, 2)));
+  const downs = new Set(an.downbeats.map((d) => roundTo(d, 2)));
   let barK = 0;
   for (const b of beats) {
-    if (downs.has(pyRoundTo(b, 2))) {
+    if (downs.has(pyRound(b, 2))) {
       barK += 1;
       if (ct !== null) barFlash(ct, b, 0.3, 0.9);
     }
@@ -1884,10 +1811,10 @@ export function pingPong(cars: Car[], an: Analysis, ph: Phrase) {
 /** Metronome car (the 5-car Arrival): the stage holds a soft glow while one car at a time
  * takes a slow solo pulse, moving left, centre, right, centre on each hit (every bar when calm).
  * Spacious and patient: calm intros and quiet verses with a steady pulse underneath. */
-export function metronome(cars: Car[], an: Analysis, ph: Phrase) {
-  const seq = pingPongOrder(byX(cars));
+function metronome(cars: Car[], an: Analysis, ph: Phrase) {
+  const seq = pingPongOrder(cars);
   const hits = grid(an, ph, 'beats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   for (const c of cars) {
     c.light(c.drl(), ph.t0, ph.t1, C.ON_1000);
     c.light(c.drl(), ph.t1, ph.t1 + 1.0, OFF_1000);
@@ -1909,11 +1836,11 @@ export function metronome(cars: Car[], an: Analysis, ph: Phrase) {
 /** Stripe scroll (Cyber Symphony's Bars): four bright stripes scroll along the truck's bar for
  * two beats, then reverse; the Ys answer as a mirrored pair - inner halves on one two-beat block,
  * outer halves on the next. Groove/drive under a steady rhythm section. */
-export function stripes(cars: Car[], an: Analysis, ph: Phrase) {
+function stripes(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
   const beats = grid(an, ph, 'beats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   const blocks = every(beats, 2);
   blocks.forEach((b, k) => {
     const dur = Math.max(0.3, next(blocks, k, 2 * beat) - b);
@@ -1933,12 +1860,11 @@ export function stripes(cars: Car[], an: Analysis, ph: Phrase) {
 /** Flutter (the Arrival's six quick washes): the whole stage flickers on sixteenths, the outer
  * pair against the truck, for a beat at a time with a beat's rest between - a shiver of light
  * for trills, tremolo strings and the last bar before a drop. Frenzy only. */
-export function flutter(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
+function flutter(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
-  const ys = order.filter((c) => !c.isCt);
+  const ys = cars.filter((c) => !c.isCt);
   let beats: ArrayLike<number> = within(an.beats, ph.t0, ph.t1);
-  if (beats.length < 2) beats = arange(ph.t0, ph.t1, 60.0 / Math.max(an.tempo, 40));
+  if (beats.length < 2) beats = arange(ph.t0, ph.t1, beatLen(an));
   for (let k = 0; k < beats.length; k++) {
     if (k % 2) continue;
     const b = beats[k];
@@ -1952,21 +1878,19 @@ export function flutter(cars: Car[], an: Analysis, ph: Phrase) {
   }
 }
 
-export type Move = (cars: Car[], an: Analysis, ph: Phrase) => void;
+type Move = (cars: Car[], an: Analysis, ph: Phrase) => void;
 
-/** Every unison move by its Python name (catalog.UNISON), called as moves.<name>(cars, an, ph).
- * keyboard and out_in take their defaults here; block gets the piece's nominal beat. The
- * choreographer passes its own arguments for those three (choreo._play_phrases `special`). */
-export const BY_NAME: Record<string, Move> = {
-  keyboard: (cars, an, ph) => keyboard(cars, an, ph),
+/** Every unison move by its catalogue name (catalog.UNISON): the whole lineup plays it. */
+export const UNISON: Record<string, Move> = {
+  keyboard: (cars, an, ph) => keyboard(cars, an, ph, tierAt(an, ph.t0) >= 2),   // whole half-cars when lively
   relay,
   lr_notes: lrNotes,
-  rotation: (cars, an, ph) => rotation(cars, an, ph),
+  rotation,
   mirror,
   call_response: callResponse,
   antiphony,
   pulse,
-  block: (cars, an, ph) => block(cars, an, ph, 60.0 / Math.max(an.tempo, 40)),
+  block: (cars, an, ph) => block(cars, an, ph, beatLen(an)),
   rain,
   motif,
   shimmer,
@@ -1998,9 +1922,37 @@ export const BY_NAME: Record<string, Move> = {
   sunrise,
   crossing,
   shockwave,
-  out_in: (cars, an, ph) => outIn(cars, an, ph),
+  out_in: (cars, an, ph) => outIn(cars, an, ph, ph.index % 2 === 1),   // every other one from the truck out
   fill_stage: fillStage,
   bounce_build: bounceBuild,
   implode,
   accelerando,
+};
+
+/** A split formation's two parts by name (catalog.SPLIT): the side cars play one, the centre truck the
+ * other. */
+export const SIDE: Record<string, (ys: Car[], an: Analysis, ph: Phrase) => void> = {
+  y_keyboard: (ys, an, ph) => yKeyboard(ys, an, ph, Math.min(2, Math.max(0, tierAt(an, ph.t0)))),
+  y_ripple_in: (ys, an, ph) => yRipple(ys, an, ph, true),
+  y_ripple_out: (ys, an, ph) => yRipple(ys, an, ph, false),
+  y_breathe: yBreathe,
+  y_turn_ticks: (ys, an, ph) => {
+    yTurnTicks(ys, an, ph);
+    yBassFogs(ys, an, ph);
+  },
+  y_bass_fogs: (ys, an, ph) => {
+    yBassFogs(ys, an, ph);
+    yKeyboard(ys, an, ph);
+  },
+  y_chords: (ys, an, ph) => yChords(ys, an, ph, beatLen(an)),
+  y_wink: yWink,
+};
+
+export const CENTRE: Record<string, (ct: Car, an: Analysis, ph: Phrase) => void> = {
+  ct_meter: ctMeter,
+  ct_comets: ctComets,
+  ct_scan: ctScan,
+  ct_edge_pulse: ctEdgePulse,
+  ct_swell: ctSwell,
+  bar_collide: barCollide,
 };
