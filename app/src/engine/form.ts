@@ -14,10 +14,10 @@ import {
 } from './listen/dsp';
 import { clip, mean, mean32, round } from './np';
 
-/** The form map of `y` (mono, 22050 Hz): its sections and the index of the climax. `spec` reuses the
- * spectrum audio.ts already took of the same samples. */
+/** The form map of `y` (mono, 22050 Hz): its sections, from the spectrum audio.ts already took of the
+ * same samples. */
 export function analyzeForm(y: Float32Array, sr: number, intensity: ArrayLike<number>, step: number,
-  duration: number, spec?: Spectrum): { sections: Section[]; climax: number } {
+  duration: number, spec?: Spectrum): Section[] {
   const hop = HOP;
   const s = spec ?? spectrum(y);
   const T = s.T;
@@ -132,7 +132,7 @@ export function analyzeForm(y: Float32Array, sr: number, intensity: ArrayLike<nu
       }
     }
   }
-  return { sections, climax: climax.index };
+  return sections;
 }
 
 export function sectionAt(sections: Section[], t: number): Section {

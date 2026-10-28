@@ -142,14 +142,8 @@ export function melodyPath(an: Analysis, t0: number, t1: number, n: number): Flo
   return out;
 }
 
-export interface LegatoResult {
-  start: number;
-  end: number;
-  layers: Int32Array;
-}
-
 /** All the lights for a legato song (the motors are scheduled separately, as for any song). */
-export function choreograph(cars: Car[], an: Analysis): LegatoResult {
+export function choreograph(cars: Car[], an: Analysis): void {
   const ct = M.centreTruck(cars);
   const order = [...cars].sort((p, q) => p.x - q.x);
   const [start, end] = musicSpan(an);
@@ -160,8 +154,7 @@ export function choreograph(cars: Car[], an: Analysis): LegatoResult {
   const live: boolean[] = [];
   for (let i = 0; i < n; i++) live.push(tt[i] >= start && tt[i] < end);
   L = L.map((v, i) => (live[i] ? v : 0));
-  const layersLive = layers(L, live);
-  const lay = layersLive.map((v, i) => (live[i] ? v : -1));
+  const lay = layers(L, live).map((v, i) => (live[i] ? v : -1));
 
   // 1. the bed, layer by layer
   const groups: [number, (c: Car) => readonly number[]][] = [
@@ -247,5 +240,4 @@ export function choreograph(cars: Car[], an: Analysis): LegatoResult {
     const lit = c.everything().filter((ch) => c.get(row, ch) > 0);
     if (lit.length) c.light(lit, end, Math.min(an.duration, end + 2.0), C.OFF_2000);
   }
-  return { start, end, layers: lay };
 }

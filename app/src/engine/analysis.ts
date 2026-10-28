@@ -6,7 +6,6 @@
 export interface Events {
   t: number[];
   dur: number[];
-  n: number[];          // distinct pitch classes
   low: number[];        // midi
   high: number[];
   top: number[];        // melodic pitch
@@ -14,10 +13,8 @@ export interface Events {
   kind: number[];       // 0 single note, 1 dyad, 2 chord, 3 big chord
   trill: number[];
   arrival: number[];
-  runDir: number[];
   density: number[];
   phrase: string[];     // texture label per event (texture.PHRASES)
-  phraseIdx: number[];
 }
 
 /** A stretch of the form map (form.ts). */
@@ -41,21 +38,15 @@ export interface Phrase {
   t0: number;
   t1: number;
   gesture: string;
-  n: number;
   density: number;
   up: number;
   lo: number;
   hi: number;
-  hold: number;
-  afterRest: boolean;
   index: number;
-  sub: unknown[];
   mood?: string;
   move?: string;
   pace?: number;
   energy?: number;
-  clarity?: number;
-  pulse?: string;
 }
 
 /** One sung line of the lyrics, timed by line only (LRCLIB): when it starts and stops, and what it says. */
@@ -72,11 +63,9 @@ export interface Analysis {
   tempo: number;
   beats: number[];
   downbeats: number[];
-  notes: number[][];     // rows: time, strength 0..1, position 0..1
   bass: number[][];      // rows: time, strength
   highs: number[][];
   hits: number[];
-  sustain: boolean[];    // per frame
   intensity: number[];   // per frame 0..1
   build: number[];       // per frame 0..1 progress through a crescendo
   tier: number[];        // per frame 0..3
@@ -86,7 +75,6 @@ export interface Analysis {
   pitchHi: number;
   beatScore: number;
   sections: Section[];
-  climax: number;
   pulseEnv: number[];
   pulseHop: number;
   lyricWords: [number, number, string][] | null;     // Whisper's words (the Python analyses only)
@@ -95,14 +83,8 @@ export interface Analysis {
   phrases?: Phrase[];
   cuePeaks?: [number, number, number | null, boolean][];
   driver?: string;
-  pace?: unknown;
-  energy?: unknown;
-  pulseGaps?: Phrase[];
-  pulseStats?: unknown;
-  beatFollow?: unknown;
-  beatsTracked?: unknown;
-  beatsSnapMs?: unknown;
-  beatsPhaseMoved?: unknown;
+  pace?: number | null;
+  energy?: Float64Array;
 }
 
 export interface BridgeMeta {
@@ -126,6 +108,5 @@ export function fromBridge(json: { meta: BridgeMeta; analysis: Json }): { meta: 
   const a = camelKeys<Analysis & Json>(json.analysis);
   a.events = camelKeys<Events>(json.analysis.events as Json);
   a.sections = ((json.analysis.sections as Json[]) ?? []).map((s) => camelKeys<Section>(s));
-  a.notes = a.notes ?? [];
   return { meta: json.meta, an: a };
 }

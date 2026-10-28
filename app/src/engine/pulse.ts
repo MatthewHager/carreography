@@ -46,8 +46,6 @@ export interface Segment {
   t1: number;
   move?: string;
   mood?: string;
-  gesture?: string;
-  pulse?: string;
 }
 
 /**
@@ -97,55 +95,29 @@ export function position(an: Analysis): Int32Array {
   return pos;
 }
 
-/** Python's f"{x:.1f}" (round-half-even on exact ties, which toFixed rounds up). */
-function fixed1(x: number): string {
-  const q = x * 4;
-  if (Number.isInteger(q) && q % 2 !== 0) {
-    const lo = Math.floor(x * 10);
-    return ((lo % 2 === 0 ? lo : lo + 1) / 10).toFixed(1);
-  }
-  return x.toFixed(1);
-}
-
-export interface PulseStats {
-  hits: number;
-  phrases: number;
-}
-
 /** Lay the beat layer over the choreography (after the moves and drums, before the cues). */
-export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): PulseStats | Record<string, never> {
+export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): void {
   const ys = M.sides(cars);
   const ct = M.centreTruck(cars);
   const beats = an.beats;
-  if (beats.length < 4) return {};
+  if (beats.length < 4) return;
   const pos = position(an);
   const capped = Math.trunc(max(an.tier)) <= 1;          // a song held quiet on purpose (Ave Maria)
   const organ = (an.driver ?? '') === 'organ';
-  const stats: PulseStats = { hits: 0, phrases: 0 };
   for (const ph of segments(an, phrases)) {
     const move = ph.move ?? '';
     const parts = move.split(' → ');
     const name = parts[parts.length - 1].split('+')[0].trim();
     const mood = ph.mood ?? 'drive';
-    const clear = clarity(an, ph.t0, ph.t1);
-    ph.pulse = `clarity ${fixed1(clear)}: `;
-    if (capped) {
-      ph.pulse += 'off (song held quiet)';
-      continue;
-    }
-    if (OWNERS.has(name)) {
-      ph.pulse += `off (${name} owns the stage)`;
-      continue;
-    }
+    if (capped || OWNERS.has(name)) continue;      // a song held quiet, or a cadence that owns the stage
     if (BUILDS.has(name)) {
-      buildPulse(cars, an, ph, beats);
-      ph.pulse += 'build: Ys on the beat, then every car, then eighths, half a beat of black, land';
+      buildPulse(cars, ph, beats);
       continue;
     }
+    const clear = clarity(an, ph.t0, ph.t1);
     if (mood === 'calm') {
       // a quiet passage over a strong beat (a march under a soft verse): a small half-time
       // step on the inner beams - both Ys on 1, the truck on 3 - so the pulse never vanishes
-      ph.pulse += clear >= 3.0 && !organ ? 'calm: half-time march on the inner beams' : 'calm: off';
       if (clear >= 3.0 && !organ) {
         for (let i = 0; i < beats.length; i++) {
           if (!(beats[i] >= ph.t0 && beats[i] < ph.t1 && (pos[i] === 0 || pos[i] === 2))) continue;
@@ -165,18 +137,9 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): PulseStats 
     } else {
       pattern = PATTERN[mood];
     }
-    const nPat = Object.keys(pattern).length;
-    ph.pulse += ({ 0: '', 1: 'downbeats', 2: '1 and 3', 4: 'every beat' } as Record<number, string>)[nPat]
-      || 'off (no clear beat)';
-    if (!nPat) continue;
+    if (!Object.keys(pattern).length || move.startsWith('teardown')) continue;
     // the headlights belong to the beat for this phrase: clear what the moves wrote there
-    const start = ph.t0;
-    if (move.startsWith('teardown')) {
-      ph.pulse += ' - skipped (teardown)';
-      continue;
-    }
-    for (const c of cars) c.set(HEADS, start, ph.t1, 0);
-    stats.phrases += 1;
+    for (const c of cars) c.set(HEADS, ph.t0, ph.t1, 0);
     // the beat grows with the music: a groove thumps on the inner beams, drive and frenzy on
     // every headlight - so the intro's pulse is smaller than the chorus's
     const lamps = mood === 'groove' ? INNER : HEADS;
@@ -199,17 +162,13 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): PulseStats 
       } else if (kind === 'small') {
         for (const c of ys) c.set(lamps, t, t + hold, C.ON);
       }
-      if (kind) {
-        stats.hits += 1;
-        if (mood === 'drive' || mood === 'frenzy') duck(cars, t, gap);
-      }
+      if (kind && (mood === 'drive' || mood === 'frenzy')) duck(cars, t, gap);
       if (mood === 'frenzy' && ct !== null) {
         const off = b + gap / 2 - LEAD_S;
         if (off + 0.1 < nxt - LEAD_S) ct.set(ct.inner(), off, off + Math.min(0.1, gap * 0.25), C.ON);
       }
     }
   }
-  return stats;
 }
 
 /**
@@ -218,7 +177,7 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): PulseStats 
  * black, and the build's own landing hits the next downbeat. The build move keeps its shape on
  * the feature lamps (signatures, DRLs, fogs, the bar).
  */
-export function buildPulse(cars: Car[], _an: Analysis, ph: Segment, beats: ArrayLike<number>): void {
+export function buildPulse(cars: Car[], ph: Segment, beats: ArrayLike<number>): void {
   const ys = M.sides(cars);
   for (const c of cars) c.set(HEADS, ph.t0, ph.t1, 0);
   const b: number[] = [];
@@ -275,14 +234,10 @@ export function segments(an: Analysis, phrases: Phrase[], minGap = 0.6): Segment
   }
   if (an.duration - last >= minGap) gaps.push([last, an.duration]);
   const organ = (an.driver ?? '') === 'organ';
-  const pulseGaps: Segment[] = [];
   for (const [a, b] of gaps) {
     let mood = moodAt(an, (a + b) / 2);
     if (mood === 'calm' && !organ && clarity(an, a, b) >= 4.0) mood = 'groove';
-    const g: Segment = { t0: a, t1: b, move: '(between phrases)', mood, gesture: 'gap', pulse: '' };
-    pulseGaps.push(g);
-    out.push(g);
+    out.push({ t0: a, t1: b, move: '(between phrases)', mood });
   }
-  an.pulseGaps = pulseGaps as unknown as Phrase[];
   return out.sort((p, q) => p.t0 - q.t0);
 }

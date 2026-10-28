@@ -2,11 +2,11 @@
 // each stretch gets a texture: a single-note run, chords, a trill, a held pedal, an arrival.
 //
 // Event fields (one entry per onset group):
-//   t, dur, n (distinct pitch classes), low, high (midi), top (melodic pitch), amp,
-//   kind: 0 single note, 1 dyad, 2 chord, 3 big chord
+//   t, dur, low, high (midi), top (melodic pitch), amp,
+//   kind: 0 single note, 1 dyad, 2 chord, 3 big chord (by the number of distinct pitch classes)
 //   trill: 1 if part of a rapid two-note alternation
 //   arrival: 1 if a strong chord that lands after a run or a gap
-//   runDir: -1 descending, +1 ascending, 0 neither (over the previous few events)
+//   density: events in the surrounding second
 
 import type { Events } from './analysis';
 import { median, quantile } from './np';
@@ -16,8 +16,8 @@ export const GROUP_WINDOW = 0.045;   // onsets this close together are one event
 /** `notes`: basic-pitch rows (start s, end s, midi pitch, amplitude 0..1), sorted by start. */
 export function groupEvents(notes: readonly (readonly number[])[]): Events {
   if (notes.length === 0) {
-    return { t: [], dur: [], n: [], low: [], high: [], top: [], amp: [], kind: [], trill: [], arrival: [],
-      runDir: [], density: [], phrase: [], phraseIdx: [] };
+    return { t: [], dur: [], low: [], high: [], top: [], amp: [], kind: [], trill: [], arrival: [], density: [],
+      phrase: [] };
   }
   const groups: [number, number][] = [];
   let i = 0;
@@ -78,21 +78,6 @@ export function groupEvents(notes: readonly (readonly number[])[]): Events {
     }
   }
 
-  // Run direction over the previous three single-note events.
-  const runDir = new Array<number>(m).fill(0);
-  for (let i = 3; i < m; i++) {
-    if (Math.max(kind[i - 3], kind[i - 2], kind[i - 1], kind[i]) <= 1) {
-      let up = true, down = true;
-      for (let k = i - 2; k <= i; k++) {
-        const d = top[k] - top[k - 1];
-        if (!(d > 0)) up = false;
-        if (!(d < 0)) down = false;
-      }
-      if (up) runDir[i] = 1;
-      else if (down) runDir[i] = -1;
-    }
-  }
-
   // Arrivals: a strong chord that lands after a busy run or after silence. Rare by design:
   // top-decile loudness, at least 2.5 s apart, so "everything on" stays a punctuation mark.
   const arrival = new Array<number>(m).fill(0);
@@ -110,7 +95,7 @@ export function groupEvents(notes: readonly (readonly number[])[]): Events {
     }
   }
 
-  return { t, dur, n, low, high, top, amp, kind, trill, arrival, runDir, density, phrase: [], phraseIdx: [] };
+  return { t, dur, low, high, top, amp, kind, trill, arrival, density, phrase: [] };
 }
 
 export const PHRASES = ['melody', 'run_up', 'run_down', 'zigzag', 'trill', 'chords', 'pedal', 'arrival', 'climax'];
@@ -130,7 +115,6 @@ export function labelPhrases(ev: Events, tierAt: (t: number) => number): Events 
   const phrase = new Array<string>(n).fill('melody');
   if (n === 0) {
     ev.phrase = phrase;
-    ev.phraseIdx = [];
     return ev;
   }
   const sign = (x: number) => (x > 0 ? 1 : x < 0 ? -1 : 0);
@@ -168,17 +152,14 @@ export function labelPhrases(ev: Events, tierAt: (t: number) => number): Events 
       phrase[i] = 'chords';
     }
   }
-  // Smooth single-event blips into their neighbours, then number events within each phrase.
+  // Smooth single-event blips into their neighbours.
   for (let i = 1; i < n - 1; i++) {
     const blip = phrase[i - 1] === phrase[i + 1] && phrase[i + 1] !== phrase[i];
     if (blip && phrase[i] !== 'arrival' && phrase[i] !== 'trill') {
       phrase[i] = phrase[i - 1];
     }
   }
-  const phraseIdx = new Array<number>(n).fill(0);
-  for (let i = 1; i < n; i++) phraseIdx[i] = phrase[i] === phrase[i - 1] ? phraseIdx[i - 1] + 1 : 0;
   ev.phrase = phrase;
-  ev.phraseIdx = phraseIdx;
   return ev;
 }
 

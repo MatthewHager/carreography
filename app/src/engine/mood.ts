@@ -80,12 +80,11 @@ export function assign(an: Analysis, phrases: Phrase[]): Phrase[] {
   for (const ph of phrases) {
     const a = Math.trunc(ph.t0 / an.step);
     const b = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
-    ph.clarity = clarity(an, ph.t0, ph.t1);
     ph.energy = b > a && a < e.length ? mean(e, a, Math.min(b, e.length)) : NaN;
     ph.mood = moodFor(ph.energy);
     // a steady, clearly struck beat keeps a phrase out of "calm" (Thriller's quiet groove intro),
     // but rhythm alone never pushes it higher - the dynamics still come from the music's energy
-    if (ph.mood === 'calm' && ph.clarity >= 4.0 && (an.driver ?? '') !== 'organ') ph.mood = 'groove';
+    if (ph.mood === 'calm' && clarity(an, ph.t0, ph.t1) >= 4.0 && (an.driver ?? '') !== 'organ') ph.mood = 'groove';
     ph.pace = paceS(ph.mood, beat);
   }
   // A trill or a dense run in a lively section is frenzy material whatever the loudness says.
@@ -120,8 +119,8 @@ export function paceS(mood: string, beat: number): number {
 }
 
 export function moodAt(an: Analysis, t: number): string {
-  const e = an.energy as Float64Array | undefined | null;
-  if (e === undefined || e === null) return 'drive';
+  const e = an.energy;
+  if (!e) return 'drive';
   return moodFor(e[Math.min(e.length - 1, Math.max(0, Math.trunc(t / an.step)))]);
 }
 

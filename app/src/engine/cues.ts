@@ -4,18 +4,15 @@
 // Actions:
 //   solo      only the named cars play for a window (everything else dark)
 //   hit       a stage-wide hit: blackout, everything on, release
-//   blackout  dark for a window
 //   peak      a crescendo peak the frunk/liftgates must rise into (build length in seconds; `hold`
 //             seconds open afterwards, or `final: true` to stay open to the end)
 //   ceiling   force the intensity ceiling for a window (0..3)
-//   dark_end  everything fades and stays dark from a time to the end
 //
 // Detectors (`at`):
 //   first_phrase              the opening phrase
 //   last_arrival              the last arrival chord / cadence before the end
 //   loudest_last_quarter      the loudest instant in the closing quarter
 //   shouts:N                  the N strongest chordal hits, >= 1.5 s apart
-//   big_chord_last_fifth      the biggest chord in the closing fifth (voices, then length, then loudness)
 //   final_section             the last section of the form map
 //   t=SECONDS                 an explicit time in this recording
 
@@ -25,8 +22,8 @@ import { argmax, argsort } from './np';
 // What drives the rhythm in each piece, and so what the beat layer listens to and which moves it
 // prefers. "organ": the notes are the rhythm (nothing else). "orchestra": timpani, low brass and
 // the string pulse (percussive onsets), beat moves only where the beat is steady. "band": the drum
-// kit from the drums stem (kick -> headlights, snare -> the Ys, hats -> markers), bass guitar under,
-// beat-locked moves preferred. "vocal_band": a band with the singers carrying the melody, lyric cues.
+// kit (kick -> fogs, snare -> the Ys, hats -> markers), beat-locked moves preferred. "vocal_band": a
+// band with the singers carrying the melody, lyric cues.
 export const DRIVERS: Record<string, string> = {
   '01_toccata_and_fugue': 'organ',
   '02_this_is_halloween': 'vocal_band',
@@ -42,10 +39,9 @@ export const DRIVERS: Record<string, string> = {
   '12_ave_maria': 'organ',
 };
 
-/** What drives the rhythm: the song's entry above, else a guess - a recording separated into stems
- * is a band (its drum kit drives the beat), anything else is treated like an orchestra. */
-export function driver(name: string, stems = false): string {
-  return DRIVERS[name] || (stems ? 'band' : 'orchestra');
+/** What drives the rhythm: the song's entry above, else an orchestra. */
+export function driver(name: string): string {
+  return DRIVERS[name] || 'orchestra';
 }
 
 export interface Cue {
@@ -130,20 +126,6 @@ export function resolve(name: string, an: Analysis): [string, Resolved][] {
         const f = f0 + argmax(an.loudFast.slice(f0, f1));
         times = [[f * an.step, f * an.step]];
       }
-    } else if (at === 'big_chord_last_fifth') {
-      // The biggest chord in the closing fifth: the most voices, then the loudest, then the longest.
-      const f0 = 0.8 * an.duration;
-      let best = -1;
-      const key = (i: number): [number, number] => [ev.n[i] + Math.min(ev.dur[i], 1.5) * 2, ev.amp[i]];
-      for (let i = 0; i < ev.t.length; i++) {
-        if (!(ev.t[i] >= f0 && ev.t[i] < an.duration - 4 && ev.kind[i] >= 1)) continue;
-        if (best < 0) best = i;
-        else {
-          const [a0, a1] = key(i), [b0, b1] = key(best);
-          if (a0 > b0 || (a0 === b0 && a1 > b1)) best = i;
-        }
-      }
-      if (best >= 0) times = [[ev.t[best], ev.t[best]]];
     } else if (at.startsWith('shouts:')) {
       const n = parseInt(at.split(':')[1], 10);
       const idx = ev.kind.flatMap((k, i) => (k >= 1 ? [i] : []));

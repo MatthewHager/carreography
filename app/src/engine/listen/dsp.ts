@@ -71,7 +71,6 @@ export interface Spectrum {
   T: number;
   mel96: Float32Array | null;    // (96 x T) power, fmax 8000 (audio.py's melspectrogram)
   mel128: Float32Array;          // (128 x T) power, fmax sr/2 (librosa's default, for mfcc and beat_track(y))
-  centroid: Float64Array | null; // spectral_centroid
   rms: Float32Array | null;      // feature.rms
   tuning: number;                // estimate_tuning(bins_per_octave=36), as chroma_cqt estimates it
 }
@@ -84,11 +83,9 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
   const win = hann(nFft), fft = realFft(nFft);
   const m96 = full ? melBasis(96, 8000) : null, m128 = melBasis(128, SR / 2);
   const mel96 = full ? new Float32Array(96 * T) : null, mel128 = new Float32Array(128 * T);
-  const centroid = full ? new Float64Array(T) : null, rms = full ? new Float32Array(T) : null;
+  const rms = full ? new Float32Array(T) : null;
   const buf = new Float64Array(nFft), re = new Float64Array(nb), im = new Float64Array(nb);
-  const P = new Float64Array(nb), S = new Float64Array(nb), freqs = new Float64Array(nb);
-  const val = 1 / (nFft * (1 / SR));
-  for (let k = 0; k < nb; k++) freqs[k] = k * val;
+  const P = new Float64Array(nb), S = new Float64Array(nb);
   const pitches: number[] = [], mags: number[] = [];
   const bands: [SparseRow[], Float32Array][] = m96 && mel96 ? [[m96, mel96], [m128, mel128]] : [[m128, mel128]];
   for (let t = 0; t < T; t++) {
@@ -101,15 +98,11 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
     }
     if (rms) rms[t] = f32(Math.sqrt(f32(ss / nFft)));
     fft.forward(buf, re, im);
-    let msum = 0, fsum = 0;
     for (let k = 0; k < nb; k++) {
       const r = f32(re[k]), i = f32(im[k]), m = f32(Math.sqrt(r * r + i * i));   // np.abs of the complex64 STFT
       S[k] = m;
       P[k] = f32(m * m);
-      msum += m;
-      fsum += m * freqs[k];
     }
-    if (centroid) centroid[t] = fsum / (msum < TINY32 ? 1 : msum);
     if (full) piptrack(S, pitches, mags);
     for (const [basis, dst] of bands) {
       for (let b = 0; b < basis.length; b++) {
@@ -120,7 +113,7 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
       }
     }
   }
-  return { T, mel96, mel128, centroid, rms, tuning: full ? pitchTuning(pitches, mags, 36) : 0 };
+  return { T, mel96, mel128, rms, tuning: full ? pitchTuning(pitches, mags, 36) : 0 };
 }
 
 /** librosa.piptrack on one magnitude frame (fmin 150, fmax 4000, threshold 0.1): appends the picked

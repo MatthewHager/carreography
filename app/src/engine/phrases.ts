@@ -101,7 +101,6 @@ export function segment(ev: Events, cutsAt?: number[] | null): Phrase[] {
     const dens = m / span;
     const hold = dur[b - 1];
     const trill = mean(ev.trill.slice(a, b));
-    const afterRest = a === 0 || t[a] - maxEnd(Math.max(0, a - 4), a) >= 0.3;
     let g: string;
     if (chordy >= 0.5 && m <= 6) g = 'cadence';
     else if (chordy >= 0.5) g = 'chords';
@@ -112,10 +111,8 @@ export function segment(ev: Events, cutsAt?: number[] | null): Phrase[] {
     else g = 'recitative';
     let lo = Infinity, hi = -Infinity;
     for (let i = a; i < b; i++) [lo, hi] = [Math.min(lo, top[i]), Math.max(hi, top[i])];
-    phrases.push({
-      a, b, t0: t[a], t1: Math.min(maxEnd(a, b), t[b - 1] + 4), gesture: g, n: m, density: dens,
-      up, lo, hi, hold, afterRest, index: 0, sub: [],
-    });
+    phrases.push({ a, b, t0: t[a], t1: Math.min(maxEnd(a, b), t[b - 1] + 4), gesture: g, density: dens, up, lo, hi,
+      index: 0 });
   }
   const counts = new Map<string, number>();
   for (const p of phrases) {

@@ -1,12 +1,10 @@
 // Music analysis on the show's frame grid.
 //
 // Produces the musical events the choreography reacts to:
-//   notes     melodic onsets with strength and a pitch position (0 = low/left .. 1 = high/right)
 //   bass      low-frequency hits (kick, timpani, low brass, organ pedal)
 //   highs     bright transients (cymbals, xylophone, string attacks)
 //   hits      the strongest accents in the whole piece
 //   beats / downbeats, tempo-following
-//   sustain   per frame: a held note or chord with no new attacks
 //   intensity per frame 0..1: loudness weighted so the show builds across the piece
 //   build     per frame: inside a crescendo (energy rising steadily), with its 0..1 progress
 //
@@ -62,18 +60,18 @@ function toGrid(values: ArrayLike<number>, times: ArrayLike<number>, grid: Array
   return interp(grid, times, values);
 }
 
-/** Onset times/strengths from the spectral flux of a mel-band slice (rows [r0, r1) of the dB mel). */
-function bandOnsets(melDb: Float32Array, T: number, r0: number, r1: number, delta: number, wait: number,
-  lag = 2): { rows: number[][]; env: Float32Array } {
-  const env = onsetStrength(melDb, T, r0, r1, { lag, aggregate: 'mean' });
+/** [time, strength 0..1] of the onsets in the spectral flux of a mel-band slice (rows [r0, r1) of the
+ * dB mel). */
+function bandOnsets(melDb: Float32Array, T: number, r0: number, r1: number, delta: number, wait: number)
+  : number[][] {
+  const env = onsetStrength(melDb, T, r0, r1, { lag: 2, aggregate: 'mean' });
   const frames = onsetDetect(env, { delta, wait });
-  if (frames.length === 0) return { rows: [], env };
+  if (frames.length === 0) return [];
   const s = frames.map((f) => env[f]);
   const lo = quantile(env.filter((v) => v > 0), 0.5), hi = quantile(s, 0.97);
   // float32, as numpy keeps the envelope's dtype against float64 scalars
   const lo32 = f32(lo), span = f32(Math.max(hi - lo, 1e-9));
-  const rows = frames.map((f, i) => [framesToTime(f), clip(f32(f32(s[i] - lo32) / span), 0, 1)]);
-  return { rows, env };
+  return frames.map((f, i) => [framesToTime(f), clip(f32(f32(s[i] - lo32) / span), 0, 1)]);
 }
 
 /** Python's _stabilize: runs shorter than `minLen` take the value before them. */
@@ -131,27 +129,9 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
     return idx.length ? [idx[0], idx[idx.length - 1] + 1] : [0, 0];
   };
   const [b0, b1] = rowsWhere((f) => f < 180);
-  const [m0, m1] = rowsWhere((f) => f >= 180 && f < 2000);
   const [h0, h1] = rowsWhere((f) => f >= 2000);
-  const bass = bandOnsets(melDb, T, b0, b1, 0.12, 4).rows;
-  const mid = bandOnsets(melDb, T, m0, m1, 0.06, 2);
-  const highs = bandOnsets(melDb, T, h0, h1, 0.10, 2).rows;
-
-  // Pitch position of each note: spectral centroid right after the attack, song-normalised.
-  const centroid = spec.centroid!;
-  const logC = Float64Array.from(centroid, (c) => Math.log2(Math.max(c, 50)));
-  let notes: number[][] = [];
-  if (mid.rows.length) {
-    const c = mid.rows.map(([t]) => {
-      const i = Math.min(Math.trunc((t * sr) / HOP) + 1, logC.length - 1);
-      const end = Math.min(i + 3, logC.length);
-      let s = 0;
-      for (let k = i; k < end; k++) s += logC[k];
-      return s / (end - i);
-    });
-    const [lo, hi] = quantiles(c, [0.1, 0.9]);
-    notes = mid.rows.map(([t, s], i) => [t, s, clip((c[i] - lo) / Math.max(hi - lo, 1e-9), 0, 1)]);
-  }
+  const bass = bandOnsets(melDb, T, b0, b1, 0.12, 4);
+  const highs = bandOnsets(melDb, T, h0, h1, 0.10, 2);
 
   // --- Global accents: strongest onsets anywhere, >= 0.5 s apart ---
   const frames = onsetDetect(fullEnv);
@@ -196,19 +176,6 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   const tier = stabilize(intensity.map((v) => searchsorted(cuts, v, 'right')), Math.trunc(3.0 / step))
     .map((v) => Math.min(v, maxTier));
 
-  // --- Sustain: loud enough, but no new attacks in the last 0.6 s ---
-  const midEnv = mid.env;
-  const midMax = max(midEnv) > 1e-9 ? max(midEnv) : 1e-9;
-  const flux = toGrid(Float32Array.from(midEnv, (v) => v / midMax), frameT, grid);
-  const back = Math.trunc(0.6 / step);
-  const sustainRaw = new Array<number>(nFrames);
-  for (let i = 0; i < nFrames; i++) {
-    let m = -Infinity;
-    for (let k = Math.max(0, i - back); k <= i; k++) if (flux[k] > m) m = flux[k];
-    sustainRaw[i] = energy[i] > 0.15 && m < 0.25 ? 1 : 0;
-  }
-  const sustain = stabilize(sustainRaw, Math.trunc(0.4 / step)).map((v) => v !== 0);
-
   // --- Builds: energy rising for 4 s or more ---
   const slow = smooth(loud, 3.0);
   const slowMax = Math.max(max(slow), 1e-9);
@@ -230,7 +197,7 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   const beatScore = f32(mean32(gather32(fullEnv, beatFrames)) / Math.max(mean32(fullEnv), 1e-9));
 
   // --- Form map: sections, repeats, arc ceilings, per-section tempo ---
-  const { sections, climax } = analyzeForm(y, sr, intensity, step, duration, spec);
+  const sections = analyzeForm(y, sr, intensity, step, duration, spec);
   // a calm-only show (e.g. Ave Maria) caps the arc too
   for (const sec of sections) sec.ceiling = Math.min(sec.ceiling, maxTier);
   let secBeats: number[][] = [];
@@ -283,8 +250,8 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   const [pitchLo, pitchHi] = pitchScale(events);
 
   return {
-    duration, nFrames, step, tempo, beats, downbeats, notes, bass, highs, hits, sustain, intensity, build, tier,
-    loudFast, events, pitchLo, pitchHi, beatScore, sections, climax,
+    duration, nFrames, step, tempo, beats, downbeats, bass, highs, hits, intensity, build, tier,
+    loudFast, events, pitchLo, pitchHi, beatScore, sections,
     pulseEnv: Array.from(fullEnv), pulseHop: HOP / SR, lyricWords: null,
   };
 }

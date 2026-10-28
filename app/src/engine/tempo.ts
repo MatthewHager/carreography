@@ -51,11 +51,11 @@ function fitLine(x: number[], y: number[]): [number, number] {
  *     `agree` x the local beat of that line; otherwise (an off-beat note was grabbed, or nothing was
  *     played) it sits on the line. The tempo then glides through rubato and only ever lands on real
  *     attacks or on the smooth flow between them.
- * Returns [beats, anchored mask]. */
-export function follow(an: Analysis, reach = 0.16, minStrength = 0.6, span = 3, agree = 0.06): [number[], boolean[]] {
+ */
+export function follow(an: Analysis, reach = 0.16, minStrength = 0.6, span = 3, agree = 0.06): number[] {
   const b0 = an.beats;
   const nb = b0.length;
-  if (nb < 4) return [[...b0], new Array(nb).fill(false)];
+  if (nb < 4) return [...b0];
   let [t, w] = onsets(an);
   const keep = w.map((x) => x >= minStrength);
   t = t.filter((_, i) => keep[i]);
@@ -78,7 +78,6 @@ export function follow(an: Analysis, reach = 0.16, minStrength = 0.6, span = 3, 
     }
   }
   const out = [...b0];
-  const final = new Array<boolean>(nb).fill(false);
   for (let i = 0; i < nb; i++) {
     const lo = Math.max(0, i - span), hi = Math.min(nb, i + span + 1);
     // don't fit across a fermata / silence: stop at gaps over twice the local beat
@@ -97,12 +96,7 @@ export function follow(an: Analysis, reach = 0.16, minStrength = 0.6, span = 3, 
     } else {
       line = b0[i];
     }
-    if (has[i] && Math.abs(anchor[i] - line) <= agree * local[i]) {
-      out[i] = anchor[i];
-      final[i] = true;
-    } else {
-      out[i] = line;
-    }
+    out[i] = has[i] && Math.abs(anchor[i] - line) <= agree * local[i] ? anchor[i] : line;
   }
   // A tracked beat already sitting on a played attack (within 30 ms) is left exactly where it is:
   // only the beats that drifted are moved, so a steady band track keeps its steady grid.
@@ -110,19 +104,13 @@ export function follow(an: Analysis, reach = 0.16, minStrength = 0.6, span = 3, 
     for (let i = 0; i < nb; i++) {
       const on = clip(searchsorted(t, b0[i]), 1, Math.max(1, t.length - 1));
       const dist = Math.min(Math.abs(b0[i] - t[on - 1]), Math.abs(t[on] - b0[i]));
-      if (dist <= 0.03) {
-        out[i] = b0[i];
-        final[i] = true;
-      }
+      if (dist <= 0.03) out[i] = b0[i];
     }
   }
   for (let i = 1; i < nb; i++) {                       // strictly increasing
-    if (out[i] <= out[i - 1] + 0.3 * local[i]) {
-      out[i] = out[i - 1] + 0.3 * local[i];
-      final[i] = false;
-    }
+    if (out[i] <= out[i - 1] + 0.3 * local[i]) out[i] = out[i - 1] + 0.3 * local[i];
   }
-  return [out, final];
+  return out;
 }
 
 function maxEnv(env: number[], a: number, b: number): number {
@@ -136,11 +124,11 @@ function maxEnv(env: number[], a: number, b: number): number {
  * For each window of `window` beats the pulse envelope (drums when separated) is sampled at the
  * beats shifted by 0, +/-1/4 and 1/2 of the local beat; if a shift scores `gain` x better than the
  * beats as tracked, those beats move. Neighbouring windows vote, so a single loud fill doesn't flip
- * a section. Returns the share of beats moved. */
-export function phaseLock(an: Analysis, window = 8, gain = 1.3): number {
+ * a section. */
+export function phaseLock(an: Analysis, window = 8, gain = 1.3): void {
   const env = an.pulseEnv;
   const b = an.beats;
-  if (!env || b.length < 2 * window) return 0.0;
+  if (!env || b.length < 2 * window) return;
   const hop = an.pulseHop ?? 512 / 22050;
   const w = Math.max(1, Math.trunc(round(0.03 / hop)));
   const score = (times: number[]) => times.map((x) => {
@@ -163,23 +151,21 @@ export function phaseLock(an: Analysis, window = 8, gain = 1.3): number {
   const out = b.map((x, i) => x + choice[i] * gap[i]);
   const order = argsort(out);
   an.beats = order.map((i) => out[i]);
-  const moved = mean(choice.map((c) => (c !== 0 ? 1 : 0)));
-  if (moved) {
+  if (choice.some((c) => c !== 0)) {
     an.downbeats = an.downbeats
       .map((d) => out[clip(searchsorted(b, d - 1e-6), 0, b.length - 1)])
       .sort((x, y) => x - y);
   }
-  return moved;
 }
 
 /** Each beat moved onto the peak of the music's attack curve (the drums when separated) within
  * `reach` seconds, refined between analysis frames by fitting a parabola through the peak - the
  * tracker works on 23 ms frames and can sit a whole frame after the hit (Thriller did). Beats with no
- * peak nearby stay where they are. Returns the median shift in ms. */
-export function snapToPulse(an: Analysis, reach = 0.045): number {
+ * peak nearby stay where they are. */
+export function snapToPulse(an: Analysis, reach = 0.045): void {
   const env = an.pulseEnv;
   const b = an.beats;
-  if (!env || b.length < 4) return 0.0;
+  if (!env || b.length < 4) return;
   const hop = an.pulseHop ?? 512 / 22050;
   const w = Math.max(1, Math.trunc(round(reach / hop)));
   const out = [...b];
@@ -196,27 +182,24 @@ export function snapToPulse(an: Analysis, reach = 0.045): number {
     out[k] = (j + clip(d, -0.5, 0.5)) * hop;
   });
   for (let k = 1; k < out.length; k++) out[k] = Math.max(out[k], out[k - 1]);
-  const shift = median(out.map((x, k) => x - b[k])) * 1000;
   if (out.some((x, k) => x !== b[k])) {
     const idx = [...new Set(an.downbeats.map((d) => clip(searchsorted(b, d - 1e-6), 0, b.length - 1)))]
       .sort((x, y) => x - y);
     an.beats = out;
     an.downbeats = idx.map((i) => out[i]);
   }
-  return shift;
 }
 
 /** Replace an.beats / an.downbeats with the performer-following map (downbeats keep their beat
- * indices). Returns the share of beats anchored to a played onset. */
-export function apply(an: Analysis): number {
-  an.beatsPhaseMoved = phaseLock(an);
-  an.beatsSnapMs = snapToPulse(an);
+ * indices). */
+export function apply(an: Analysis): void {
+  phaseLock(an);
+  snapToPulse(an);
   const old = an.beats;
-  if (old.length < 4) return 0.0;
-  const [nu, anchored] = follow(an);
+  if (old.length < 4) return;
+  const nu = follow(an);
   const idx = [...new Set(an.downbeats.map((d) => clip(searchsorted(old, d - 1e-6), 0, old.length - 1)))]
     .sort((x, y) => x - y);
   an.beats = nu;
   an.downbeats = idx.map((i) => nu[i]);
-  return mean(anchored.map((x) => (x ? 1 : 0)));
 }

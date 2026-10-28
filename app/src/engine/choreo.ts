@@ -71,10 +71,9 @@ export function choreograph(an: Analysis, opts: Options = {}): Car[] {
     }
   }
   an.driver = driver || (name ? CUE.driver(name) : 'orchestra');
+  TEMPO.apply(an);          // beats moved onto what is played (rubato-aware)
   // Durations in the moves (a bar, a sixteenth) come from the tempo: make it the tracked beats' own
   // spacing so a bar-long sweep ends on the next downbeat rather than drifting off it.
-  an.beatsTracked = an.beats;
-  an.beatFollow = TEMPO.apply(an);          // beats moved onto what is played (rubato-aware)
   if (an.beats.length > 8) an.tempo = 60.0 / median(an.beats.slice(1).map((b, i) => b - an.beats[i]));
   MD.assign(an, phrases);
   if (style === 'legato') {
@@ -89,7 +88,7 @@ export function choreograph(an: Analysis, opts: Options = {}): Car[] {
     darknessGuard(cars, an, phrases);
     if (an.driver === 'band' || an.driver === 'vocal_band') drums(cars, an);
     else if (an.driver === 'orchestra') percussion(cars, an);
-    an.pulseStats = PULSE.apply(cars, an, phrases);      // the beat layer owns the headlights
+    PULSE.apply(cars, an, phrases);      // the beat layer owns the headlights
     applyCues(cars, an, cues);
     interior(cars, an);
     applyColorCues(cars, an, cues);
@@ -104,7 +103,6 @@ export function choreograph(an: Analysis, opts: Options = {}): Car[] {
       for (let ch = C.FRONT_BAR[0]; ch < C.N_CHANNELS; ch++) car.put(f, ch, 0);
     }
   }
-  an.phrases = phrases;
   return cars;
 }
 
@@ -608,11 +606,6 @@ export function applyCues(cars: Car[], an: Analysis, cues: Cues) {
       }
     } else if (action === 'hit') {
       M.allOn(cars, t0, c.hold ?? 0.4);
-    } else if (action === 'blackout') {
-      for (const car of cars) {
-        car.set(car.everything(), t0, t1, 0);
-        car.set(bars, t0, t1, 0);
-      }
     } else if (action === 'lightning') {
       M.lightning(cars, t0);
     } else if (action === 'ping') {
