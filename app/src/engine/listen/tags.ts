@@ -121,7 +121,7 @@ function flac(bytes: Uint8Array) {
 }
 
 /** A Vorbis comment block: vendor string, then KEY=value pairs (keys in any case). */
-export function vorbisComments(b: Uint8Array) {
+function vorbisComments(b: Uint8Array) {
   let p = 4 + u32le(b, 0);
   const n = u32le(b, p);
   p += 4;

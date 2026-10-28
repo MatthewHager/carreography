@@ -27,12 +27,12 @@ export { HOP, SR };
 
 const f32 = Math.fround;
 
-export interface NeuralBeats {
+interface NeuralBeats {
   beats: number[];
   downbeats: number[];
 }
 
-export interface AnalyzeOptions {
+interface AnalyzeOptions {
   stepMs: number;
   maxTier?: number;
   /** basic-pitch notes: rows of (start s, end s, midi pitch, amplitude 0..1), sorted by start */
@@ -45,7 +45,7 @@ export interface AnalyzeOptions {
  * of the beat gaps within 10 % of the median gap - which is where it is reliable (songs with a drum kit).
  * A share rather than a standard deviation, so one long gap (a break, the fade-out) doesn't disqualify a
  * steady song. Otherwise null. */
-export function neuralBeats(d: NeuralBeats | null | undefined, minSteady = 0.9): [number[], number[]] | null {
+function neuralBeats(d: NeuralBeats | null | undefined, minSteady = 0.9): [number[], number[]] | null {
   if (!d) return null;
   const b = d.beats, db = d.downbeats;
   if (b.length < 16) return null;
@@ -75,7 +75,7 @@ function bandOnsets(melDb: Float32Array, T: number, r0: number, r1: number, delt
 }
 
 /** Python's _stabilize: runs shorter than `minLen` take the value before them. */
-export function stabilize(level: ArrayLike<number>, minLen: number): number[] {
+function stabilize(level: ArrayLike<number>, minLen: number): number[] {
   const out = Array.from(level);
   let i = 0;
   while (i < out.length) {
@@ -197,7 +197,7 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   const beatScore = f32(mean32(gather32(fullEnv, beatFrames)) / Math.max(mean32(fullEnv), 1e-9));
 
   // --- Form map: sections, repeats, arc ceilings, per-section tempo ---
-  const sections = analyzeForm(y, sr, intensity, step, duration, spec);
+  const sections = analyzeForm(y, intensity, step, duration, spec);
   // a calm-only show (e.g. Ave Maria) caps the arc too
   for (const sec of sections) sec.ceiling = Math.min(sec.ceiling, maxTier);
   let secBeats: number[][] = [];

@@ -16,12 +16,12 @@ const MODEL = {
   outputs: ['beat', 'downbeat'],
 };
 
-export interface Beats {
+interface Beats {
   beats: number[];       // seconds
   downbeats: number[];   // seconds, each one of the beats
 }
 
-export interface BeatOptions {
+interface BeatOptions {
   onProgress?: (fraction: number) => void;
   backend?: Backend;
   model?: ArrayBuffer;   // the .onnx file's bytes, instead of fetching it
@@ -71,7 +71,7 @@ function melBands(): { start: number; w: Float32Array }[] {
 
 /** log1p(1000 * mel(|STFT|)): centred frames with reflect padding, a periodic Hann window, magnitudes
  * scaled by 1 / sqrt(n_fft) (normalized="frame_length"). T frames x 128 mels, row-major. */
-export function logMel(x: Float32Array): { data: Float32Array; T: number } {
+function logMel(x: Float32Array): { data: Float32Array; T: number } {
   const n = x.length, pad = N_FFT / 2, T = 1 + Math.floor(n / HOP);
   const win = Float64Array.from({ length: N_FFT }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N_FFT));
   // torch.stft's reflect padding (the edge sample isn't repeated)

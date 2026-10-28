@@ -138,7 +138,7 @@ export const UNISON: Record<string, Move> = {
     LIVELY, FIG, "build"),
 };
 
-export const SPLIT: [string, string, Move][] = [
+const SPLIT: [string, string, Move][] = [
   ["y_keyboard", "ct_comets", mv("the Ys play the notes as a keyboard while comets glide on the bar",
     ["calm", "groove"], FIG, "note", false)],
   ["y_ripple_in", "ct_comets", mv("ripples run inward on the Ys toward comets on the truck",

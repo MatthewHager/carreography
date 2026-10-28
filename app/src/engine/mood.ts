@@ -20,11 +20,10 @@ import { ceilingAt } from './arc';
 import { argsort, clip, convolveSame, diff, max, mean, median } from './np';
 import { clarity } from './pulse';
 
-export const MOODS = ['calm', 'groove', 'drive', 'frenzy'] as const;
-export const BEATS_PER_HIT: Record<string, number> = { calm: 4, groove: 2, drive: 1, frenzy: 0.5 };
-export const MIN_GAP_S: Record<string, number> = { calm: 1.5, groove: 0.7, drive: 0.0, frenzy: 0.0 };   // never faster than this
+const BEATS_PER_HIT: Record<string, number> = { calm: 4, groove: 2, drive: 1, frenzy: 0.5 };
+const MIN_GAP_S: Record<string, number> = { calm: 1.5, groove: 0.7, drive: 0.0, frenzy: 0.0 };   // never faster than this
 
-export function rank(x: ArrayLike<number>): Float64Array {
+function rank(x: ArrayLike<number>): Float64Array {
   const order = argsort(argsort(x));
   const d = Math.max(x.length - 1, 1);
   const out = new Float64Array(x.length);
@@ -33,7 +32,7 @@ export function rank(x: ArrayLike<number>): Float64Array {
 }
 
 /** Per-frame energy 0..1. */
-export function energyCurve(an: Analysis): Float64Array {
+function energyCurve(an: Analysis): Float64Array {
   const step = an.step;
   const n = an.intensity.length;
   const win = Math.max(1, Math.trunc(3.0 / step));
@@ -104,14 +103,14 @@ export function assign(an: Analysis, phrases: Phrase[]): Phrase[] {
   return phrases;
 }
 
-export function moodFor(energy: number): string {
+function moodFor(energy: number): string {
   if (energy < 0.36) return 'calm';
   if (energy < 0.55) return 'groove';
   if (energy < 0.78) return 'drive';
   return 'frenzy';
 }
 
-export function paceS(mood: string, beat: number): number {
+function paceS(mood: string, beat: number): number {
   const k = BEATS_PER_HIT[mood];
   let p = k * beat;
   while (p < MIN_GAP_S[mood]) p *= 2;

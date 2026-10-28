@@ -22,8 +22,8 @@ export function hann(n: number): Float64Array {
 }
 
 /** librosa.frames_to_time. */
-export function framesToTime(f: number, sr = SR, hop = HOP): number {
-  return (f * hop) / sr;
+export function framesToTime(f: number): number {
+  return (f * HOP) / SR;
 }
 
 // ---------- mel ----------
@@ -207,7 +207,7 @@ export function onsetStrength(S: Float32Array, T: number, r0: number, r1: number
 }
 
 /** librosa.util.peak_pick. */
-export function peakPick(x: ArrayLike<number>, preMax: number, postMax: number, preAvg: number, postAvg: number,
+function peakPick(x: ArrayLike<number>, preMax: number, postMax: number, preAvg: number, postAvg: number,
   delta: number, wait: number): number[] {
   const N = x.length, peaks: number[] = [];
   const mx = (a: number, b: number) => {
@@ -329,7 +329,7 @@ export function localTempo(env: Float32Array): Float64Array {
 }
 
 /** librosa.feature.tempo(onset_envelope=env): one tempo for the whole envelope. */
-export function globalTempo(env: Float32Array): number {
+function globalTempo(env: Float32Array): number {
   const { bpms, logprior } = tempoPrior(), acc = new Float64Array(AC_SIZE);
   eachTempogramFrame(env, (_, ac) => {
     for (let l = 0; l < AC_SIZE; l++) acc[l] += ac[l];
@@ -442,7 +442,7 @@ export function beatTrack(env: Float32Array, bpm: number | Float64Array, tightne
 
 /** librosa.onset.onset_strength(y=...) as beat_track computes it: the median flux of the 128-band mel
  * spectrogram in dB. */
-export function medianOnsets(mel128: Float32Array, T: number): Float32Array {
+function medianOnsets(mel128: Float32Array, T: number): Float32Array {
   return onsetStrength(powerToDb(mel128, 1.0), T, 0, 128, { aggregate: 'median' });
 }
 

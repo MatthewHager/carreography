@@ -11,7 +11,7 @@
 import type { Events } from './analysis';
 import { median, quantile } from './np';
 
-export const GROUP_WINDOW = 0.045;   // onsets this close together are one event (one hand, one chord)
+const GROUP_WINDOW = 0.045;   // onsets this close together are one event (one hand, one chord)
 
 /** `notes`: basic-pitch rows (start s, end s, midi pitch, amplitude 0..1), sorted by start. */
 export function groupEvents(notes: readonly (readonly number[])[]): Events {
@@ -97,8 +97,6 @@ export function groupEvents(notes: readonly (readonly number[])[]): Events {
 
   return { t, dur, low, high, top, amp, kind, trill, arrival, density, phrase: [] };
 }
-
-export const PHRASES = ['melody', 'run_up', 'run_down', 'zigzag', 'trill', 'chords', 'pedal', 'arrival', 'climax'];
 
 /** Texture taxonomy: label every event with the kind of passage it belongs to.
  *

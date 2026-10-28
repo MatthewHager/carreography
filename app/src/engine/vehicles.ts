@@ -70,7 +70,3 @@ export function lineupCars(lineup: string): [string, Vehicle, string][] {
   const places = PLACES[s.length];
   return [...s].map((ch, i) => [`Car${i + 1}_${VEHICLES[ch].model}_${places[i]}`, VEHICLES[ch], places[i]]);
 }
-
-export function describe(lineup: string): string {
-  return lineupCars(lineup).map(([, v]) => v.label).join(' | ');
-}

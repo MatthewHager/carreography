@@ -6,7 +6,7 @@
 import type { Analysis, LyricLine } from './analysis';
 import type { Resolved } from './cues';
 
-export type Word = [number, number, string];
+type Word = [number, number, string];
 
 const ORANGE = [255, 90, 0];
 const RED = [255, 0, 0];
@@ -46,7 +46,7 @@ interface Rule {
 //   lightning  three strobes on each matched word
 //   chant   consecutive repeats of the word ping across the cars, one car per word
 //   solo    only the named cars for the span of the line
-export const LYRIC_RULES: Record<string, Rule[]> = {
+const LYRIC_RULES: Record<string, Rule[]> = {
   '02_this_is_halloween': [
     { match: 'eyes glowing red|glowing red', do: 'color', color: RED, hold: 2.5, span: 'line' },
     { match: '\\bred\\b', do: 'color', color: RED, hold: 1.5 },
@@ -137,7 +137,7 @@ const PINK = [255, 30, 120];
 /** The words that make a picture: whole words in any case, a trailing * takes any ending.
  *   color      the interiors take the colour while the line is sung
  *   lightning  three strobes on the line's strongest attack */
-export const LYRIC_WORDS: { do: 'color' | 'lightning'; color?: number[]; words: string[] }[] = [
+const LYRIC_WORDS: { do: 'color' | 'lightning'; color?: number[]; words: string[] }[] = [
   { do: 'color', color: RED, words: ['red', 'blood*', 'crimson', 'scarlet', 'fire', 'flame*', 'burn*', 'devil*'] },
   { do: 'color', color: ORANGE, words: ['orange*', 'pumpkin*', 'amber', 'jack-o-lantern*'] },
   { do: 'color', color: GREEN, words: ['green', 'emerald*', 'slime*', 'goblin*', 'zombie*'] },

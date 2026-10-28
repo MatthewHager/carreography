@@ -14,7 +14,7 @@ export interface Events {
   trill: number[];
   arrival: number[];
   density: number[];
-  phrase: string[];     // texture label per event (texture.PHRASES)
+  phrase: string[];     // the texture of the passage each event is in (texture.labelPhrases)
 }
 
 /** A stretch of the form map (form.ts). */
@@ -87,7 +87,7 @@ export interface Analysis {
   energy?: Float64Array;
 }
 
-export interface BridgeMeta {
+interface BridgeMeta {
   name: string;
   lineup: string;
   style: string | null;

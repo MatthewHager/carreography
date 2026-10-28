@@ -16,7 +16,7 @@
 import type { Events, Phrase } from './analysis';
 import { mean, searchsorted } from './np';
 
-export const MAX_PHRASE = 8.0;
+const MAX_PHRASE = 8.0;
 
 /** `cutsAt`: extra phrase boundaries in seconds (sung lines), snapped to the nearest event. */
 export function segment(ev: Events, cutsAt?: number[] | null): Phrase[] {

@@ -27,7 +27,7 @@ const MODEL = {
   outputs: ['StatefulPartitionedCall:1', 'StatefulPartitionedCall:2'],   // note (frames), onset
 };
 
-export interface NoteOptions {
+interface NoteOptions {
   onProgress?: (fraction: number) => void;
   backend?: Backend;
   model?: ArrayBuffer;   // the .onnx file's bytes, instead of fetching it
@@ -72,7 +72,7 @@ function frameTime(f: number): number {
 
 /** output_to_notes_polyphonic (infer_onsets and the melodia trick on), then frames to seconds.
  * frames and onsets are T x 88, row-major; they are not modified. */
-export function notesFromActivations(framesIn: Float32Array, onsetsIn: Float32Array, T: number): number[][] {
+function notesFromActivations(framesIn: Float32Array, onsetsIn: Float32Array, T: number): number[][] {
   const frames = framesIn.slice(), onsets = onsetsIn.slice();
 
   // constrain_frequency

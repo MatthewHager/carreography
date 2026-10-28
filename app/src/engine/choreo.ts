@@ -29,8 +29,6 @@ const PURPLE = [110, 0, 200];
 const ORANGE = [255, 70, 0];
 const WHITE = [255, 255, 255];
 
-export const WINDOW_DANCE_BUDGET_S = 28.0;   // Tesla advises ~30 s of dance per show (thermal limits)
-
 export type Formation = readonly string[];   // ['unison', move] or ['split', y, ct]
 type Cues = [string, Resolved][];
 
@@ -40,9 +38,8 @@ const parts = (f: Formation) => f.slice(1);
 const anyIn = (f: Formation, s: Set<string>) => parts(f).some((m) => s.has(m));
 const allIn = (f: Formation, s: Set<string>) => parts(f).every((m) => s.has(m));
 
-export interface Options {
+interface Options {
   layout?: string;
-  useLiftgate?: boolean;
   name?: string | null;
   style?: string | null;
   driver?: string | null;
@@ -53,7 +50,7 @@ export interface Options {
  * beat to follow, e.g. Ave Maria) uses legato.ts for the lights instead. driver says what carries the
  * rhythm ("organ", "orchestra", "band", "vocal_band"; see cues.DRIVERS). */
 export function choreograph(an: Analysis, opts: Options = {}): Car[] {
-  const { layout = 'YCY', useLiftgate = true, name = null, style = null, driver = null } = opts;
+  const { layout = 'YCY', name = null, style = null, driver = null } = opts;
   const cars = makeLineup(layout, an.nFrames, an.step);
   const words = an.lyricWords;
   // LRCLIB's lines (a song dropped into the browser) when there are no Whisper words (the Python analyses)
@@ -80,8 +77,8 @@ export function choreograph(an: Analysis, opts: Options = {}): Car[] {
     LEGATO.choreograph(cars, an);
     for (const ph of phrases) ph.move = 'legato';
     applyCues(cars, an, cues);
-    applyColorCues(cars, an, cues);
-    motors.choreograph(cars, an, useLiftgate);
+    applyColorCues(cars, cues);
+    motors.choreograph(cars, an);
   } else {
     pedal(cars, an);
     playPhrases(cars, an, phrases);
@@ -91,8 +88,8 @@ export function choreograph(an: Analysis, opts: Options = {}): Car[] {
     PULSE.apply(cars, an, phrases);      // the beat layer owns the headlights
     applyCues(cars, an, cues);
     interior(cars, an);
-    applyColorCues(cars, an, cues);
-    motors.choreograph(cars, an, useLiftgate);
+    applyColorCues(cars, cues);
+    motors.choreograph(cars, an);
     finale(cars, an);
   }
   for (const car of cars) {
@@ -114,34 +111,29 @@ export function choreograph(an: Analysis, opts: Options = {}): Car[] {
 
 // Single-note passages strobe: every move here flashes per note or per beat. (Flow moves such as
 // meter, expand_contract and fill_stage are reserved for chords and crescendos.)
-export const UNISON_FIGURATION = ['lr_notes', 'rotation', 'mirror', 'keyboard', 'wave', 'converge', 'call_response',
+const UNISON_FIGURATION = ['lr_notes', 'rotation', 'mirror', 'keyboard', 'wave', 'converge', 'call_response',
   'relay', 'pinball', 'syncopate', 'lr_beat', 'march', 'cascade', 'tug_of_war', 'antiphony',
   'checker', 'beam', 'lr_channel'];
 // Moves where the cars pass something between them (the ones with the most impact).
-export const COLLAB = new Set([
+const COLLAB = new Set([
   'wave', 'converge', 'relay', 'pinball', 'syncopate', 'expand_contract', 'fill_stage', 'out_in', 'rotation',
   'lr_notes', 'lr_beat', 'call_response', 'march', 'cascade', 'tug_of_war', 'bounce_build', 'antiphony', 'motif',
   'checker', 'beam', 'lr_channel', 'implode', 'fade_cross',
   ...Object.entries(CAT.UNISON).filter(([, i]) => i.collab).map(([m]) => m),
 ]);
-export const BEAT_MOVES = new Set(['lr_beat', 'wave', 'converge', 'heartbeat', 'y_ripple_in', 'y_ripple_out',
+const BEAT_MOVES = new Set(['lr_beat', 'wave', 'converge', 'heartbeat', 'y_ripple_in', 'y_ripple_out',
   'ct_scan', 'ct_edge_pulse', 'y_turn_ticks', 'pinball', 'syncopate', 'expand_contract',
   'march', 'cascade', 'tug_of_war', 'bounce_build', 'checker', 'beam', 'lr_channel',
   'curtain', 'breathe_wash', 'marquee', 'crossing', 'shockwave', 'sparkle', 'sunrise', 'scanner', 'accelerando',
   'ping_pong', 'metronome', 'stripes', 'flutter']);
-export const SPLIT_FIGURATION: [string, string][] = [['y_keyboard', 'ct_comets'], ['y_ripple_in', 'ct_comets'],
+const SPLIT_FIGURATION: [string, string][] = [['y_keyboard', 'ct_comets'], ['y_ripple_in', 'ct_comets'],
   ['y_keyboard', 'ct_scan'], ['y_turn_ticks', 'ct_comets'], ['y_ripple_out', 'ct_edge_pulse'],
   ['y_bass_fogs', 'ct_comets'], ['y_wink', 'ct_comets']];
-export const CALM = new Set(['keyboard', 'mirror', 'meter', 'pulse', 'y_breathe', 'ct_comets', 'ct_swell', 'ct_meter',
+const CALM = new Set(['keyboard', 'mirror', 'meter', 'pulse', 'y_breathe', 'ct_comets', 'ct_swell', 'ct_meter',
   'y_keyboard', 'breathe_wash', 'sunrise', 'sparkle', 'beam', 'relay', 'march', 'fade_cross', 'metronome']);
-// How much of the stage a move lights. Full-power sections only use strong moves; calm ones only quiet.
-export const QUIET = new Set(['breathe_wash', 'sunrise', 'sparkle', 'y_turn_ticks', 'y_bass_fogs', 'y_breathe',
+// Moves that light little of the stage: a full-power section never chooses one.
+const QUIET = new Set(['breathe_wash', 'sunrise', 'sparkle', 'y_turn_ticks', 'y_bass_fogs', 'y_breathe',
   'ct_swell', 'ct_edge_pulse', 'pulse', 'meter', 'ct_comets', 'ct_meter', 'y_keyboard', 'shimmer', 'mirror']);
-export const STRONG = new Set(['wave', 'converge', 'lr_notes', 'rotation', 'keyboard', 'call_response', 'out_in',
-  'heartbeat', 'motif', 'cadence', 'block', 'y_ripple_in', 'y_ripple_out', 'ct_scan', 'y_chords', 'relay',
-  'pinball', 'syncopate', 'expand_contract', 'fill_stage', 'rain', 'bar_collide', 'march', 'cascade',
-  'tug_of_war', 'bounce_build', 'antiphony', 'checker', 'beam', 'lr_channel', 'implode', 'curtain', 'marquee',
-  'crossing', 'shockwave', 'scanner', 'accelerando', 'ping_pong', 'stripes', 'flutter']);
 
 function signature(ev: Events, ph: Phrase): Float64Array | null {
   const p = ev.top.slice(ph.a, ph.b);
@@ -154,8 +146,8 @@ function signature(ev: Events, ph: Phrase): Float64Array | null {
 /** Candidate formations for a phrase, best first: the gesture's candidates, plus every catalogued
  * move that suits the gesture and the phrase's mood, keeping only those whose mood range includes
  * this phrase's (so a calm verse never gets a strobe, a climax never a breath). */
-export function formationsFor(ph: Phrase, an: Analysis, ev: Events): Formation[] {
-  const base = formationsBase(ph, an, ev);
+function formationsFor(ph: Phrase, an: Analysis): Formation[] {
+  const base = formationsBase(ph, an);
   const mood = ph.mood;
   if (mood === undefined || mood === null || ph.gesture === 'motif' || ph.gesture === 'cadence') return base;
   if (base.length && BUILDS.includes(base[0][1])) return base;          // a crescendo candidate stays first
@@ -170,7 +162,7 @@ export function formationsFor(ph: Phrase, an: Analysis, ev: Events): Formation[]
   return out.length ? out : base;
 }
 
-export const BUILDS = ['out_in', 'fill_stage', 'bounce_build', 'implode', 'accelerando'];
+const BUILDS = ['out_in', 'fill_stage', 'bounce_build', 'implode', 'accelerando'];
 
 /** Does the phrase's loudness rise (the last quarter 35 % louder than the first)? */
 function louderAtEnd(an: Analysis, ph: Phrase): boolean {
@@ -182,7 +174,7 @@ function louderAtEnd(an: Analysis, ph: Phrase): boolean {
 }
 
 /** Candidate formations for a phrase by gesture, best first. */
-export function formationsBase(ph: Phrase, an: Analysis, _ev: Events): Formation[] {
+function formationsBase(ph: Phrase, an: Analysis): Formation[] {
   const g = ph.gesture, tier = tierAt(an, ph.t0);
   const ceiling = ceilingAt(an, ph.t0);
   const beatOk = an.beatScore >= 2.0;
@@ -243,7 +235,7 @@ function sortBy<T>(xs: T[], k: (x: T) => number): T[] {
 }
 
 // When a section comes back louder, its formations come back bigger.
-export const ESCALATE = new Map<string, Formation>([
+const ESCALATE = new Map<string, Formation>([
   [['split', 'y_keyboard', 'ct_meter'], ['unison', 'cascade']],
   [['split', 'y_keyboard', 'ct_comets'], ['unison', 'converge']],
   [['split', 'y_breathe', 'ct_comets'], ['split', 'y_ripple_in', 'ct_comets']],
@@ -280,7 +272,7 @@ function escalate(f: Formation, steps: number, beatOk: boolean): Formation {
  * - each section leans unison or split (alternating per new letter) so contrast happens at section
  *   scale rather than every few seconds;
  * - within that, least-used first, never the same twice running. */
-export function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
+function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
   const ev = an.events;
   const secs = an.sections ?? [];
   const history: Formation[] = [], plan: Formation[] = [];
@@ -342,7 +334,7 @@ export function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
         if (choice !== null && (!CAT.fits(choice, mood) || hearing >= 2)) {
           const baseInfo = CAT.info(choice);
           const c0 = choice;
-          let sibs = formationsFor(ph, an, ev).filter((c) => !same(c, c0) && CAT.info(c) != null && baseInfo != null
+          let sibs = formationsFor(ph, an).filter((c) => !same(c, c0) && CAT.info(c) != null && baseInfo != null
             && CAT.info(c)!.grid === baseInfo.grid);
           sibs = sortBy(sibs, (c) => countIf(history, (h) => same(h, c)));
           if (sibs.length) choice = sibs[0];
@@ -352,7 +344,7 @@ export function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
     }
     if (choice !== null && history.length && same(history[history.length - 1], choice) && ph.gesture === 'figuration') {
       const c0 = choice;
-      const alt = formationsFor(ph, an, ev).filter((c) => !same(c, c0) && c[0] === 'unison' && COLLAB.has(c[1]));
+      const alt = formationsFor(ph, an).filter((c) => !same(c, c0) && c[0] === 'unison' && COLLAB.has(c[1]));
       if (alt.length) choice = alt[0];
     }
     if (choice === null) {
@@ -369,7 +361,7 @@ export function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
         }
       }
       if (choice === null) {
-        const cands = formationsFor(ph, an, ev);
+        const cands = formationsFor(ph, an);
         const recent = history.slice(-2);
         const used = new Map<string, number>();
         for (const h of history) used.set(key(h), (used.get(key(h)) ?? 0) + 1);
@@ -418,7 +410,7 @@ export function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
  * sung tail, a hummed chorus) can leave the stage black for seconds; when fewer than an eighth of a
  * lively phrase's frames light anything (a beat-strobe move like pinball sits near a fifth), a beat
  * march (or a pulse without a beat) is laid over it so the stage keeps moving. */
-export function darknessGuard(cars: Car[], an: Analysis, phrases: Phrase[]) {
+function darknessGuard(cars: Car[], an: Analysis, phrases: Phrase[]) {
   // Only the note-following moves can fail this way; the beat strobes (pinball, syncopate,
   // bounce_build, lr_beat...) are sparse on purpose and are left alone.
   const noteDriven = new Set(['wave', 'converge', 'lr_notes', 'keyboard', 'rotation', 'mirror', 'relay', 'meter', 'pulse',
@@ -442,16 +434,9 @@ export function darknessGuard(cars: Car[], an: Analysis, phrases: Phrase[]) {
     });
     const lit = mean(shares);
     if (lit >= 0.12) continue;
-    if (ph.mood === 'calm') {
-      M.breatheWash(cars, an, ph);
-      ph.move += '+breathe_wash';
-    } else if (an.beatScore >= 2.0) {
-      M.march(cars, an, ph);
-      ph.move += '+march';
-    } else {
-      M.pulse(cars, an, ph);
-      ph.move += '+pulse';
-    }
+    const extra = ph.mood === 'calm' ? 'breathe_wash' : an.beatScore >= 2.0 ? 'march' : 'pulse';
+    M.UNISON[extra](cars, an, ph);
+    ph.move += '+' + extra;
   }
 }
 
@@ -461,43 +446,10 @@ const BIG = new Set(['wave', 'converge', 'out_in', 'cadence', 'heartbeat', 'call
   'accelerando']);
 const SOFT: Record<string, [number, number, number]> = { calm: [C.ON_500, C.OFF_1000, 1.0], groove: [C.ON, C.OFF_500, 0.5] };
 
-export function playPhrases(cars: Car[], an: Analysis, phrases: Phrase[]) {
-  const beatLen = 60.0 / Math.max(an.tempo, 40);
+function playPhrases(cars: Car[], an: Analysis, phrases: Phrase[]) {
   const plan = choosePlan(an, phrases);
   const ys = M.sides(cars);
   const ct = M.centreTruck(cars);
-  type Play = (ph: Phrase) => void;
-  // Unison moves are M.BY_NAME[name](cars, an, ph); the ones that need more are listed here.
-  const special: Record<string, Play> = {
-    keyboard: (ph) => M.keyboard(cars, an, ph, tierAt(an, ph.t0) >= 2),
-    out_in: (ph) => M.outIn(cars, an, ph, ph.index % 2 === 1),
-    block: (ph) => M.block(cars, an, ph, beatLen),
-  };
-  const unison = (name: string): Play => special[name] ?? ((ph) => M.BY_NAME[name](cars, an, ph));
-  const sideMoves: Record<string, Play> = {
-    y_keyboard: (ph) => M.yKeyboard(ys, an, ph, Math.min(2, Math.max(0, tierAt(an, ph.t0)))),
-    y_ripple_in: (ph) => M.yRipple(ys, an, ph, true),
-    y_ripple_out: (ph) => M.yRipple(ys, an, ph, false),
-    y_breathe: (ph) => M.yBreathe(ys, an, ph),
-    y_turn_ticks: (ph) => {
-      M.yTurnTicks(ys, an, ph);
-      M.yBassFogs(ys, an, ph);
-    },
-    y_bass_fogs: (ph) => {
-      M.yBassFogs(ys, an, ph);
-      M.yKeyboard(ys, an, ph);
-    },
-    y_chords: (ph) => M.yChords(ys, an, ph, beatLen),
-    y_wink: (ph) => M.yWink(ys, an, ph),
-  };
-  const centre: Record<string, Play> = {
-    ct_meter: (ph) => M.ctMeter(ct!, an, ph),
-    ct_comets: (ph) => M.ctComets(ct!, an, ph),
-    ct_scan: (ph) => M.ctScan(ct!, an, ph),
-    ct_edge_pulse: (ph) => M.ctEdgePulse(ct!, an, ph),
-    ct_swell: (ph) => M.ctSwell(ct!, an, ph),
-    bar_collide: (ph) => M.barCollide(ct!, an, ph),
-  };
   let nHits = 0;
   let prevPh: Phrase | null = null;
   let prevF: Formation | null = null, prevEnd = -9.0;
@@ -526,7 +478,7 @@ export function playPhrases(cars: Car[], an: Analysis, phrases: Phrase[]) {
       if (ph.energy! < prevPh.energy! - 0.12 || (ph.mood === 'calm' && prevPh.mood !== 'calm')) {
         const span = Math.min(2 * bar, 0.6 * (ph.t1 - d0));
         if (span >= 1.0) {
-          M.teardown(cars, an, d0, span);
+          M.teardown(cars, d0, span);
           ph.move = 'teardown → ' + ph.move;
           play = { ...ph, t0: d0 + span };
           play.a = searchsorted(an.events.t, play.t0);
@@ -547,10 +499,10 @@ export function playPhrases(cars: Car[], an: Analysis, phrases: Phrase[]) {
     try {
       if ((play.t1 - play.t0 >= 0.5 && play.b > play.a) || play === ph) {
         if (f[0] === 'unison' || !ys.length) {
-          unison(f[0] === 'unison' ? f[1] : 'keyboard')(play);
+          M.UNISON[f[0] === 'unison' ? f[1] : 'keyboard'](cars, an, play);
         } else {
-          sideMoves[f[1]](play);
-          if (ct !== null) centre[f[2]](play);        // no Cybertruck: every car plays the side cars' part
+          M.SIDE[f[1]](ys, an, play);
+          if (ct !== null) M.CENTRE[f[2]](ct, an, play);        // no Cybertruck: every car plays the side cars' part
         }
       }
     } finally {
@@ -580,7 +532,7 @@ export function playPhrases(cars: Car[], an: Analysis, phrases: Phrase[]) {
 
 /** A cue's moment moved onto the music's grid: onto the beat when it is within a quarter beat of one
  * (a shout detected from a chord can read a little late), else onto the nearest eighth. */
-export function onGrid(an: Analysis, t: number): number {
+function onGrid(an: Analysis, t: number): number {
   const b = an.beats;
   if (b.length < 2) return t;
   const i = clip(searchsorted(b, t), 1, b.length - 1);
@@ -589,7 +541,7 @@ export function onGrid(an: Analysis, t: number): number {
   return M.snap(an, t, 2);
 }
 
-export function applyCues(cars: Car[], an: Analysis, cues: Cues) {
+function applyCues(cars: Car[], an: Analysis, cues: Cues) {
   const ct = M.centreTruck(cars);
   const ys = M.sides(cars);
   const bars = [...C.FRONT_BAR, ...C.REAR_BAR];
@@ -619,7 +571,7 @@ export function applyCues(cars: Car[], an: Analysis, cues: Cues) {
 }
 
 /** Interior colour from the lyrics (overrides the section colour for the span). */
-export function applyColorCues(cars: Car[], _an: Analysis, cues: Cues) {
+function applyColorCues(cars: Car[], cues: Cues) {
   for (const [action, c] of cues) {
     if (action !== 'color') continue;
     const a = cars[0].fr(c.t0), b = cars[0].fr(c.t1);
@@ -634,7 +586,7 @@ export function applyColorCues(cars: Car[], _an: Analysis, cues: Cues) {
 /** Band songs: the kit is the rhythm. Kicks (low onsets of the drums stem) hit every car's headlights,
  * snares (strong high onsets) hit both Ys' accents mirrored, hats (weak high onsets) tick the markers -
  * all gated by the section's ceiling so quiet sections stay quiet. */
-export function drums(cars: Car[], an: Analysis) {
+function drums(cars: Car[], an: Analysis) {
   const ys = M.sides(cars);
   for (const [t, strength] of an.bass) {
     const mood = MD.moodAt(an, t);
@@ -653,7 +605,7 @@ export function drums(cars: Car[], an: Analysis) {
 
 /** Orchestral pieces: timpani and low-brass hits (low onsets) thump the headlights in lively sections;
  * cymbal and string attacks (high onsets) tick the markers at full power. */
-export function percussion(cars: Car[], an: Analysis) {
+function percussion(cars: Car[], an: Analysis) {
   for (const [t, strength] of an.bass) {
     const mood = MD.moodAt(an, t);
     if (ceilingAt(an, t) >= 2 && strength >= 0.5 && (mood === 'drive' || mood === 'frenzy')) {
@@ -667,7 +619,7 @@ export function percussion(cars: Car[], an: Analysis) {
 
 /** Long low notes: the centre car's inner beams swell slowly (2 s ramp) and release, so the pedal reads
  * as weight underneath without parking the headlights on. */
-export function pedal(cars: Car[], an: Analysis) {
+function pedal(cars: Car[], an: Analysis) {
   const ev = an.events;
   const trucks = cars.filter((c) => c.isCt);
   const anchor = trucks.length ? trucks : [cars[Math.floor(cars.length / 2)]];
@@ -696,7 +648,8 @@ function onRuns(col: Uint8Array): [number[], number[]] {
 
 /** Boolean lights: flashes shorter than 100 ms get stretched, gaps under 60 ms get opened up, so rapid
  * notes read as separate flashes instead of a smear. */
-export function tidy(car: Car, minOn = 5, minOff = 3) {
+function tidy(car: Car) {
+  const minOn = 5, minOff = 3;
   const n = car.nFrames;
   for (let ch = C.L_OUTER_MAIN; ch <= C.LICENSE_PLATE; ch++) {
     const col = car.column(ch);
@@ -717,7 +670,7 @@ export function tidy(car: Car, minOn = 5, minOff = 3) {
   }
 }
 
-export function interior(cars: Car[], an: Analysis) {
+function interior(cars: Car[], an: Analysis) {
   const base: Record<number, [number[], number]> = { 0: [PURPLE, 0.3], 1: [PURPLE, 0.6], 2: [ORANGE, 0.6], 3: [ORANGE, 1.0] };
   const tiers = an.tier;
   let i = 0;
@@ -744,7 +697,7 @@ export function interior(cars: Car[], an: Analysis) {
 /** The music's last strong beat: the last beat in the final 12 s whose attack is at least 60 % of the
  * strongest there (a song that grooves to the end lands its finale on its final hit, not on the last
  * accent the accent detector happened to catch). */
-export function finalBeat(an: Analysis, end: number): number | null {
+function finalBeat(an: Analysis, end: number): number | null {
   const env = an.pulseEnv;
   const b = an.beats.filter((x) => x > end - 12 && x < end - 0.6);
   if (!env || !b.length) return null;
@@ -759,7 +712,7 @@ export function finalBeat(an: Analysis, end: number): number | null {
   return strong.length ? strong[strong.length - 1] : null;
 }
 
-export function finale(cars: Car[], an: Analysis) {
+function finale(cars: Car[], an: Analysis) {
   const end = an.duration;
   const late = an.hits.filter((h) => h < end - 1.5);
   let t = late.length && late[late.length - 1] > end - 12 ? late[late.length - 1] : Math.max(end - 3.0, 0);

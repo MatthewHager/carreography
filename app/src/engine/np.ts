@@ -2,7 +2,7 @@
 // frame: Python's round-half-to-even, numpy's quantile interpolation, its pairwise float sums, interp,
 // linspace and arange. Arrays are plain number[] or Float64Array.
 
-export type Arr = ArrayLike<number>;
+type Arr = ArrayLike<number>;
 
 /** Python's round() / numpy's rint: halves go to the even neighbour. */
 export function round(x: number): number {
@@ -88,7 +88,7 @@ export function quantile(a: Arr, q: number): number {
   return quantileSorted(sorted(a), q);
 }
 
-export function quantileSorted(s: Arr, q: number): number {
+function quantileSorted(s: Arr, q: number): number {
   const n = s.length;
   const v = (n - 1) * q;
   let lo = Math.floor(v);
@@ -118,7 +118,7 @@ export function median(a: Arr): number {
 }
 
 /** np.interp for one x (xp ascending). */
-export function interp1(x: number, xp: Arr, fp: Arr): number {
+function interp1(x: number, xp: Arr, fp: Arr): number {
   const n = xp.length;
   if (x > xp[n - 1]) return fp[n - 1];
   if (x < xp[0]) return fp[0];
@@ -246,7 +246,7 @@ function toDouble(m: bigint, e: number): number {
 }
 
 /** a * b + c with a single rounding (a hardware fused multiply-add). */
-export function fma(a: number, b: number, c: number): number {
+function fma(a: number, b: number, c: number): number {
   const [ma, ea] = decompose(a), [mb, eb] = decompose(b), [mc, ec] = decompose(c);
   const mp = ma * mb, ep = ea + eb;
   if (mp === 0n) return a * b + c;

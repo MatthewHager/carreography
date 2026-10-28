@@ -28,16 +28,16 @@ import type { Car } from './car';
 import * as M from './moves';
 import { argsort, clip, convolveSame, interp, max, mean, percentile, runs } from './np';
 
-export const RES = 0.25;                                  // seconds per control step
-export const LAYER_PCT = [12, 40, 70, 90];                 // loudness percentiles at which layers 1-4 come in
-export const HYST = 0.04;                                  // ...and go out this much lower
-export const MIN_DWELL = 2.5;                              // seconds a layer stays once it changes
+const RES = 0.25;                                  // seconds per control step
+const LAYER_PCT = [12, 40, 70, 90];                 // loudness percentiles at which layers 1-4 come in
+const HYST = 0.04;                                  // ...and go out this much lower
+const MIN_DWELL = 2.5;                              // seconds a layer stays once it changes
 
 /**
  * Loudness 0-1 on a RES grid: the intensity curve smoothed over ~3 s, ranked within the song
  * and blended with its level below the song's peak (so a quiet song still breathes).
  */
-export function loudness(an: Analysis): Float64Array {
+function loudness(an: Analysis): Float64Array {
   const step = an.step;
   const k = Math.max(1, Math.trunc(3.0 / step));
   const sm = convolveSame(an.intensity, new Float64Array(k).fill(1 / k));
@@ -58,7 +58,7 @@ export function loudness(an: Analysis): Float64Array {
 }
 
 /** [start, end] of the audible music: the first and last moments within 30 dB of the peak. */
-export function musicSpan(an: Analysis): [number, number] {
+function musicSpan(an: Analysis): [number, number] {
   const db = new Float64Array(an.intensity.length);
   for (let i = 0; i < db.length; i++) db[i] = 20 * Math.log10(Math.max(an.intensity[i], 1e-4));
   const lim = max(db) - 30;
@@ -77,7 +77,7 @@ export function musicSpan(an: Analysis): [number, number] {
  * Layer count (0-4) per RES step, with hysteresis and a minimum dwell; the thresholds are
  * percentiles of the song's own loudness, so every song uses its whole range.
  */
-export function layers(L: ArrayLike<number>, live: ArrayLike<boolean>): Int32Array {
+function layers(L: ArrayLike<number>, live: ArrayLike<boolean>): Int32Array {
   const liveL: number[] = [];
   for (let i = 0; i < L.length; i++) if (live[i]) liveL.push(L[i]);
   const up = liveL.length ? LAYER_PCT.map((p) => percentile(liveL, p)) : [0.2, 0.4, 0.6, 0.8];
@@ -98,7 +98,7 @@ export function layers(L: ArrayLike<number>, live: ArrayLike<boolean>): Int32Arr
   return out;
 }
 
-export function glow(car: Car, chs: readonly number[], t0: number, t1: number, up: number = C.ON_2000,
+function glow(car: Car, chs: readonly number[], t0: number, t1: number, up: number = C.ON_2000,
   down: number = C.OFF_2000, downS = 2.0): void {
   car.light(chs, t0, t1, up);
   car.light(chs, t1, t1 + downS, down);
@@ -108,7 +108,7 @@ export function glow(car: Car, chs: readonly number[], t0: number, t1: number, u
  * Stage position 0-1 (crowd's left to right) of the melody on a RES grid, NaN where no melody
  * sounds: the top notes of the transcription, gliding from one note to the next.
  */
-export function melodyPath(an: Analysis, t0: number, t1: number, n: number): Float64Array {
+function melodyPath(an: Analysis, t0: number, t1: number, n: number): Float64Array {
   const ev = an.events;
   const pos = new Float64Array(n).fill(NaN);
   if (ev === undefined || ev === null || !ev.t.length) return pos;

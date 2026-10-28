@@ -18,7 +18,7 @@ export interface LrcRecord {
   syncedLyrics: string | null;
 }
 
-export const API = 'https://lrclib.net/api';
+const API = 'https://lrclib.net/api';
 const MAX_LINE_S = 8.0;           // a line with no following timestamp is taken to last this long at most
 
 /** The lines of an LRC text, in time order. Handles several stamps on one line ("[00:12.00][01:30.00]"),
@@ -58,7 +58,7 @@ export function parseLrc(lrc: string): LyricLine[] {
 
 // ---- Looking a song up -------------------------------------------------------------------------
 
-export interface FetchOptions {
+interface FetchOptions {
   fetch?: typeof fetch;                    // for the tests
   wait?: (ms: number) => Promise<void>;    // for the tests
   tries?: number;

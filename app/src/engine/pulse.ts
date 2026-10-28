@@ -29,19 +29,19 @@ import * as M from './moves';
 import { moodAt } from './mood';
 import { clip, diff, max, mean32, median, round, searchsorted } from './np';
 
-export const HEADS = [C.L_OUTER_MAIN, C.R_OUTER_MAIN, C.L_INNER_MAIN, C.R_INNER_MAIN];
-export const INNER = [C.L_INNER_MAIN, C.R_INNER_MAIN];
-export const PATTERN: Record<string, Record<number, string>> = {
+const HEADS = [C.L_OUTER_MAIN, C.R_OUTER_MAIN, C.L_INNER_MAIN, C.R_INNER_MAIN];
+const INNER = [C.L_INNER_MAIN, C.R_INNER_MAIN];
+const PATTERN: Record<string, Record<number, string>> = {
   groove: { 0: 'big', 2: 'mid' },
   drive: { 0: 'big', 1: 'small', 2: 'mid', 3: 'small' },
   frenzy: { 0: 'big', 1: 'small', 2: 'mid', 3: 'small' },
 };
-export const OWNERS = new Set(['cadence', 'motif']);
-export const BUILDS = new Set(['out_in', 'fill_stage', 'bounce_build', 'implode', 'accelerando']);
-export const LEAD_S = 0.02;            // the beat's light lands a frame early: the eye forgives early, not late
+const OWNERS = new Set(['cadence', 'motif']);
+const BUILDS = new Set(['out_in', 'fill_stage', 'bounce_build', 'implode', 'accelerando']);
+const LEAD_S = 0.02;            // the beat's light lands a frame early: the eye forgives early, not late
 
 /** A phrase, or a stretch between phrases (see segments). */
-export interface Segment {
+interface Segment {
   t0: number;
   t1: number;
   move?: string;
@@ -76,7 +76,7 @@ export function clarity(an: Analysis, t0: number, t1: number, reach = 4.0): numb
 }
 
 /** Beat index within its bar (0 = downbeat) for every tracked beat. */
-export function position(an: Analysis): Int32Array {
+function position(an: Analysis): Int32Array {
   const b = an.beats;
   const d = an.downbeats;
   const downs = new Set<number>();
@@ -177,7 +177,7 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): void {
  * black, and the build's own landing hits the next downbeat. The build move keeps its shape on
  * the feature lamps (signatures, DRLs, fogs, the bar).
  */
-export function buildPulse(cars: Car[], ph: Segment, beats: ArrayLike<number>): void {
+function buildPulse(cars: Car[], ph: Segment, beats: ArrayLike<number>): void {
   const ys = M.sides(cars);
   for (const c of cars) c.set(HEADS, ph.t0, ph.t1, 0);
   const b: number[] = [];
@@ -209,7 +209,7 @@ export function buildPulse(cars: Car[], ph: Segment, beats: ArrayLike<number>): 
  * dark-to-bright step instead of brightening something already lit. The moves keep their shape
  * between beats.
  */
-export function duck(cars: Car[], t: number, gap: number): void {
+function duck(cars: Car[], t: number, gap: number): void {
   const d = clip(gap * 0.15, 0.06, 0.1);
   for (const c of cars) {
     if (c.hasBar) c.set(C.FRONT_BAR, t - d, t, 0);
@@ -223,7 +223,7 @@ export function duck(cars: Car[], t: number, gap: number): void {
  * the beat doesn't stop, so each such gap becomes a segment of its own, with its mood read from
  * the energy curve (a clearly struck beat keeps it out of calm).
  */
-export function segments(an: Analysis, phrases: Phrase[], minGap = 0.6): Segment[] {
+function segments(an: Analysis, phrases: Phrase[], minGap = 0.6): Segment[] {
   const out: Segment[] = [];
   let last = 0.0;
   const gaps: [number, number][] = [];

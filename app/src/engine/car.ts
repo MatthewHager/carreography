@@ -9,10 +9,10 @@ import * as C from './channels';
 import { round, u8 } from './np';
 import { lineupCars } from './vehicles';
 
-export const LIGHT_LEAD_S = 0.02;   // lights fire one frame before the sound so they read as on the beat
+const LIGHT_LEAD_S = 0.02;   // lights fire one frame before the sound so they read as on the beat
 
 export type Side = 'L' | 'R' | null | undefined;
-export type Chs = number | readonly number[];
+type Chs = number | readonly number[];
 
 const list = (chs: Chs): readonly number[] => (typeof chs === 'number' ? [chs] : chs);
 

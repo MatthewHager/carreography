@@ -24,7 +24,7 @@ import { argmax, argsort } from './np';
 // the string pulse (percussive onsets), beat moves only where the beat is steady. "band": the drum
 // kit (kick -> fogs, snare -> the Ys, hats -> markers), beat-locked moves preferred. "vocal_band": a
 // band with the singers carrying the melody, lyric cues.
-export const DRIVERS: Record<string, string> = {
+const DRIVERS: Record<string, string> = {
   '01_toccata_and_fugue': 'organ',
   '02_this_is_halloween': 'vocal_band',
   '03_danse_macabre': 'orchestra',
@@ -44,7 +44,7 @@ export function driver(name: string): string {
   return DRIVERS[name] || 'orchestra';
 }
 
-export interface Cue {
+interface Cue {
   at: string;
   do: string;
   cars?: string[];
@@ -61,7 +61,7 @@ export interface Resolved extends Cue {
   car?: number;
 }
 
-export const CUES: Record<string, Cue[]> = {
+const CUES: Record<string, Cue[]> = {
   // Bach. The opening mordent is the most recognisable second in organ music: the truck alone.
   // The cadenza chord before the ending is the pinnacle; the frunk rises into it.
   '01_toccata_and_fugue': [
@@ -96,7 +96,7 @@ export const CUES: Record<string, Cue[]> = {
   ],
 };
 
-export const DEFAULT: Cue[] = [
+const DEFAULT: Cue[] = [
   { at: 'final_section', do: 'ceiling', value: 3 },
   { at: 'loudest_last_quarter', do: 'peak', build: 8.0 },
 ];

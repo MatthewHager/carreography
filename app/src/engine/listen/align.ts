@@ -78,7 +78,7 @@ export function vocalCurve(left: Float32Array, right: Float32Array, sr: number):
 }
 
 /** For each slide of the lines (frames, -max..max), the curve's mean over the time they're sung. */
-export function slideScores(curve: Float64Array, lines: LyricLine[], maxShift: number): Float64Array {
+function slideScores(curve: Float64Array, lines: LyricLine[], maxShift: number): Float64Array {
   const n = curve.length;
   let mean = 0;
   for (const v of curve) mean += v / n;
@@ -103,7 +103,7 @@ const bestShift = (scores: Float64Array, maxShift: number) => {
   return best - maxShift;
 };
 
-export interface Alignment {
+interface Alignment {
   offset: number;                 // seconds to add to LRCLIB's times
   by: 'voice' | 'length';         // found in the audio, or LRCLIB's times kept for a same-length release
   agree: number;                  // thirds of the lines that agreed with the slide (0-3)
