@@ -484,7 +484,70 @@ export function choreograph(cars: Car[], an: Analysis, useLiftgate: boolean): vo
   });
   fillStill(cars, an, line, spent);
   spendLeftovers(cars, an, line, spent, useLiftgate);
+  falconDoors(cars, an);
   finishWindows(cars, an);
+}
+
+
+// ---- Model X falcon doors ----------------------------------------------------------------------
+// The Model X's showpiece: both falcon doors rise (20 s), land on the song's biggest peak a beat
+// after the car to their left - as the windows' peak dance does on the other cars - dance through
+// the loud stretch and close (8 s): Open + Dance + Close of the doors' 6 commands each. Tesla's
+// README warns that windows moving while the doors move can trip the pinch detection and stop the
+// show, so the car's windows keep still for the whole gesture (window commands there are dropped).
+// The front doors (22 s up) are left alone.
+
+export const FALCON_OPEN_S = 20.0, FALCON_CLOSE_S = 8.0;
+export const FALCON_DANCE_S = WINDOW_PEAK_DANCE_S;
+
+export function falconDoors(cars: Car[], an: Analysis): void {
+  const end = an.duration;
+  const order = cars.slice().sort((p, q) => p.x - q.x);
+  const beat = 60.0 / Math.max(an.tempo, 40);
+  const peaks = crescendos(an, FALCON_OPEN_S).sort((p, q) => -p[3] - -q[3]);
+  for (const c of order) {
+    if (!c.falcon) continue;
+    const idx = order.indexOf(c);
+    for (const [peak, , holdUntil] of peaks) {
+      const land = onBeat(an, peak + idx * beat);
+      const openAt = land - FALCON_OPEN_S - LID_OPEN_MARGIN_S;
+      const danceEnd = land + np.clip(holdUntil - land, LID_DANCE_MIN_S, FALCON_DANCE_S);
+      const closeAt = danceEnd + 0.3;
+      // after the windows' opening Open, and shut a little before the end
+      if (openAt < 0.7 + WINDOW_S + 0.5 || closeAt + FALCON_CLOSE_S > end - 1.0) continue;
+      for (const door of [C.L_FALCON, C.R_FALCON]) {
+        c.closure(door, openAt, openAt + 0.5, C.CLOSURE_OPEN);
+        c.closure(door, land, danceEnd, C.CLOSURE_DANCE);
+        c.closure(door, closeAt, closeAt + 0.5, C.CLOSURE_CLOSE);
+      }
+      const still: [number, number] = [openAt - 0.5, closeAt + FALCON_CLOSE_S + 0.5];
+      c.windowsStill.push(still);
+      for (const w of C.WINDOWS) {
+        // every window command that would have the window moving in the span: a whole run, plus travel
+        for (const [a, b] of commandRuns(c, w)) {
+          if (a * an.step < still[1] && b * an.step + WINDOW_S > still[0]) for (let f = a; f < b; f++) c.put(f, w, 0);
+        }
+      }
+      break;
+    }
+  }
+}
+
+/** [first frame, end frame) of each run of one command on a channel. */
+function commandRuns(car: Car, ch: number): [number, number][] {
+  const out: [number, number][] = [];
+  for (let f = 0; f < car.nFrames;) {
+    const v = car.get(f, ch);
+    if (!v) {
+      f++;
+      continue;
+    }
+    let g = f;
+    while (g < car.nFrames && car.get(g, ch) === v) g++;
+    out.push([f, g]);
+    f = g;
+  }
+  return out;
 }
 
 
@@ -624,7 +687,8 @@ export function finishWindows(cars: Car[], an: Analysis): void {
         if (v >= 96 && v < 160) last = f;
       }
       if (last < 0) continue;
-      const t = (last + 1) * an.step + 1.0;
+      let t = (last + 1) * an.step + 1.0;
+      for (const [a, b] of c.windowsStill) if (t + WINDOW_S > a && t < b) t = b;      // not while a Model X's doors move
       c.closure(w, Math.min(an.duration - 2.0, t), Math.min(an.duration - 1.5, t + 0.5), C.CLOSURE_OPEN);
     }
   }

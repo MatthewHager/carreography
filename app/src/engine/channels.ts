@@ -67,4 +67,5 @@ export const CLOSURE_STOP = 255;
 export const CLOSURE_LIMITS: Record<number, number> = {
   [LIFTGATE]: 6, [L_MIRROR]: 20, [R_MIRROR]: 20, [CHARGE_PORT]: 3,
   [L_FRONT_WINDOW]: 6, [L_REAR_WINDOW]: 6, [R_FRONT_WINDOW]: 6, [R_REAR_WINDOW]: 6,
+  [L_FALCON]: 6, [R_FALCON]: 6, [L_FRONT_DOOR]: 6, [R_FRONT_DOOR]: 6,      // Model X
 };
