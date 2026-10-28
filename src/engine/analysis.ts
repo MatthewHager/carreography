@@ -1,6 +1,5 @@
 // What the listening side (listen/audio.ts) hands the choreographer: the song's beats, notes, loudness
-// and form, with per-frame curves on the show's 20 ms grid. fromBridge reads the same thing from the
-// analyses the Python version exported for bridge.test.ts.
+// and form, with per-frame curves on the show's 20 ms grid.
 
 /** Transcribed note events (a key press or a chord), one entry per onset group (texture.ts). */
 export interface Events {
@@ -79,36 +78,10 @@ export interface Analysis {
   pulseEnv: number[];    // the onset strength curve, one value per pulseHop seconds
   pulseHop: number;
   lyricLines?: LyricLine[] | null;                   // LRCLIB's lines, lined up with this recording
-  lyricWords?: [number, number, string][] | null;    // only in the frozen Python analyses (see lyrics.ts)
   // set while choreographing
   phrases?: Phrase[];
   cuePeaks?: [number, number, number | null, boolean][];   // the cue sheet's peaks: time, build, hold, final
   driver?: string;
   pace?: number | null;  // the current phrase's seconds between hits, for the beat moves (mood.ts)
   energy?: Float64Array; // per frame 0..1 (mood.energyCurve)
-}
-
-interface BridgeMeta {
-  name: string;
-  lineup: string;
-  style: string | null;
-  driver: string;
-  cars: string[];
-}
-
-type Json = Record<string, unknown>;
-
-const camel = (s: string) => s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-
-function camelKeys<T>(o: Json): T {
-  return Object.fromEntries(Object.entries(o).map(([k, v]) => [camel(k), v])) as T;
-}
-
-/** An analysis.json from cache/bridge (written by the Python version, tag python-final): its fields are
- * the Analysis's in snake_case, with the song's name, lineup, style and driver alongside. */
-export function fromBridge(json: { meta: BridgeMeta; analysis: Json }): { meta: BridgeMeta; an: Analysis } {
-  const a = camelKeys<Analysis & Json>(json.analysis);
-  a.events = camelKeys<Events>(json.analysis.events as Json);
-  a.sections = ((json.analysis.sections as Json[]) ?? []).map((s) => camelKeys<Section>(s));
-  return { meta: json.meta, an: a };
 }

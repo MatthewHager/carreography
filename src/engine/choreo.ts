@@ -52,15 +52,11 @@ interface Options {
 export function choreograph(an: Analysis, opts: Options = {}): Car[] {
   const { layout = 'YCY', name = null, style = null, driver = null } = opts;
   const cars = makeLineup(layout, an.nFrames, an.step);
-  // a sung line starts a phrase: LRCLIB's lines, or the word times in the frozen Python analyses (lyrics.ts)
-  const words = an.lyricWords?.length ? an.lyricWords : null;
-  const sung = !words && an.lyricLines?.length ? an.lyricLines : null;
-  const cutsAt = words ? LY.lines(words).map((l) => l[0]) : sung ? sung.map((l) => l.t) : null;
-  const phrases = segment(an.events, cutsAt);
+  const sung = an.lyricLines?.length ? an.lyricLines : null;     // a sung line starts a phrase
+  const phrases = segment(an.events, sung ? sung.map((l) => l.t) : null);
   an.phrases = phrases;
   const cues: Cues = name ? CUE.resolve(name, an) : [];
-  if (words && name) cues.push(...LY.lyricCues(name, words));
-  else if (sung) cues.push(...LY.lineCues(sung, an));
+  if (sung) cues.push(...LY.lineCues(sung, an));
   an.cuePeaks = cues.filter(([a]) => a === 'peak').map(([, c]) => [c.t0, c.build!, c.hold ?? null, c.final ?? false]);
   for (const [a, c] of cues) {                     // ceilings are needed before the plan is chosen
     if (a === 'ceiling' && an.sections && an.sections.length) {
