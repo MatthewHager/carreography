@@ -21,7 +21,7 @@ import type { Moment } from './lyrics';
 import * as MD from './mood';
 import * as motors from './motors';
 import * as M from './moves';
-import { clip, corrcoef, interp, linspace, mean, median, round, runs, searchsorted, slope } from './np';
+import { clip, corrcoef, interp, linspace, mean, median, runs, searchsorted, slope } from './np';
 import * as PULSE from './pulse';
 import { frameSpan, segment } from './phrases';
 import * as TEMPO from './tempo';
@@ -702,11 +702,10 @@ function finalBeat(an: Analysis, end: number): number | null {
   if (!env || !b.length) return null;
   const hop = an.pulseHop ?? 512 / 22050;
   const strength = b.map((x) => {
-    const i = clip(round(x / hop), 1, env.length - 2);
+    const i = clip(Math.round(x / hop), 1, env.length - 2);
     return Math.max(env[i - 1], env[i], env[i + 1]);
   });
-  // a float32 array compared with a float: numpy casts the threshold to float32
-  const threshold = Math.fround(0.6 * Math.max(...strength));
+  const threshold = 0.6 * Math.max(...strength);
   const strong = b.filter((_, k) => strength[k] >= threshold);
   return strong.length ? strong[strong.length - 1] : null;
 }

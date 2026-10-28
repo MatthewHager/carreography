@@ -195,12 +195,12 @@ function windows(cars: Car[], an: Analysis): void {
     const peaks = crescendos(an, LIFTGATE_OPEN_S[c.kind]).sort((p, q) => -p[3] - -q[3]);
     const bar = barLen(an);
     const beat = bar / 4;
-    const burst = beat * Math.max(2, np.round(WINDOW_BURST_S / beat));      // ~4.5 s, a whole number of beats
-    const half = beat * Math.max(1, Math.floor(np.round(burst / beat) / 2));
+    const burst = beat * Math.max(2, Math.round(WINDOW_BURST_S / beat));      // ~4.5 s, a whole number of beats
+    const half = beat * Math.max(1, Math.floor(Math.round(burst / beat) / 2));
     const peakT = peaks.length ? onBeat(an, peaks[0][0]) : null;
     // wave moments: starts of lively sections, spread over the piece, clear of the peak dance
     const waveCands = Array.from(new Set(
-      secs.filter((sc) => sc.ceiling >= 2 && 8 < sc.t0 && sc.t0 < end - 20).map((sc) => np.pyRound(sc.t0, 1)),
+      secs.filter((sc) => sc.ceiling >= 2 && 8 < sc.t0 && sc.t0 < end - 20).map((sc) => Math.round(sc.t0 * 10) / 10),
     )).sort((p, q) => p - q);
     const waves: number[] = [];
     let last = -1e9;
@@ -434,7 +434,7 @@ function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
     // stays on the music's grid even when the tempo drifts a little.
     let grid: number[] = [];
     if (beats.length >= 8) {
-      const per = Math.max(1, np.round(cycle / Math.max(np.median(np.diff(beats)), 0.2)));
+      const per = Math.max(1, Math.round(cycle / Math.max(np.median(np.diff(beats)), 0.2)));
       for (let i = 0; i < beats.length; i += per) grid.push(beats[i]);
     }
     if (grid.length < 4 || Math.abs(np.median(np.diff(grid)) - cycle) > 0.3 * cycle) {
@@ -606,7 +606,7 @@ function spendLeftovers(cars: Car[], an: Analysis, line: Line, spent: Spent): vo
   const step = an.step;
   const livelyOnly = Math.trunc(np.max(an.tier)) <= 1;      // a song held quiet on purpose (Ave Maria) stays gentle
   // 1. Windows: extra travelling dances in the stillness (one command kept for the final Open).
-  const burst = beat * Math.max(2, np.round(WINDOW_BURST_S / beat));
+  const burst = beat * Math.max(2, Math.round(WINDOW_BURST_S / beat));
   for (let k = 0; k < 12; k++) {
     const mask = motion(cars, an);
     let placed = false;

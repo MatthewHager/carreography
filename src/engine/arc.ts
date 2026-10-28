@@ -3,12 +3,11 @@
 
 import type { Analysis } from './analysis';
 import { sectionAt } from './form';
-import { at } from './np';
 
 /** Intensity tier at t, capped by the form map's ceiling for that section (the arc). */
 export function tierAt(an: Analysis, t: number): number {
   const f = Math.min(Math.trunc(t / an.step), an.tier.length - 1);
-  let tier = Math.trunc(at(an.tier, f));
+  let tier = Math.trunc(an.tier[f]);
   const secs = an.sections;
   if (secs && secs.length) {
     const ceiling = sectionAt(secs, t).ceiling;

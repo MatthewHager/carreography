@@ -10,21 +10,23 @@
 import type { Analysis, Events, Phrase } from './analysis';
 import type { Car, Side } from './car';
 import * as C from './channels';
-import {
-  arange, argmin, at, clip, cumsum, diff, linspace, mean, median, pymod, pyRound, quantile, round, roundTo,
-  searchsorted, sum,
-} from './np';
+import { arange, argmin, clip, cumsum, diff, linspace, mean, median, quantile, searchsorted, sum } from './np';
 import { barLen, beatLen } from './tempo';
 import { tierAt } from './arc';
 import { kitAt } from './feel';
 import { pacedGrid } from './mood';
 import { frameSpan } from './phrases';
-import { Rng } from './rng';
+import { Seeded } from './seeded';
 
 const ON = C.ON, OFF_500 = C.OFF_500, ON_500 = C.ON_500, OFF_1000 = C.OFF_1000;
 const BAR = C.FRONT_BAR.length;   // 60 LEDs
 
 type LR = 'L' | 'R';
+
+/** a mod n, never negative, for patterns that wrap. */
+const mod = (a: number, n: number) => ((a % n) + n) % n;
+/** A time to the millisecond, to tell whether a beat is a downbeat. */
+const ms = (t: number) => Math.round(t * 1000);
 type Rows = Float64Array[];
 type Level = number | ArrayLike<number>;
 /** A phrase as far as the time-grid helpers need one (the choreographer also passes stand-ins). */
@@ -120,8 +122,8 @@ function slotFor(cars: Car[], pitch: number, lo: number, hi: number): [Car, LR, 
   const cs = cumsum(widths);
   const edges = [0.0, ...Array.from(cs, (v) => v / total)];
   const idx = Math.min(cars.length - 1, searchsorted(edges, pos, 'right') - 1);
-  const w = (pos - at(edges, idx)) / (at(edges, idx + 1) - at(edges, idx));
-  const car = at(cars, idx);
+  const w = (pos - edges[idx]) / (edges[idx + 1] - edges[idx]);
+  const car = cars[idx];
   return [car, w < 0.5 ? 'L' : 'R', car.isCt ? w : null];   // any truck plays its bar
 }
 
@@ -221,7 +223,7 @@ function lrNotes(cars: Car[], an: Analysis, ph: Phrase) {
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = flashLen(ev, i);
     const high = ev.top[i] >= med;
-    const car = high ? at(outer, -1) : outer[0];
+    const car = high ? outer[outer.length - 1] : outer[0];
     const side = msd(car, (i - ph.a) % 2 === 0 ? 'L' : 'R', cars);
     let onGrid = sub === null;
     if (sub !== null) {
@@ -239,12 +241,12 @@ function lrBeat(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const outer = sides(cars);
   const beats = within(an.beats, ph.t0 - 0.05, ph.t1);
-  const downs = new Set(an.downbeats.map((d) => roundTo(d, 3)));
+  const downs = new Set(an.downbeats.map(ms));
   beats.forEach((b, k) => {
     const car = outer[k % outer.length];
     hit(car, 'L', b, 0.14, true);
     hit(car, 'R', b, 0.14, true);
-    if (downs.has(pyRound(b, 3)) && ct !== null) barFlash(ct, b, 0.3);
+    if (downs.has(ms(b)) && ct !== null) barFlash(ct, b, 0.3);
   });
   const [lo, hi] = phraseRange(ph);
   if (ct !== null) {
@@ -332,7 +334,7 @@ function outIn(cars: Car[], an: Analysis, ph: Phrase, reverse = false) {
   for (let j = 0, i = ph.a; i < ph.b; j++, i++) {
     const t = ev.t[i];
     const k = Math.min(3, Math.trunc(((t - ph.t0) / span) * 4));
-    const groups = at(stages, k);
+    const groups = stages.at(k)!;
     const [car, chs] = groups[j % groups.length];
     car.light(chs, t, t + 0.08);
     if (ct !== null) {
@@ -352,7 +354,7 @@ function outIn(cars: Car[], an: Analysis, ph: Phrase, reverse = false) {
 
 function landsOnHold(an: Analysis, ph: Phrase): boolean {
   const ev = an.events;
-  return at(ev.dur, ph.b - 1) >= 0.8 || (ph.b < nEvents(ev) && ev.kind[ph.b] >= 2 && ev.t[ph.b] - ph.t1 < 0.6);
+  return ev.dur.at(ph.b - 1)! >= 0.8 || (ph.b < nEvents(ev) && ev.kind[ph.b] >= 2 && ev.t[ph.b] - ph.t1 < 0.6);
 }
 
 /** The top of a build: a beat of black, the pop, and if the music lands on a held chord,
@@ -360,7 +362,7 @@ function landsOnHold(an: Analysis, ph: Phrase): boolean {
 function land(cars: Car[], an: Analysis, ph: Phrase, ct: Car | null, pop: boolean) {
   if (!pop) return;
   const ev = an.events;
-  const last = at(ev.dur, ph.b - 1);
+  const last = ev.dur.at(ph.b - 1)!;
   const hold = Math.min(2.5, Math.max(0.35, last >= 0.8 ? last : 0.35));
   for (const c of cars) {
     c.set(c.everything(), ph.t1 - 0.16, ph.t1, 0);
@@ -500,7 +502,7 @@ function shimmer(cars: Car[], an: Analysis, ph: Phrase) {
     car.flash([...car.accents(side), ...car.turns(side).slice(0, 1)], t, 0.07);
     if (ct !== null) {
       const n = Math.max(1, ct.fr(t + 0.1) - ct.fr(t));
-      const sparkle = new Rng(k).randoms(BAR).map((r) => (r < 0.25 ? 1 : 0));
+      const sparkle = new Seeded(k).randoms(BAR).map((r) => (r < 0.25 ? 1 : 0));
       ct.pixels(C.FRONT_BAR, t, repeatRow(sparkle, n));
     }
   }
@@ -513,7 +515,7 @@ function motif(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const idx: number[] = [];
   for (let i = ph.a; i < ph.b; i++) idx.push(i);
-  const landI = at(idx, -1);
+  const landI = idx[idx.length - 1];
   const pre = idx.slice(0, -1);
   // Ornament: the first notes before any wide leap.
   const orn: number[] = [];
@@ -534,7 +536,7 @@ function motif(cars: Car[], an: Analysis, ph: Phrase) {
       mid.flash(mid.heads(), t, 0.1);
     }
   });
-  const [landCar, landSide, w] = slotFor(cars, at(ev.top, landI), an.pitchLo, an.pitchHi);
+  const [landCar, landSide, w] = slotFor(cars, ev.top[landI], an.pitchLo, an.pitchHi);
   // Sweep: slots in order from the far side of the stage to the landing slot.
   const order = slots6(cars);
   const target = order.findIndex(([c, s]) => c === landCar && s === landSide);
@@ -548,7 +550,7 @@ function motif(cars: Car[], an: Analysis, ph: Phrase) {
     hit(car, side, t, 0.1, true);
     if (ct !== null && car !== ct) comet(ct, t, 0.5, 0.15, 0.5, 12);
   });
-  const t = at(ev.t, landI), hold = clip(at(ev.dur, landI), 0.4, 3.0);
+  const t = ev.t[landI], hold = clip(ev.dur[landI], 0.4, 3.0);
   landCar.light([...landCar.accents(landSide), ...landCar.heads(landSide)], t, t + hold);
   landCar.light([...landCar.accents(landSide), ...landCar.heads(landSide)], t + hold, t + hold + 0.8, OFF_500);
   // the comet goes on the centrepiece even when another truck is the one landed on
@@ -790,7 +792,7 @@ function callResponse(cars: Car[], an: Analysis, ph: Phrase) {
   const mid = ph.a + Math.floor((ph.b - ph.a) / 2);
   // a view of the phrase restricted to one half
   const half = (a: number, b: number): Phrase => ({
-    ...ph, a, b, t0: at(ev.t, a), t1: at(ev.t, b - 1) + Math.min(at(ev.dur, b - 1), 2.0), lo: ph.lo, hi: ph.hi,
+    ...ph, a, b, t0: ev.t[a], t1: ev.t.at(b - 1)! + Math.min(ev.dur.at(b - 1)!, 2.0), lo: ph.lo, hi: ph.hi,
   });
   const h1 = half(ph.a, mid), h2 = half(mid, ph.b);
   yKeyboard(ys, an, h1);
@@ -909,7 +911,7 @@ function grid(an: Analysis, ph: Span, kind: 'downbeats' | 'beats' = 'downbeats')
     } else {
       // no tracked beats here (a fermata): carry on from the last beat at the local pace
       const prev = b.filter((x) => x <= ph.t0);
-      const start = prev.length ? at(prev, -1) : ph.t0;
+      const start = prev.length ? prev[prev.length - 1] : ph.t0;
       const period = (kind === 'downbeats' ? 4 : 1) * beatAt(an, start);
       const count = Math.trunc((ph.t1 - start) / period) + 1;
       g = [];
@@ -937,7 +939,7 @@ function subGrid(an: Analysis, div = 4): Float64Array {
     const gaps = diff(b);
     const out = new Float64Array(b.length * div);
     for (let i = 0; i + 1 < b.length; i++) for (let j = 0; j < div; j++) out[i * div + j] = b[i] + (gaps[i] * j) / div;
-    const lastB = at(b, -1), lastGap = at(gaps, -1);
+    const lastB = b[b.length - 1], lastGap = gaps[gaps.length - 1];
     for (let j = 0; j < div; j++) out[(b.length - 1) * div + j] = lastB + (j * lastGap) / div;
     g = out;
     cache.set(div, g);
@@ -952,13 +954,13 @@ function subGrid(an: Analysis, div = 4): Float64Array {
 export function snap(an: Analysis, t: number, div = 4): number {
   const g = subGrid(an, div);
   const i = Math.min(Math.max(searchsorted(g, t), 1), g.length - 1);
-  const q = t - at(g, i - 1) <= at(g, i) - t ? at(g, i - 1) : at(g, i);
+  const q = t - g.at(i - 1)! <= g.at(i)! - t ? g.at(i - 1)! : g.at(i)!;
   const ev = an.events;
   if (ev && nEvents(ev)) {
     const tol = Math.min(0.04, beatAt(an, q) / (2 * div));
     const et = ev.t;
     const j = Math.min(Math.max(searchsorted(et, q), 1), et.length - 1);
-    const near = q - at(et, j - 1) <= at(et, j) - q ? at(et, j - 1) : at(et, j);
+    const near = q - et.at(j - 1)! <= et.at(j)! - q ? et.at(j - 1)! : et.at(j)!;
     if (Math.abs(near - q) <= tol) return near;
   }
   return q;
@@ -1057,13 +1059,13 @@ function rain(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
   const [f0, f1] = frameSpan(an, ph);
-  const rng = new Rng(Math.trunc(ph.t0 * 100));
+  const rng = new Seeded(Math.trunc(ph.t0 * 100));
   const n = f1 - f0;
   if (ct !== null) {
     const lv = an.loudFast.slice(f0, f1);
     const field = Array.from({ length: n }, () => new Float64Array(BAR));
     for (let k = 0; k < n; k += 2) {
-      const density = 0.04 + 0.16 * at(lv, Math.min(k, lv.length - 1));
+      const density = 0.04 + 0.16 * lv[Math.min(k, lv.length - 1)];
       const spark = rng.randoms(BAR);
       for (let r = k; r < Math.min(n, k + 3); r++) for (let q = 0; q < BAR; q++) if (spark[q] < density) field[r][q] = 1.0;
     }
@@ -1138,7 +1140,7 @@ function yWink(ys: Car[], an: Analysis, ph: Phrase) {
   const bar = barLen(an);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = flashLen(ev, i);
-    const who = pymod(Math.trunc((t - ph.t0) / bar), 2);
+    const who = mod(Math.trunc((t - ph.t0) / bar), 2);
     const car = ys[who];
     const lamps = car.lamps();
     const pos = posOf(ev.top[i], lo, hi, 0.999);
@@ -1261,7 +1263,7 @@ function antiphony(cars: Car[], an: Analysis, ph: Phrase) {
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = flashLen(ev, i);
     const pos = posOf(ev.top[i], lo, hi, 0.999);
-    const truckTurn = pymod(Math.trunc((t - ph.t0) / bar), 2) === 0;
+    const truckTurn = mod(Math.trunc((t - ph.t0) / bar), 2) === 0;
     if (truckTurn && ct !== null) {
       comet(ct, t, pos, d + 0.15);
       ct.flash(ct.heads(pos < 0.5 ? 'L' : 'R'), t, d);
@@ -1348,7 +1350,7 @@ function lrChannel(cars: Car[], an: Analysis, ph: Phrase) {
     const hold = Math.max(0.12, Math.min(0.45, (nxt - b) * 0.8));
     const left = k % 2 === 0;
     if (ys.length) {
-      const car = left ? ys[0] : at(ys, -1);
+      const car = left ? ys[0] : ys[ys.length - 1];
       car.light([...car.sig(), ...car.drl(), ...car.heads()], b, b + hold);
     }
     if (ct !== null) {
@@ -1397,7 +1399,7 @@ function fadeCross(cars: Car[], an: Analysis, ph: Phrase) {
   for (let q = 0; q + 1 < downs.length; q++) {
     const t = downs[q], stop = Math.min(downs[q + 1], ph.t1);
     if (stop - t < 0.3) continue;
-    const [up, down] = k % 2 === 0 ? [ys[0], at(ys, -1)] : [at(ys, -1), ys[0]];
+    const [up, down] = k % 2 === 0 ? [ys[0], ys[ys.length - 1]] : [ys[ys.length - 1], ys[0]];
     if (ys.length >= 2) {
       up.light([...up.sig(), ...up.drl(), ...up.inner()], t, stop, C.ON_1000);
       down.light([...down.sig(), ...down.drl(), ...down.inner()], t, stop, C.OFF_1000);
@@ -1452,7 +1454,7 @@ function curtain(cars: Car[], an: Analysis, ph: Phrase) {
   const span = ph.t1 - tOpen;
   if (span < 1.5) return;
   const sw = Math.min(bar, span / 3);
-  const tClose = Math.max(tOpen + sw, downs.length > 2 ? at(downs, -1) : ph.t1 - sw);
+  const tClose = Math.max(tOpen + sw, downs.length > 2 ? downs[downs.length - 1] : ph.t1 - sw);
   const onAt = qSteps(an, tOpen, sw, n);
   const offAt = qSteps(an, tClose, sw, n).reverse();
   slots.forEach(([car, side], j) => {
@@ -1516,11 +1518,11 @@ function marquee(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const hits = grid(an, ph, 'beats');
   const beat = beatLen(an);
-  const perTurn = Math.max(4, Math.trunc(round((2 * barLen(an)) / Math.max(hits.length > 1 ? median(diff(hits)) : beat, 0.1))));
+  const perTurn = Math.max(4, Math.trunc(Math.round((2 * barLen(an)) / Math.max(hits.length > 1 ? median(diff(hits)) : beat, 0.1))));
   let phase = 0;
   hits.forEach((b, k) => {
     const hold = Math.max(0.12, Math.min(0.8, (next(hits, k, beat) - b) * 0.92));
-    phase = pymod(phase + (Math.floor(k / perTurn) % 2 === 0 ? 1 : -1), 3);
+    phase = mod(phase + (Math.floor(k / perTurn) % 2 === 0 ? 1 : -1), 3);
     line.forEach(([car, lamp], i) => {
       if (i % 3 === phase) car.light(lamp, b, b + hold);
     });
@@ -1614,7 +1616,7 @@ const SPARKLE: Record<string, [number, number, number]> = {   // mood: subdivisi
  * Calm: one soft twinkle per beat that glows and fades. Frenzy: three sharp ones per sixteenth.
  * For shimmering textures, trills, high bells, magical moments, and the quiet after a climax. */
 function sparkle(cars: Car[], an: Analysis, ph: Phrase) {
-  const rng = new Rng(pymod(Math.trunc(ph.t0 * 1000), 2 ** 32));
+  const rng = new Seeded(Math.trunc(ph.t0 * 1000));
   const lamps: [Car, number[]][] = [];
   for (const c of cars) for (const lamp of c.lamps()) lamps.push([c, lamp]);
   const ct = centreTruck(cars);
@@ -1634,7 +1636,7 @@ function sparkle(cars: Car[], an: Analysis, ph: Phrase) {
     if (ct !== null) {
       const m = Math.max(2, ct.fr(t + Math.max(hold, 0.2)) - ct.fr(t));
       const mask = new Float64Array(BAR);
-      for (const j of rng.choiceNoReplace(BAR, 2 * count)) mask[j] = 1.0;
+      for (const j of rng.choose(BAR, 2 * count)) mask[j] = 1.0;
       const env = linspace(1, 0, m);
       ct.pixels(C.FRONT_BAR, t, rows(m, (f, k) => env[f] * mask[k]));
     }
@@ -1654,7 +1656,7 @@ function sunrise(cars: Car[], an: Analysis, ph: Phrase) {
   const ringOf = (j: number) => Math.trunc(Math.abs(j - (n - 1) / 2));
   const rings = [...new Set(slots.map((_, j) => ringOf(j)))].sort((p, q) => p - q);   // 0 = truck, 2 = outer halves
   const riseAt = rings.map((r) => downs[Math.min(r, downs.length - 1)]);
-  const setFrom = downs.length >= 2 * rings.length ? at(downs, -rings.length) : ph.t1 - (ph.t1 - ph.t0) * 0.3;
+  const setFrom = downs.length >= 2 * rings.length ? downs.at(-rings.length)! : ph.t1 - (ph.t1 - ph.t0) * 0.3;
   const setStep = Math.max(0.4, (ph.t1 - setFrom) / rings.length);
   slots.forEach(([car, side], j) => {
     const r = ringOf(j);
@@ -1682,7 +1684,7 @@ function scanner(cars: Car[], an: Analysis, ph: Phrase) {
   if (ct === null) return wave(cars, an, ph);
   const hits = grid(an, ph, 'beats');
   const beat = beatLen(an);
-  for (const y of [cars[0], at(cars, -1)]) if (!y.isCt) y.light(y.drl(), ph.t0, ph.t1, C.ON_1000);
+  for (const y of [cars[0], cars[cars.length - 1]]) if (!y.isCt) y.light(y.drl(), ph.t0, ph.t1, C.ON_1000);
   hits.forEach((b, k) => {
     const dur = Math.max(0.2, next(hits, k, beat) - b);
     const ltr = k % 2 === 0;
@@ -1693,7 +1695,7 @@ function scanner(cars: Car[], an: Analysis, ph: Phrase) {
       const behind = (q - pos[f]) * (ltr ? -1 : 1);      // >0 behind the eye
       return behind >= 0 ? Math.exp(-behind / 6.0) : Math.exp(behind / 1.5);
     }));
-    const endCar = ltr ? at(cars, -1) : cars[0];
+    const endCar = ltr ? cars[cars.length - 1] : cars[0];
     if (!endCar.isCt) {
       const side = innerSide(endCar, cars);
       endCar.flash([...endCar.heads(side), ...endCar.accents(side)], b + dur, Math.min(0.25, dur * 0.6));
@@ -1722,7 +1724,7 @@ function accelerando(cars: Car[], an: Analysis, ph: Phrase) {
     const q = Math.min(3, Math.trunc((4 * (b - ph.t0)) / span));
     const sub = subs[q];
     if (sub < 1) {
-      if (ticks.length && b - at(ticks, -1)[0] < 2 * beat * 0.9) continue;
+      if (ticks.length && b - ticks[ticks.length - 1][0] < 2 * beat * 0.9) continue;
       ticks.push([b, q]);
     } else {
       for (let s = 0; s < Math.trunc(sub); s++) ticks.push([b + (beat * s) / sub, q]);
@@ -1775,7 +1777,7 @@ export function teardown(cars: Car[], t0: number, span: number) {
   }
   if (ct !== null) {
     const m = Math.max(2, ct.fr(t0 + span) - ct.fr(t0));
-    const rng = new Rng(pymod(Math.trunc(t0 * 1000), 2 ** 32));
+    const rng = new Seeded(Math.trunc(t0 * 1000));
     const d = linspace(-1, 1, BAR).map(Math.abs);
     const r = rng.randoms(BAR);
     const die = d.map((v, k) => clip((1 - v) * 0.8 + r[k] * 0.2, 0, 1));     // ends die first
@@ -1794,14 +1796,14 @@ function pingPong(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   if (ys.length < 2) return lrBeat(cars, an, ph);
   const beats = grid(an, ph, 'beats');
-  const downs = new Set(an.downbeats.map((d) => roundTo(d, 2)));
+  const downs = new Set(an.downbeats.map(ms));
   let barK = 0;
   for (const b of beats) {
-    if (downs.has(pyRound(b, 2))) {
+    if (downs.has(ms(b))) {
       barK += 1;
       if (ct !== null) barFlash(ct, b, 0.3, 0.9);
     }
-    const [lead, follow] = barK % 2 === 0 ? [ys[0], at(ys, -1)] : [at(ys, -1), ys[0]];
+    const [lead, follow] = barK % 2 === 0 ? [ys[0], ys[ys.length - 1]] : [ys[ys.length - 1], ys[0]];
     const half = beatAt(an, b) / 2;
     lead.flash([...lead.heads(), ...lead.accents()], b, Math.min(0.2, half * 0.8));
     follow.flash([...follow.heads(), ...follow.accents()], snap(an, b + half, 2), Math.min(0.2, half * 0.8));
@@ -1852,7 +1854,7 @@ function stripes(cars: Car[], an: Analysis, ph: Phrase) {
     if (ct !== null) {
       const m = Math.max(2, ct.fr(b + dur) - ct.fr(b));
       const shift = linspace(0, (2.5 * BAR) / 4, m).map((v) => v * (k % 2 === 0 ? 1 : -1));
-      ct.pixels(C.FRONT_BAR, b, rows(m, (f, q) => (pymod(q + shift[f], BAR / 4) < 4 ? 1 : 0)));
+      ct.pixels(C.FRONT_BAR, b, rows(m, (f, q) => (mod(q + shift[f], BAR / 4) < 4 ? 1 : 0)));
     }
   });
 }
