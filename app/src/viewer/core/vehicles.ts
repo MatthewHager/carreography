@@ -368,6 +368,16 @@ export const MODEL_Y_2025 = profile({
   ],
 });
 
+// The Model Y L (six seats, a longer body) has the 2025+ Model Y's front and rear light bars; no
+// light show test of it is known, so it takes the light-bar Model Y's map.
+export const MODEL_Y_L = profile({
+  ...MODEL_Y_2025,
+  id: 'modelY-L',
+  variant: 'L · 2025 – present',
+  hint: 'Six seats, a longer body; light bars across the front and back',
+  rows: MODEL_Y_2025.channels.map(({ id, group, ...extra }): Row => [id, group, extra]),
+});
+
 export const MODEL_Y_STANDARD = profile({
   id: 'modelY-2026-standard',
   model: 'modelY',
@@ -435,6 +445,7 @@ export const VEHICLES: readonly VehicleProfile[] = [
   MODEL_X_2025,
   MODEL_Y_2020,
   MODEL_Y_2025,
+  MODEL_Y_L,
   MODEL_Y_STANDARD,
   CYBERTRUCK_2024,
 ];

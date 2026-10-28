@@ -30,16 +30,17 @@ export interface Vehicle {
   falcon?: boolean;              // Model X falcon doors (motors.ts)
 }
 
+/** In menu order. */
 export const VEHICLES: Record<string, Vehicle> = {
-  Y: { letter: 'Y', kind: 'modely', model: 'ModelY', label: 'Model Y (2025+)', juniper: true, body: 'bayberry' },
-  y: { letter: 'y', kind: 'modely', model: 'ModelY', label: 'Model Y (2020-2024)', juniper: false, body: 'y_high' },
-  C: { letter: 'C', kind: 'cybertruck', model: 'Cybertruck', label: 'Cybertruck', juniper: false, body: 'cybertruck' },
   S: { letter: 'S', kind: 'modely', model: 'ModelS', label: 'Model S (2021+)', juniper: false, body: 's_palladium' },
   M: { letter: 'M', kind: 'modely', model: 'Model3', label: 'Model 3 (2024+)', juniper: false, body: 'poppyseed' },
   m: { letter: 'm', kind: 'modely', model: 'Model3', label: 'Model 3 (2017-2023)', juniper: false, body: 'model3_high' },
   X: { letter: 'X', kind: 'modely', model: 'ModelX', label: 'Model X (2021+)', juniper: false, body: 'x_palladium', falcon: true },
+  Y: { letter: 'Y', kind: 'modely', model: 'ModelY', label: 'Model Y (2025+)', juniper: true, body: 'bayberry' },
   B: { letter: 'B', kind: 'modely', model: 'ModelY', label: 'Model Y Standard (2025+)', juniper: false, body: 'bayberry_e41' },
   L: { letter: 'L', kind: 'modely', model: 'ModelYL', label: 'Model Y L', juniper: true, body: 'bayberry_e80' },
+  y: { letter: 'y', kind: 'modely', model: 'ModelY', label: 'Model Y (2020-2024)', juniper: false, body: 'y_high' },
+  C: { letter: 'C', kind: 'cybertruck', model: 'Cybertruck', label: 'Cybertruck', juniper: false, body: 'cybertruck' },
 };
 
 /** Place names by lineup length, crowd's left to right. */

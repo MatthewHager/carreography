@@ -5,11 +5,11 @@ import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 import type { AppModelId } from '@/viewer/car/appBody';
 import { FILES } from '@/viewer/car/appBody';
-import { addModelFile, MODEL_LABELS } from './models';
+import { addModelFile, MODEL_LABELS, PAINT_FILE } from './models';
 
 export function ModelsCard({ missing, onAdded }: { missing: AppModelId[]; onAdded: () => void }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: { 'model/gltf-binary': ['.glb'] },
+    accept: { 'model/gltf-binary': ['.glb'], 'application/json': ['.json'] },
     onDrop: async (files) => {
       let added = 0;
       for (const f of files) {
@@ -18,7 +18,7 @@ export function ModelsCard({ missing, onAdded }: { missing: AppModelId[]; onAdde
           if (id) added++;
           else toast.error(`${f.name} isn't one of the Tesla app's models`);
         } catch {
-          toast.error(`${f.name} couldn't be read as a 3D model`);
+          toast.error(`${f.name} couldn't be read`);
         }
       }
       if (added) {
@@ -34,7 +34,7 @@ export function ModelsCard({ missing, onAdded }: { missing: AppModelId[]; onAdde
         can't include them: extract them once with{' '}
         <a className="text-foreground underline underline-offset-2" href="https://github.com/koenhendriks/tesla-model-extractor"
           target="_blank" rel="noreferrer">tesla-model-extractor</a>{' '}
-        and add the files here. Your browser keeps them.
+        and add the files here, with its <code>{PAINT_FILE}</code> for the paint colours. Your browser keeps them.
       </p>
       <ul className="space-y-1">
         {missing.map((id) => (
@@ -49,7 +49,7 @@ export function ModelsCard({ missing, onAdded }: { missing: AppModelId[]; onAdde
           text-xs text-muted-foreground transition-colors ${isDragActive ? 'border-ring bg-accent/40' : 'hover:bg-accent/30'}`}>
         <input {...getInputProps()} />
         <Box className="size-5" />
-        Drop the .glb files here, or click to choose them
+        Drop the .glb files (and {PAINT_FILE}) here, or click to choose them
       </div>
       <p className="text-xs text-muted-foreground">The light show files work without them.</p>
     </div>

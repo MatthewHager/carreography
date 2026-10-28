@@ -7,7 +7,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import type { AppModelId } from '@/viewer/car/appBody';
 import { DownloadSheet } from '@/app/DownloadSheet';
-import { LineupEditor } from '@/app/LineupEditor';
+import { DEFAULT_PAINT, LineupEditor } from '@/app/LineupEditor';
 import { ModelsCard } from '@/app/ModelsCard';
 import { showFromBridge, showFromFile } from '@/app/pipeline';
 import { Player } from '@/app/player';
@@ -21,6 +21,7 @@ const params = new URLSearchParams(location.search);
 export default function App() {
   const player = useMemo(() => new Player(), []);
   const [lineup, setLineup] = useState(params.get('lineup') ?? 'YCY');
+  const [paints, setPaints] = useState<string[]>([]);
   const [song, setSong] = useState<File | null>(null);
   const [show, setShow] = useState<Show | null>(null);
   const [wav, setWav] = useState<Blob | undefined>();
@@ -32,6 +33,7 @@ export default function App() {
 
   const onMissing = useCallback((ids: AppModelId[]) => setMissing(ids), []);
   const stale = show !== null && show.lineup !== lineup;
+  const carPaints = useMemo(() => [...lineup].map((_, i) => paints[i] ?? DEFAULT_PAINT), [lineup, paints]);
 
   useEffect(() => {
     if (import.meta.env.DEV) (window as unknown as { __show: Show | null }).__show = show;   // for checks
@@ -76,8 +78,8 @@ export default function App() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-background">
-      <Stage key={modelsVersion} lineup={lineup} show={stale ? null : show} player={player} camera={camera}
-        onMissing={onMissing} />
+      <Stage key={modelsVersion} lineup={lineup} paints={carPaints} show={stale ? null : show} player={player}
+        camera={camera} onMissing={onMissing} />
 
       <div className="pointer-events-none absolute inset-0 flex flex-col p-3 sm:p-4">
         <div className="pointer-events-auto w-full max-w-sm space-y-3 rounded-2xl border bg-card p-4 shadow-2xl
@@ -100,7 +102,10 @@ export default function App() {
                   setShow(null);
                 }} />
               <Separator />
-              <LineupEditor lineup={lineup} onChange={setLineup} disabled={!!busy} />
+              <LineupEditor lineup={lineup} paints={carPaints} disabled={!!busy} onChange={(l, p) => {
+                setLineup(l);
+                setPaints(p);
+              }} />
             </>
           )}
           {busy ? (

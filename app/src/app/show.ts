@@ -1,8 +1,8 @@
 // A finished show: one frame array per car, plus the song it plays to.
 
 import { N_CHANNELS, STEP_MS } from '@/engine/channels';
+import { VEHICLES } from '@/engine/vehicles';
 import type { AppModelId } from '@/viewer/car/appBody';
-import type { CarKind, YBody } from '@/viewer/rig';
 
 export interface ShowCar {
   name: string;          // Car2_Cybertruck_Center: the folder its USB drive needs
@@ -21,9 +21,7 @@ export interface Show {
 export const STEP_S = STEP_MS / 1000;
 export const CHANNELS = N_CHANNELS;
 
-/** How the 3D view draws a lineup letter. */
-export function bodyFor(letter: string): { kind: CarKind; yBody: YBody; model: AppModelId } {
-  if (letter === 'C') return { kind: 'cybertruck', yBody: 'refresh', model: 'cybertruck' };
-  if (letter === 'y') return { kind: 'modely', yBody: 'mesh', model: 'y_high' };
-  return { kind: 'modely', yBody: 'refresh', model: 'bayberry' };
+/** The Tesla app model the 3D view draws a lineup letter with. */
+export function modelFor(letter: string): AppModelId {
+  return VEHICLES[letter].body as AppModelId;
 }

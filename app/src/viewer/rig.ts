@@ -6,16 +6,51 @@
 import * as THREE from 'three';
 import type { Simulation } from './core/simulate';
 import type { VehicleProfile } from './core/vehicles';
-import { CYBERTRUCK_2024, MODEL_Y_2020, MODEL_Y_2025 } from './core/vehicles';
-import type { Builder, BuiltBody, GlowHandle, Materials } from './car/builder';
+import {
+  CYBERTRUCK_2024, MODEL_3_2020, MODEL_3_2024, MODEL_S_2021, MODEL_X_2021, MODEL_Y_2020, MODEL_Y_2025, MODEL_Y_L,
+  MODEL_Y_STANDARD,
+} from './core/vehicles';
+import type { Builder, BuiltBody, GlowHandle } from './car/builder';
 import { buildAppBody, type AppModelId } from './car/appBody';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GlowEntry } from './glow';
 
-export type CarKind = 'modely' | 'cybertruck';
-/** Which Model Y: 2020-24 ('mesh') or 2025+ "Juniper" ('refresh', front light bar). */
-export type YBody = 'mesh' | 'refresh';
+/** Which channels each app model's car has, and how it treats them (core/vehicles.ts). */
+export const PROFILES: Record<AppModelId, VehicleProfile> = {
+  s_palladium: MODEL_S_2021,
+  model3_high: MODEL_3_2020,
+  poppyseed: MODEL_3_2024,
+  x_palladium: MODEL_X_2021,
+  y_high: MODEL_Y_2020,
+  bayberry: MODEL_Y_2025,
+  bayberry_e41: MODEL_Y_STANDARD,
+  bayberry_e80: MODEL_Y_L,
+  cybertruck: CYBERTRUCK_2024,
+};
 
+/** A paint from the Tesla app's paint table (paints.json): its colour as the app stores it. */
+export interface Paint {
+  name: string;
+  albedo: string;
+  metallic: number;
+  roughness: number;
+}
+
+/** The app keeps its paint colours very dark and brightens them with its studio lighting; this is the
+ * factor tesla-model-extractor measured for its GLB export (`--paint-brightness`). */
+const PAINT_BRIGHTNESS = 8;
+
+/**
+ * A paint's colour on our lot: the app's colour brightened as the extractor does (in gamma space,
+ * keeping the hue). The lot has no studio reflections, so the share of the look the app's metal
+ * leaves to reflections (its metallic beyond the base coat's 0.3) stays dark: black paint stays black.
+ */
+export function paintColor(paint: Paint): THREE.Color {
+  const { r, g, b } = new THREE.Color(paint.albedo).getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace);
+  const k = Math.min(PAINT_BRIGHTNESS, 1 / Math.max(r, g, b, 1e-6));
+  const reflected = THREE.MathUtils.clamp((paint.metallic - 0.3) / 0.7, 0, 1);
+  return new THREE.Color().setRGB(r * k, g * k, b * k, THREE.SRGBColorSpace).multiplyScalar(1 - 0.85 * reflected);
+}
 interface LightPart {
   ids: string[];
   material: THREE.MeshStandardMaterial;
@@ -58,8 +93,9 @@ export class CarRig {
   readonly glowEntries: GlowEntry[] = [];
   bounds: BuiltBody = { halfLength: 2.4, height: 1.6, halfWidth: 1 };
   private car = new THREE.Group();
-  private readonly m: Materials;
   private lights: LightPart[] = [];
+  /** The model's own paint (its colour, metalness, roughness), for setPaint(null). */
+  private ownPaint: { color: THREE.Color; metalness: number; roughness: number }[] = [];
   private bars: LedBar[] = [];
   private closures: { id: string; apply: (p: number, d: boolean, t: number) => void }[] = [];
   private pools: Pool[] = [];
@@ -70,25 +106,37 @@ export class CarRig {
   private frame = 0;
 
   constructor(
-    readonly kind: CarKind,
     readonly name: string,
-    yBody: YBody,
-    paint: string,
     /** Tesla's own model from the Tesla app (appBody.ts). */
     private readonly app: { id: AppModelId; gltf: GLTF },
   ) {
-    this.profile = kind === 'cybertruck' ? CYBERTRUCK_2024 : yBody === 'mesh' ? MODEL_Y_2020 : MODEL_Y_2025;
-    this.m = makeMaterials(paint, kind);
+    this.profile = PROFILES[app.id];
     this.cabinLight.visible = false;
     this.group.add(this.car);
     this.build();
+  }
+
+  /** Paints the car in one of the app's paints; null keeps the model's own. No-op on the Cybertruck. */
+  setPaint(paint: Paint | null): void {
+    (this.bounds.paints ?? []).forEach((m, i) => {
+      const own = this.ownPaint[i]!;
+      if (!paint) {
+        m.color.copy(own.color);
+        m.metalness = own.metalness;
+        m.roughness = own.roughness;
+        return;
+      }
+      // The metal and gloss tamed as nightLot (appBody.ts) does for every material.
+      m.color.copy(paintColor(paint));
+      m.metalness = Math.min(paint.metallic, 0.35);
+      m.roughness = Math.max(paint.roughness, 0.5);
+    });
   }
 
   private build(): void {
     const car = this.car;
     const builder: Builder = {
       car,
-      m: this.m,
       cabinLight: this.cabinLight,
       light: (parent, ids, color, lens, size, position, gain = 5) => {
         const material = new THREE.MeshStandardMaterial({ color: lens, roughness: 0.2, metalness: 0.1 });
@@ -120,6 +168,7 @@ export class CarRig {
     };
 
     this.bounds = buildAppBody(builder, this.app.gltf, this.app.id);
+    this.ownPaint = (this.bounds.paints ?? []).map((m) => ({ color: m.color.clone(), metalness: m.metalness, roughness: m.roughness }));
     // The body builder adds the cabin light to the car; it stays
     // hidden (no per-pixel light cost) and only marks where the display is.
     this.cabinLight.visible = false;
@@ -253,7 +302,7 @@ export class CarRig {
     const inv = new THREE.Matrix4().copy(this.car.matrixWorld).invert();
     box.applyMatrix4(inv);
     const size = box.getSize(new THREE.Vector3());
-    const ct = this.kind === 'cybertruck';
+    const ct = this.app.id === 'cybertruck';
     // Greenhouse: the cabin sits in its lower part, between the pillars.
     const x0 = box.min.x + size.x * (ct ? 0.3 : 0.2);
     const x1 = box.max.x - size.x * (ct ? 0.22 : 0.25);
@@ -348,14 +397,6 @@ export class CarRig {
 }
 
 // --- helpers ---------------------------------------------------------------
-
-function makeMaterials(paint: string, kind: CarKind): Materials {
-  const paintParams: THREE.MeshPhysicalMaterialParameters =
-    kind === 'cybertruck'
-      ? { color: paint, metalness: 0.3, roughness: 0.55, clearcoat: 0 }
-      : { color: paint, metalness: 0.15, roughness: 0.6, clearcoat: 0 };
-  return { paint: new THREE.MeshPhysicalMaterial(paintParams) };
-}
 
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
