@@ -56,10 +56,14 @@ export function choreograph(an: Analysis, opts: Options = {}): Car[] {
   const { layout = 'YCY', useLiftgate = true, name = null, style = null, driver = null } = opts;
   const cars = makeLineup(layout, an.nFrames, an.step);
   const words = an.lyricWords;
-  const phrases = segment(an.events, words && words.length ? LY.lines(words).map((l) => l[0]) : null);
+  // LRCLIB's lines (a song dropped into the browser) when there are no Whisper words (the Python analyses)
+  const sung = !(words && words.length) && an.lyricLines?.length ? an.lyricLines : null;
+  const phrases = segment(an.events, words && words.length ? LY.lines(words).map((l) => l[0])
+    : sung ? sung.map((l) => l.t) : null);
   an.phrases = phrases;
   const cues: Cues = name ? CUE.resolve(name, an) : [];
   if (words && words.length && name) cues.push(...LY.lyricCues(name, words));
+  else if (sung) cues.push(...LY.lineCues(sung, an));
   an.cuePeaks = cues.filter(([a]) => a === 'peak').map(([, c]) => [c.t0, c.build!, c.hold ?? null, c.final ?? false]);
   for (const [a, c] of cues) {                     // ceilings are needed before the plan is chosen
     if (a === 'ceiling' && an.sections && an.sections.length) {
