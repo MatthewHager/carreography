@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import type { AppModelId } from '@/viewer/car/appBody';
 import { DownloadSheet } from '@/app/DownloadSheet';
+import { unsupported } from '@/app/errors';
 import { LineupEditor } from '@/app/LineupEditor';
 import { ModelsCard } from '@/app/ModelsCard';
 import { showFromBridge, showFromFile } from '@/app/pipeline';
@@ -56,6 +57,8 @@ export default function App() {
   const bridge = import.meta.env.DEV ? params.get('bridge') : null;
 
   useEffect(() => {
+    const why = unsupported();
+    if (why) toast.error(why, { duration: Infinity });
     const dev = import.meta.env.DEV ? params.get('song') : null;    // a recording in output/, as if dropped in
     if (dev) {
       void fetch(`${import.meta.env.BASE_URL}dev/output/${dev}/${dev}.wav`).then(async (r) => {

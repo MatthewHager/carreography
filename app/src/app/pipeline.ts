@@ -4,6 +4,7 @@
 import { mixdown } from '@/engine/listen/resample';
 import type { Reply, Request } from './show.worker';
 import { fileName } from './DownloadSheet';
+import { explain, outOfMemory, unsupported } from './errors';
 import type { Show } from './show';
 import { encodeWav } from './wav';
 
@@ -23,11 +24,11 @@ function run(req: Request, onProgress: Progress, transfer: Transferable[] = []):
       if (r.keep) kept = worker;
       else worker.terminate();
       if (r.kind === 'done') resolve(r);
-      else reject(new Error(r.message));
+      else reject(new Error(explain(r.message)));
     };
     worker.onerror = (e) => {        // it couldn't start, or died
       worker.terminate();
-      reject(new Error(e.message));
+      reject(new Error(explain(e.message)));
     };
     worker.postMessage(req, transfer);
   });
@@ -56,13 +57,17 @@ export async function showFromBridge(song: string, lineup: string, onProgress: P
 /** A song from this device: decoded at 44.1 kHz (Tesla's rate, and the one the analysis was tuned on),
  * then listened to and choreographed in the worker. */
 export async function showFromFile(file: File, lineup: string, onProgress: Progress): Promise<{ show: Show; wav: Blob }> {
+  const why = unsupported();
+  if (why) throw new Error(why);
   onProgress('Opening the song');
   const ctx = new OfflineAudioContext(2, 1, 44100);
   let audio: AudioBuffer;
   try {
     audio = await ctx.decodeAudioData(await file.arrayBuffer());
-  } catch {
-    throw new Error(`${file.name} couldn't be read as audio`);
+  } catch (err) {
+    if (outOfMemory(String(err))) throw new Error(explain(err));
+    throw new Error(`${file.name} couldn't be opened as a song. This browser reads MP3, M4A and WAV files; `
+      + 'try one of those.');
   }
   const channels = Array.from({ length: Math.min(2, audio.numberOfChannels) }, (_, i) => audio.getChannelData(i));
   const wav = encodeWav(channels, audio.sampleRate);

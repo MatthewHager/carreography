@@ -49,6 +49,6 @@ self.onmessage = async (e: MessageEvent<Request>) => {
       backend: lastBackend(), keep: touchedGpu() },
       cars.map((c) => c.frames.buffer));
   } catch (err) {
-    post({ kind: 'error', message: (err as Error).message ?? String(err), keep: touchedGpu() });
+    post({ kind: 'error', message: String(err), keep: touchedGpu() });   // "RangeError: ..." tells memory apart
   }
 };
