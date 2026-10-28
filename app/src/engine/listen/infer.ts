@@ -9,7 +9,7 @@
 // to the next backend by itself; the visitor never has to choose. Sessions are kept for the next song;
 // a pool's workers are let go after each run, since each holds its own copy of the model.
 
-import { createSession, runSession, type Ep, type ort } from './session';
+import { createSession, ort, runSession, type Ep } from './session';
 
 export type Backend = 'webgpu' | 'pool' | 'wasm';
 
@@ -101,7 +101,7 @@ export async function runPieces(model: Model, pieces: Piece[], opts: RunOptions 
   const tick = () => opts.onProgress?.(++done / pieces.length);
   if (backend === 'webgpu') {
     try {
-      const out = await runInOrder(await session(model, 'webgpu', opts.bytes), model, pieces, tick);
+      const out = await runOnGpu(await session(model, 'webgpu', opts.bytes), model, pieces, tick);
       used = 'webgpu';
       return out;
     } catch (err) {
@@ -138,6 +138,34 @@ async function runInOrder(s: ort.InferenceSession, model: Model, pieces: Piece[]
     tick();
   }
   return out;
+}
+
+// A piece takes a second or so on a GPU; one that takes this long isn't coming back.
+const GPU_STALL_MS = 60_000;
+
+/** runInOrder on the GPU session, but failing when its device is lost or a piece hangs: after a device
+ * error Safari can leave a run waiting forever. */
+async function runOnGpu(s: ort.InferenceSession, model: Model, pieces: Piece[], tick: () => void) {
+  const device = await ort.env.webgpu.device;           // ORT's own, now that a session has it
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let rearm = () => {};
+  const watch = new Promise<never>((_, reject) => {
+    rearm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => reject(new Error('WebGPU stopped answering')), GPU_STALL_MS);
+    };
+    void device.lost.then((info) => reject(new Error(`WebGPU device lost: ${info.message || info.reason}`)));
+  });
+  watch.catch(() => undefined);                         // a loss after the run is no one's business
+  rearm();
+  try {
+    return await Promise.race([runInOrder(s, model, pieces, () => {
+      rearm();
+      tick();
+    }), watch]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 type Reply = { ok: true; outputs?: Outputs } | { ok: false; error: string };
