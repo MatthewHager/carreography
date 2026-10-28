@@ -192,22 +192,32 @@ Then Compile applies the car rules:
 
 Every light-show car that has a Tesla app model. Each uses Tesla's own model and animations.
 
-| Car | App model |
-|---|---|
-| Model S 2021+ | `s_palladium` |
-| Model 3 2017–23 | `model3_high` |
-| Model 3 2024+ | `poppyseed` |
-| Model X 2021+ | `x_palladium` |
-| Model Y 2020–24 | `y_high` |
-| Model Y 2025+ Premium / Performance | `bayberry` |
-| Model Y 2025+ Standard | `bayberry_e41` |
-| Model Y L | `bayberry_e80` |
-| Cybertruck | `cybertruck` |
+| Car | Lineup letter | App model |
+|---|---|---|
+| Model S 2021+ | `S` | `s_palladium` |
+| Model 3 2017–23 | `m` | `model3_high` |
+| Model 3 2024+ | `M` | `poppyseed` |
+| Model X 2021+ | `X` | `x_palladium` |
+| Model Y 2020–24 | `y` | `y_high` |
+| Model Y 2025+ Premium / Performance | `Y` | `bayberry` |
+| Model Y 2025+ Standard | `B` | `bayberry_e41` |
+| Model Y L | `L` | `bayberry_e80` |
+| Cybertruck | `C` | `cybertruck` |
 
 Not included: Semi, and the Model S and X before 2021, which Tesla doesn't support for light shows.
 
-You pick each car's paint from the colours in the app's `paints.json`. The Cybertruck only comes in
-stainless.
+The moves speak the Model Y's lamps on every car but the Cybertruck: Tesla's Model S, 3 and X take the
+same channels, and the cars with a front light bar (`Y`, `L`) translate them at the end. A Model X's
+falcon doors open for the song's biggest peak and dance; its windows keep still while they move,
+because Tesla warns that moving windows can trip the doors' pinch detection and stop the show.
+
+You pick each car's paint from the colours in the app's `paints.json`. The table is the same for every
+car (the app doesn't say which paints each model was sold in), so every car offers all of them. The
+Cybertruck only comes in stainless.
+
+Lamps the app has no model of stay dark in the preview: the front fogs and aux park lamps of the 2024+
+Model 3 and the Model Y Standard (they may not have them), the Model Y L's front turn signals and
+reverse lamps, and the Model X's rear fog.
 
 The models are Tesla's files: they're extracted from the Tesla app on the user's own machine and never
 committed or hosted.

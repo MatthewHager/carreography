@@ -26,9 +26,10 @@ npm run build        # the site, in dist/
 
 - **The analysis models** (`public/models/*.onnx`). `tools/export_models.py` makes them; the site build
   downloads them from the repository's `models` release. For local work, put them in `public/models/`.
-- **Tesla's car models.** Visitors add the `.glb` files they extracted themselves, and the browser keeps
-  them. While developing, the dev server also serves the copies in `preview3d/public/models/tesla-app/`
-  (see `lightshow/tesla_app_models.py`).
+- **Tesla's car models and paints.** Visitors add the `.glb` files they extracted themselves, and the
+  app's paint table (`paints.json`, the same next to every model), and the browser keeps them. While
+  developing, the dev server also serves the copies in `preview3d/public/models/tesla-app/` (see
+  `lightshow/tesla_app_models.py`). Without the paint table every car keeps its model's own paint.
 - **The Python comparisons** (`cache/bridge/`, from `tools/export_bridge.py`). They describe copyrighted
   recordings, so they stay on your machine. Without them `bridge.test.ts` is skipped. With them, the dev
   server can play a song through the TypeScript choreographer from its Python analysis:
