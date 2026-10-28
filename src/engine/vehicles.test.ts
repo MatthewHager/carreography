@@ -1,32 +1,28 @@
-// Every lineup letter makes a show within Tesla's rules: the closure command limits, and on a Model X
-// the falcon doors' gesture with the windows still while the doors move. Uses one of the frozen
-// analyses in cache/bridge (see bridge.test.ts); without them it's skipped.
+// Every lineup makes a show within Tesla's rules, on every test song: the closure command limits, lids
+// that dance only once fully open, at most about 30 s of dancing per closure, a Model X's falcon doors
+// with its windows still while they move, the lights dark at the end, and one file per car in order.
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { fromBridge } from './analysis';
 import * as C from './channels';
 import { choreograph } from './choreo';
-import { FALCON_CLOSE_S, WINDOW_S } from './motors';
+import { FIXTURES, fixture } from './fixtures';
+import { FALCON_CLOSE_S, LIFTGATE_OPEN_S, WINDOW_S } from './motors';
 import { lineupCars, parseLineup, VEHICLES } from './vehicles';
 
-/** The top of this checkout: the nearest folder up that holds .git. */
-const top = (dir: string): string =>
-  (existsSync(join(dir, '.git')) || dirname(dir) === dir ? dir : top(dirname(dir)));
-const ROOT = join(top(import.meta.dirname), 'cache', 'bridge');
-const song = existsSync(ROOT) ? readdirSync(ROOT).filter((d) => existsSync(join(ROOT, d, 'analysis.json'))).sort()[0] : undefined;
+// one to five cars, every letter, no truck, one truck in the middle or at either end, several trucks
+const LINEUPS = ['Y', 'C', 'CY', 'YCY', 'yYC', 'CCC', 'SMXmB', 'YYCYY', 'CYyLX', 'BCYCB'];
 
 const COMMANDS = new Set([C.CLOSURE_OPEN, C.CLOSURE_DANCE, C.CLOSURE_CLOSE]);
 
-/** [start frame, value] of each command (a run of one non-zero value) on a channel. */
-function commands(frames: Uint8Array, nFrames: number, ch: number): [number, number][] {
-  const out: [number, number][] = [];
-  let prev = 0;
+/** [start frame, end frame, value] of each command (a run of one non-zero value) on a channel. */
+function commands(frames: Uint8Array, nFrames: number, ch: number): [number, number, number][] {
+  const out: [number, number, number][] = [];
   for (let f = 0; f < nFrames; f++) {
     const v = frames[f * C.N_CHANNELS + ch];
-    if (v && v !== prev) out.push([f, v]);
-    prev = v;
+    if (!v) continue;
+    const last = out[out.length - 1];
+    if (last && last[1] === f && last[2] === v) last[1] = f + 1;
+    else out.push([f, f + 1, v]);
   }
   return out;
 }
@@ -36,34 +32,54 @@ describe('vehicles', () => {
     for (const letter of 'SMmXYyBLC') expect(parseLineup(letter)).toBe(letter);
     expect(lineupCars('XL').map(([name]) => name)).toEqual(['Car1_ModelX_Left', 'Car2_ModelYL_Right']);
     expect(() => parseLineup('Q')).toThrow(/unknown car letter/);
+    expect(() => parseLineup('YYCYYY')).toThrow(/1 to 5 cars/);
     expect(new Set(Object.values(VEHICLES).map((v) => v.body)).size).toBe(Object.keys(VEHICLES).length);
   });
 });
 
-describe.skipIf(!song)('every car in a show', () => {
-  for (const lineup of ['SMXmB', 'LXC', 'X']) {
-    it(lineup, () => {
-      const { meta, an } = fromBridge(JSON.parse(readFileSync(join(ROOT, song!, 'analysis.json'), 'utf8')));
-      const cars = choreograph(an, { layout: lineup, name: meta.name, style: meta.style, driver: meta.driver });
-      for (const car of cars) {
-        for (const [ch, limit] of Object.entries(C.CLOSURE_LIMITS)) {
-          const n = commands(car.frames, car.nFrames, Number(ch)).filter(([, v]) => COMMANDS.has(v)).length;
-          expect(n, `${car.name} channel ${ch}`).toBeLessThanOrEqual(limit);
-        }
-        const falcon = commands(car.frames, car.nFrames, C.L_FALCON);
-        if (!car.falcon) {
-          expect(falcon).toEqual([]);
-          continue;
-        }
-        expect(falcon.map(([, v]) => v)).toEqual([C.CLOSURE_OPEN, C.CLOSURE_DANCE, C.CLOSURE_CLOSE]);
-        const from = falcon[0][0] * an.step, to = falcon[2][0] * an.step + FALCON_CLOSE_S;
-        for (const w of C.WINDOWS) {
-          for (const [f] of commands(car.frames, car.nFrames, w)) {
-            const t = f * an.step;
-            expect(t + WINDOW_S <= from || t >= to, `${car.name} window ${w} moves at ${t.toFixed(1)} s`).toBe(true);
+describe('every lineup keeps the rules', () => {
+  for (const song of FIXTURES) {
+    for (const lineup of LINEUPS) {
+      it(`${song} ${lineup}`, () => {
+        const an = fixture(song);
+        const cars = choreograph(an, { layout: lineup });
+        expect(cars.map((c) => c.name)).toEqual(lineupCars(lineup).map(([name]) => name));
+        for (const car of cars) {
+          const n = car.nFrames, step = an.step;
+          expect(car.frames.length).toBe(n * C.N_CHANNELS);
+          for (const [ch, limit] of Object.entries(C.CLOSURE_LIMITS)) {
+            const cmds = commands(car.frames, n, Number(ch));
+            expect(cmds.filter(([, , v]) => COMMANDS.has(v)).length, `${car.name} channel ${ch}`).toBeLessThanOrEqual(limit);
+            const dancing = cmds.filter(([, , v]) => v === C.CLOSURE_DANCE).reduce((s, [a, b]) => s + (b - a) * step, 0);
+            // (the charge port's Dance is its rainbow light, not a motor)
+            if (Number(ch) !== C.CHARGE_PORT) expect(dancing, `${car.name} channel ${ch} dances`).toBeLessThanOrEqual(30);
+          }
+          let opened = -Infinity;
+          for (const [a, , v] of commands(car.frames, n, C.LIFTGATE)) {
+            if (v === C.CLOSURE_OPEN) opened = a * step;
+            if (v === C.CLOSURE_CLOSE) opened = -Infinity;
+            if (v === C.CLOSURE_DANCE) {
+              expect(a * step - opened, `${car.name} lid dances before it is open`)
+                .toBeGreaterThanOrEqual(LIFTGATE_OPEN_S[car.kind]);
+            }
+          }
+          for (let ch = 0; ch < C.L_FALCON; ch++) expect(car.get(n - 1, ch), `${car.name} lamp ${ch} at the end`).toBe(0);
+          // the doors need a peak with 20 s before it and room after (the build has one): all or nothing
+          const falcon = commands(car.frames, n, C.L_FALCON);
+          if (!car.falcon || !falcon.length) {
+            expect(falcon).toEqual([]);
+            continue;
+          }
+          expect(falcon.map(([, , v]) => v)).toEqual([C.CLOSURE_OPEN, C.CLOSURE_DANCE, C.CLOSURE_CLOSE]);
+          const from = falcon[0][0] * step, to = falcon[2][0] * step + FALCON_CLOSE_S;
+          for (const w of C.WINDOWS) {
+            for (const [f] of commands(car.frames, n, w)) {
+              const t = f * step;
+              expect(t + WINDOW_S <= from || t >= to, `${car.name} window ${w} moves at ${t.toFixed(1)} s`).toBe(true);
+            }
           }
         }
-      }
-    }, 120_000);
+      });
+    }
   }
 });

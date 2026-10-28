@@ -27,7 +27,7 @@ import { BUILDS } from './catalog';
 import * as np from './np';
 import { barLen, beatLen } from './tempo';
 
-const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };   // Cybertruck frunk: timed on the truck, Oct 2026
+export const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };   // Cybertruck frunk: timed on the truck, Oct 2026
 const LIFTGATE_CLOSE_S = 4.0;
 export const WINDOW_S = 4.0, PORT_S = 2.0, MIRROR_S = 2.0;
 const WINDOW_BURST_S = 4.5, WINDOW_PEAK_DANCE_S = 10.0;   // window dances: ~3 x 4.5 + 10 = 24 s, under Tesla's ~30 s
