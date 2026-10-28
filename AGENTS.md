@@ -13,7 +13,14 @@ python3 build.py --song FILE --lineup YCY --out DIR         # build one song (an
 python3 build.py --diagnostic --lineup YC --out DIR         # the voiced test show
 .venv312/bin/python -m webapp                               # the web app on :8000 (needs requirements-web.txt)
 cd preview3d && npm run build                               # rebuild the 3D preview into dist/ (commit dist/)
+cd app && npm run dev                                       # the browser app on :5173/carreography/
+cd app && npx vitest run && npx tsc -b                      # its tests and type check
 ```
+
+The browser app (`app/`) is a TypeScript port of `lightshow/` (`app/src/engine/`, same module names)
+and must stay byte-identical to it: after changing either side, run `tools/export_bridge.py` and
+`app/src/engine/bridge.test.ts`. See [app/README.md](app/README.md) and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 To look at a show, serve the repo (`python3 -m http.server 8765`) and open
 `/preview3d/dist/?manifest=/<dir inside the repo>/shows.json&labels=1`.

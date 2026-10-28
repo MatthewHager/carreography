@@ -13,8 +13,9 @@ loudness, song structure and, for sung songs, the lyrics. A choreographer then p
 catalogue of 57 for every musical phrase. You can watch the result in a 3D preview before it goes
 anywhere near a car.
 
-- **Upload a song** in the web app, pick your cars, and download a zip with each car's
-  `LightShow` folder.
+- **In your browser**: open [matthewhager.github.io/carreography](https://matthewhager.github.io/carreography/),
+  drop in a song, pick your cars, and download a zip with each car's `LightShow` folder. The song
+  never leaves your device.
 - **Or use the command line**: `python3 build.py --song my.mp3 --lineup YCY`.
 - **Run the diagnostic first.** It's a voiced test show that checks every car's drive, sync, lamps
   and motors before the real thing.
@@ -40,7 +41,16 @@ them once from a Tesla Android app bundle (see [preview3d/README.md](preview3d/R
 python3 -m lightshow.tesla_app_models ~/Downloads/Tesla_4.61.6-4647.apkm
 ```
 
-### The web app
+### The browser app
+
+Everything runs on your device: the analysis (beat-this and Basic Pitch on WebGPU), the
+choreography and the 3D preview. To run it locally, see [app/README.md](app/README.md):
+
+```bash
+cd app && npm install && npm run dev
+```
+
+### The Python web app
 
 ```bash
 uv pip install --python .venv312/bin/python -r requirements-web.txt
