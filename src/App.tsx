@@ -65,6 +65,8 @@ export default function App() {
   }, [lineup, paints]);
 
   useEffect(() => {
+    // the link's cars are kept now (above), so later changes aren't undone by a reload
+    if (location.search) history.replaceState(null, '', location.pathname);
     const why = unsupported();
     if (why) toast.error(why, { duration: Infinity });
   }, []);
@@ -126,6 +128,7 @@ export default function App() {
           <ChevronDown
             className={`size-5 shrink-0 text-muted-foreground transition-transform ${open ? '' : 'rotate-180'}`} />
         </button>
+        <h1 className="sr-only md:hidden">Carreography</h1>
         <header className="hidden px-8 pt-10 pb-2 md:block">
           <h1 className="text-2xl font-semibold tracking-tight">Carreography</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -147,6 +150,11 @@ export default function App() {
             <LineupEditor lineup={lineup} paints={paints} disabled={!!busy}
               onChange={(l, p) => setCars({ lineup: l, paints: p })} />
           </section>
+          <p className="text-xs text-muted-foreground">
+            Not affiliated with Tesla.{' '}
+            <a href="https://github.com/MatthewHager/carreography" target="_blank" rel="noreferrer"
+              className="underline underline-offset-2 hover:text-foreground">Source code</a> (AGPL-3.0).
+          </p>
         </div>
 
         <footer className="space-y-3 border-t px-5 pt-4 pb-5 md:px-8 md:pb-8">

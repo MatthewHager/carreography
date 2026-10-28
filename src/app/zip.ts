@@ -13,6 +13,9 @@ function crc32(b: Uint8Array): number {
   return (c ^ 0xffffffff) >>> 0;
 }
 
+// 1 January 1980, the earliest a ZIP can say: the files carry no date, so every download is the same.
+const DOS_DATE = 0x0021;
+
 export function zip(files: { path: string; data: Uint8Array<ArrayBuffer> }[]): Blob {
   const enc = new TextEncoder();
   const parts: BlobPart[] = [];
@@ -26,6 +29,7 @@ export function zip(files: { path: string; data: Uint8Array<ArrayBuffer> }[]): B
     lv.setUint32(0, 0x04034b50, true);
     lv.setUint16(4, 20, true);
     lv.setUint16(6, 0x0800, true);            // UTF-8 names
+    lv.setUint16(12, DOS_DATE, true);
     lv.setUint32(14, crc, true);
     lv.setUint32(18, f.data.length, true);
     lv.setUint32(22, f.data.length, true);
@@ -37,6 +41,7 @@ export function zip(files: { path: string; data: Uint8Array<ArrayBuffer> }[]): B
     dv.setUint16(4, 20, true);
     dv.setUint16(6, 20, true);
     dv.setUint16(8, 0x0800, true);
+    dv.setUint16(14, DOS_DATE, true);
     dv.setUint32(16, crc, true);
     dv.setUint32(20, f.data.length, true);
     dv.setUint32(24, f.data.length, true);

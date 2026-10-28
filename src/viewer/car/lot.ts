@@ -67,8 +67,9 @@ const NOISE_GLSL = /* glsl */ `
   }
 `;
 
-/** Builds the lot into the scene; the function it returns takes it down again. */
-export function buildLot(scene: THREE.Scene): () => void {
+/** Builds the lot into the scene: its lamp poles (each placed at its foot) and a function that takes it
+ * down again. */
+export function buildLot(scene: THREE.Scene): { poles: THREE.Object3D[]; dispose: () => void } {
   const group = new THREE.Group();
   group.name = 'lot';
   scene.add(group);
@@ -133,6 +134,7 @@ export function buildLot(scene: THREE.Scene): () => void {
   const poleGeometry = own(new THREE.CylinderGeometry(0.07, 0.1, LAMP_HEIGHT, 10));
   const headGeometry = own(new THREE.BoxGeometry(0.7, 0.12, 0.7));
   const baseGeometry = own(new THREE.CylinderGeometry(0.25, 0.25, 0.5, 12));
+  const poles: THREE.Object3D[] = [];
   for (let k = -2; k <= 2; k++) {
     const x = -(HEAD_X + ISLAND / 2 + k * MODULE);
     const island = new THREE.Mesh(curbGeometry, curb);
@@ -142,18 +144,24 @@ export function buildLot(scene: THREE.Scene): () => void {
     group.add(island, bed);
     for (const z of POLE_Z) {
       const base = new THREE.Mesh(baseGeometry, curb);
-      base.position.set(x, CURB_HEIGHT + 0.25, z);
+      base.position.set(0, CURB_HEIGHT + 0.25, 0);
       const post = new THREE.Mesh(poleGeometry, pole);
-      post.position.set(x, CURB_HEIGHT + LAMP_HEIGHT / 2, z);
+      post.position.set(0, CURB_HEIGHT + LAMP_HEIGHT / 2, 0);
       const glow = new THREE.Mesh(headGeometry, head);
-      glow.position.set(x, CURB_HEIGHT + LAMP_HEIGHT, z);
-      group.add(base, post, glow);
+      glow.position.set(0, CURB_HEIGHT + LAMP_HEIGHT, 0);
+      const lamp = new THREE.Group().add(base, post, glow);
+      lamp.position.set(x, 0, z);
+      poles.push(lamp);
+      group.add(lamp);
     }
   }
 
-  return () => {
-    for (const o of owned) o.dispose();
-    scene.remove(group);
+  return {
+    poles,
+    dispose: () => {
+      for (const o of owned) o.dispose();
+      scene.remove(group);
+    },
   };
 }
 

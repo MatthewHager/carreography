@@ -46,7 +46,7 @@ export class Viewer {
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
   private readonly glow = new GlowLayer();
-  private readonly disposeLot: () => void;
+  private readonly lot: ReturnType<typeof buildLot>;
   private readonly lineup = new THREE.Group();
   private cars: CarRig[] = [];
   private bloomOn = true;
@@ -83,7 +83,7 @@ export class Viewer {
     moon.position.set(-4, 8, 5);
     this.scene.add(moon);
 
-    this.disposeLot = buildLot(this.scene);
+    this.lot = buildLot(this.scene);
     this.scene.add(this.lineup);
     this.scene.add(this.glow.points);
 
@@ -230,6 +230,9 @@ export class Viewer {
     this.last = now;
     this.trackPerf(dt);
     this.onTick?.();
+    // a pole nearer the camera than the cars could stand in front of them (a long lineup on a phone)
+    const reach = this.camera.position.distanceTo(this.controls.target);
+    for (const p of this.lot.poles) p.visible = p.position.distanceTo(this.camera.position) > reach;
     if (this.tween) {
       const t = Math.min(1, (now - this.tween.start) / 800);
       const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
@@ -278,7 +281,7 @@ export class Viewer {
   dispose(): void {
     cancelAnimationFrame(this.raf);
     for (const c of this.cars) c.dispose();
-    this.disposeLot();
+    this.lot.dispose();
     this.controls.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();

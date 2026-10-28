@@ -74,6 +74,7 @@ export function LineupEditor({ lineup, paints, onChange, disabled }: {
                   </span>
                 ) : (
                   <button type="button" disabled={disabled} aria-expanded={open}
+                    aria-label={`${name} paint: ${current ? paintLabel(current.name) : 'none'}`}
                     className="-mx-2 flex items-center gap-2 rounded-full px-2 py-0.5 outline-none hover:text-foreground
                       focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
                     onClick={() => setPicking(open ? null : i)}>
