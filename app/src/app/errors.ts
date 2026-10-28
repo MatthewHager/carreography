@@ -15,7 +15,10 @@ export function unsupported(): string | null {
     + `A recent Chrome, Edge, Firefox or Safari can.${lockdown}`;
 }
 
-const OUT_OF_MEMORY = /out of memory|allocation failed|bad_alloc|cannot enlarge memory|Aborted\(OOM\)|^RangeError/i;
+// What browsers, WebAssembly and ONNX Runtime say when an allocation fails. Not every RangeError: most
+// are plain bugs (a stack overflow, a bad index).
+const OUT_OF_MEMORY =
+  /out of memory|allocation failed|(could not|failed to) (allocate|grow)|bad_alloc|cannot enlarge memory|Aborted\(OOM\)/i;
 
 export const outOfMemory = (message: string) => OUT_OF_MEMORY.test(message);
 
