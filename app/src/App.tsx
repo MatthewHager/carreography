@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import type { AppModelId } from '@/viewer/car/appBody';
 import { DownloadSheet } from '@/app/DownloadSheet';
 import { LineupEditor } from '@/app/LineupEditor';
+import { LyricsNote } from '@/app/LyricsNote';
 import { ModelsCard } from '@/app/ModelsCard';
 import { showFromBridge, showFromFile } from '@/app/pipeline';
 import { Player } from '@/app/player';
@@ -118,6 +119,7 @@ export default function App() {
               </Button>
             )
           )}
+          {show?.lyrics && !stale && !busy && open && <LyricsNote lyrics={show.lyrics} />}
           {show && !stale && !busy && <DownloadSheet show={show} wav={wav} />}
         </div>
 

@@ -1,6 +1,7 @@
 // Making a show: the work runs in a worker (show.worker.ts); this side sends it the song and reports
 // progress.
 
+import { readTags } from '@/engine/listen/tags';
 import type { Reply, Request } from './show.worker';
 import { fileName } from './DownloadSheet';
 import type { Show } from './show';
@@ -53,9 +54,11 @@ export async function showFromBridge(song: string, lineup: string, onProgress: P
 export async function showFromFile(file: File, lineup: string, onProgress: Progress): Promise<{ show: Show; wav: Blob }> {
   onProgress('Opening the song');
   const ctx = new OfflineAudioContext(2, 1, 44100);
+  const bytes = await file.arrayBuffer();
+  const tags = readTags(new Uint8Array(bytes), file.name);     // before decoding, which may take the buffer
   let audio: AudioBuffer;
   try {
-    audio = await ctx.decodeAudioData(await file.arrayBuffer());
+    audio = await ctx.decodeAudioData(bytes);
   } catch {
     throw new Error(`${file.name} couldn't be read as audio`);
   }
@@ -63,10 +66,14 @@ export async function showFromFile(file: File, lineup: string, onProgress: Progr
   const wav = encodeWav(channels, audio.sampleRate);
   const title = file.name.replace(/\.[^.]+$/, '');
   const copies = channels.map((c) => c.slice());
-  const done = await run({ kind: 'song', channels: copies, sampleRate: audio.sampleRate, name: fileName(title), lineup },
-    onProgress, copies.map((c) => c.buffer));
+  const done = await run({
+    kind: 'song', channels: copies, sampleRate: audio.sampleRate, name: fileName(title), lineup, tags,
+  }, onProgress, copies.map((c) => c.buffer));
   return {
-    show: { title, lineup, nFrames: done.nFrames, cars: done.cars.map((c, i) => ({ ...c, letter: lineup[i] })), audio: wav },
+    show: {
+      title, lineup, nFrames: done.nFrames, cars: done.cars.map((c, i) => ({ ...c, letter: lineup[i] })), audio: wav,
+      lyrics: done.lyrics && { ...done.lyrics, tags },
+    },
     wav,
   };
 }
