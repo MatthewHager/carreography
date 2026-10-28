@@ -1,0 +1,222 @@
+// Continuous quantization: a beat map that follows the performer, not a metronome.
+//
+// The beat tracker gives a reasonable grid for band songs, but organ and orchestral recordings speed
+// up, hold back and breathe, and its beats drift off what is actually played. Here each tracked beat
+// is pulled onto the strongest played onset near it (a note, a chord, a bass attack), beats with
+// nothing played near them are re-spaced between their anchored neighbours so the tempo changes
+// smoothly, and the result is the grid every move quantizes to (moves.subGrid / snap).
+
+import type { Analysis } from './analysis';
+import { argmax, argsort, clip, mean, mean32, median, median32, round, searchsorted } from './np';
+
+const f32 = Math.fround;
+
+/** [times, strengths] of the played attacks: transcribed note events (chords count more) and the
+ * bass onsets. */
+export function onsets(an: Analysis): [number[], number[]] {
+  const ev = an.events;
+  let t = [...ev.t];
+  let w = ev.amp.map((a, i) => a * (1 + 0.5 * (ev.kind[i] >= 2 ? 1 : 0)));
+  if (an.bass.length) {
+    t = t.concat(an.bass.map((r) => r[0]));
+    w = w.concat(an.bass.map((r) => r[1]));
+  }
+  const order = argsort(t);
+  t = order.map((i) => t[i]);
+  w = order.map((i) => w[i]);
+  if (w.length) {
+    const m = median(w) + 1e-9;
+    w = w.map((x) => x / m);
+  }
+  return [t, w];
+}
+
+/** A least-squares line through (x, y): [slope, intercept], as np.polyfit(x, y, 1). */
+function fitLine(x: number[], y: number[]): [number, number] {
+  const mx = mean(x), my = mean(y);
+  let sxy = 0, sxx = 0;
+  for (let i = 0; i < x.length; i++) {
+    sxy += (x[i] - mx) * (y[i] - my);
+    sxx += (x[i] - mx) * (x[i] - mx);
+  }
+  const k = sxy / sxx;
+  return [k, my - k * mx];
+}
+
+/** Beat times that follow what is played. Two passes:
+ *  1. anchor: each tracked beat moves to the strongest played onset within `reach` x the local beat
+ *     (only attacks at least `minStrength` x the median count);
+ *  2. flow: a straight line is fitted through the anchors of the `span` beats either side, which is
+ *     the local tempo. A beat keeps its anchor - the exact played time - when the anchor is within
+ *     `agree` x the local beat of that line; otherwise (an off-beat note was grabbed, or nothing was
+ *     played) it sits on the line. The tempo then glides through rubato and only ever lands on real
+ *     attacks or on the smooth flow between them.
+ * Returns [beats, anchored mask]. */
+export function follow(an: Analysis, reach = 0.16, minStrength = 0.6, span = 3, agree = 0.06): [number[], boolean[]] {
+  const b0 = an.beats;
+  const nb = b0.length;
+  if (nb < 4) return [[...b0], new Array(nb).fill(false)];
+  let [t, w] = onsets(an);
+  const keep = w.map((x) => x >= minStrength);
+  t = t.filter((_, i) => keep[i]);
+  w = w.filter((_, i) => keep[i]);
+  const gaps = b0.slice(1).map((x, i) => x - b0[i]);
+  const local = [gaps[0], ...gaps.slice(1).map((g, i) => 0.5 * (gaps[i] + g)), gaps[gaps.length - 1]];
+  const anchor = [...b0];
+  const has = new Array<boolean>(nb).fill(false);
+  for (let i = 0; i < nb; i++) {
+    const lo = searchsorted(t, b0[i] - reach * local[i]);
+    const hi = searchsorted(t, b0[i] + reach * local[i]);
+    if (hi > lo) {
+      let best = lo, bestScore = -Infinity;
+      for (let c = lo; c < hi; c++) {
+        const score = w[c] - Math.abs(t[c] - b0[i]) / (reach * local[i]);
+        if (score > bestScore) [bestScore, best] = [score, c];
+      }
+      anchor[i] = t[best];
+      has[i] = true;
+    }
+  }
+  const out = [...b0];
+  const final = new Array<boolean>(nb).fill(false);
+  for (let i = 0; i < nb; i++) {
+    const lo = Math.max(0, i - span), hi = Math.min(nb, i + span + 1);
+    // don't fit across a fermata / silence: stop at gaps over twice the local beat
+    let seg: number[] = [];
+    for (let k = lo; k < hi; k++) seg.push(k);
+    for (let k = 0; k < hi - 1 - lo; k++) {
+      if (!(gaps[lo + k] > 2 * local[i])) continue;
+      if (lo + k < i) seg = seg.filter((s) => s > lo + k);
+      else seg = seg.filter((s) => s <= lo + k);
+    }
+    const pts = seg.filter((s) => has[s]);
+    let line: number;
+    if (pts.length >= 3) {
+      const [k, c] = fitLine(pts, pts.map((p) => anchor[p]));
+      line = k * i + c;
+    } else {
+      line = b0[i];
+    }
+    if (has[i] && Math.abs(anchor[i] - line) <= agree * local[i]) {
+      out[i] = anchor[i];
+      final[i] = true;
+    } else {
+      out[i] = line;
+    }
+  }
+  // A tracked beat already sitting on a played attack (within 30 ms) is left exactly where it is:
+  // only the beats that drifted are moved, so a steady band track keeps its steady grid.
+  if (t.length >= 2) {
+    for (let i = 0; i < nb; i++) {
+      const on = clip(searchsorted(t, b0[i]), 1, Math.max(1, t.length - 1));
+      const dist = Math.min(Math.abs(b0[i] - t[on - 1]), Math.abs(t[on] - b0[i]));
+      if (dist <= 0.03) {
+        out[i] = b0[i];
+        final[i] = true;
+      }
+    }
+  }
+  for (let i = 1; i < nb; i++) {                       // strictly increasing
+    if (out[i] <= out[i - 1] + 0.3 * local[i]) {
+      out[i] = out[i - 1] + 0.3 * local[i];
+      final[i] = false;
+    }
+  }
+  return [out, final];
+}
+
+function maxEnv(env: number[], a: number, b: number): number {
+  let m = -Infinity;
+  for (let k = a; k < b; k++) if (env[k] > m) m = env[k];
+  return m;
+}
+
+/** Shift any run of beats that sits anti-phase (or a quarter off) with the music's pulse.
+ *
+ * For each window of `window` beats the pulse envelope (drums when separated) is sampled at the
+ * beats shifted by 0, +/-1/4 and 1/2 of the local beat; if a shift scores `gain` x better than the
+ * beats as tracked, those beats move. Neighbouring windows vote, so a single loud fill doesn't flip
+ * a section. Returns the share of beats moved. */
+export function phaseLock(an: Analysis, window = 8, gain = 1.3): number {
+  const env = an.pulseEnv;
+  const b = an.beats;
+  if (!env || b.length < 2 * window) return 0.0;
+  const hop = an.pulseHop ?? 512 / 22050;
+  const w = Math.max(1, Math.trunc(round(0.03 / hop)));
+  const score = (times: number[]) => times.map((x) => {
+    const i = clip(round(x / hop), 0, env.length - 1);
+    return maxEnv(env, Math.max(0, i - w), i + w + 1);
+  });
+  const gaps = b.slice(1).map((x, i) => x - b[i]);
+  const gap = [...gaps, gaps[gaps.length - 1]];
+  const shifts = [0.0, 0.5, 0.25, -0.25];
+  const perBeat = shifts.map((s) => score(b.map((x, i) => x + s * gap[i])));     // shifts x beats
+  const choice = new Array<number>(b.length).fill(0);
+  const half = Math.floor(window / 2);
+  for (let a = 0; a < b.length; a += half) {
+    const s0 = Math.max(0, a - half), s1 = Math.min(b.length, a + window + half);
+    const sc = perBeat.map((row) => mean32(row, s0, s1));
+    const k = argmax(sc);
+    if (k !== 0 && sc[k] > gain * sc[0]) for (let i = a; i < Math.min(b.length, a + half); i++) choice[i] = shifts[k];
+  }
+  // majority smoothing over 3 windows
+  const out = b.map((x, i) => x + choice[i] * gap[i]);
+  const order = argsort(out);
+  an.beats = order.map((i) => out[i]);
+  const moved = mean(choice.map((c) => (c !== 0 ? 1 : 0)));
+  if (moved) {
+    an.downbeats = an.downbeats
+      .map((d) => out[clip(searchsorted(b, d - 1e-6), 0, b.length - 1)])
+      .sort((x, y) => x - y);
+  }
+  return moved;
+}
+
+/** Each beat moved onto the peak of the music's attack curve (the drums when separated) within
+ * `reach` seconds, refined between analysis frames by fitting a parabola through the peak - the
+ * tracker works on 23 ms frames and can sit a whole frame after the hit (Thriller did). Beats with no
+ * peak nearby stay where they are. Returns the median shift in ms. */
+export function snapToPulse(an: Analysis, reach = 0.045): number {
+  const env = an.pulseEnv;
+  const b = an.beats;
+  if (!env || b.length < 4) return 0.0;
+  const hop = an.pulseHop ?? 512 / 22050;
+  const w = Math.max(1, Math.trunc(round(reach / hop)));
+  const out = [...b];
+  b.forEach((t, k) => {
+    const i = Math.trunc(round(t / hop));
+    const lo = Math.max(1, i - w), hi = Math.min(env.length - 1, i + w + 1);
+    if (hi - lo < 2) return;
+    const seg = env.slice(lo, hi);
+    const j = lo + argmax(seg);
+    if (j <= 0 || j >= env.length - 1 || env[j] <= median32(seg) * 1.5) return;   // no real attack near this beat
+    const [y0, y1, y2] = [env[j - 1], env[j], env[j + 1]];
+    const den = y0 - 2 * y1 + y2;
+    const d = den < 0 ? (0.5 * f32(y0 - y2)) / den : 0.0;
+    out[k] = (j + clip(d, -0.5, 0.5)) * hop;
+  });
+  for (let k = 1; k < out.length; k++) out[k] = Math.max(out[k], out[k - 1]);
+  const shift = median(out.map((x, k) => x - b[k])) * 1000;
+  if (out.some((x, k) => x !== b[k])) {
+    const idx = [...new Set(an.downbeats.map((d) => clip(searchsorted(b, d - 1e-6), 0, b.length - 1)))]
+      .sort((x, y) => x - y);
+    an.beats = out;
+    an.downbeats = idx.map((i) => out[i]);
+  }
+  return shift;
+}
+
+/** Replace an.beats / an.downbeats with the performer-following map (downbeats keep their beat
+ * indices). Returns the share of beats anchored to a played onset. */
+export function apply(an: Analysis): number {
+  an.beatsPhaseMoved = phaseLock(an);
+  an.beatsSnapMs = snapToPulse(an);
+  const old = an.beats;
+  if (old.length < 4) return 0.0;
+  const [nu, anchored] = follow(an);
+  const idx = [...new Set(an.downbeats.map((d) => clip(searchsorted(old, d - 1e-6), 0, old.length - 1)))]
+    .sort((x, y) => x - y);
+  an.beats = nu;
+  an.downbeats = idx.map((i) => nu[i]);
+  return mean(anchored.map((x) => (x ? 1 : 0)));
+}

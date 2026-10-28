@@ -269,10 +269,13 @@ Rejected along the way:
 
 ## Build order
 
-1. **Bridge.** A Python exporter writes `score.json` from today's analysis, so the TypeScript side can
-   start before browser analysis is wired in.
-2. **The app shell** on Pages: the Vite + shadcn app, the 3D view, the file writer, and a song you drop in.
-3. **Compile and the blocks**, checked against today's shows with the existing check tools.
-4. **Read and the carreographer.**
-5. **Browser analysis** replaces the bridge.
-6. **Retire the Python choreography** once the browser shows are as good.
+1. **Port first, byte for byte.** The Python choreographer is ported to TypeScript line by line
+   (`app/src/engine/`) and checked against it: given the same analysis, every car's frames must be
+   identical (`tools/export_bridge.py` exports the analyses, `bridge.test.ts` compares). Done: all
+   12 songs in four lineups match.
+2. **The app on Pages**: the Vite + shadcn app, the 3D view, the download, and a song you drop in.
+3. **Browser analysis** replaces the Python analysis.
+4. **Retire the Python choreography** once the browser shows are as good. Not before the
+   2026-10-31 event.
+5. **Then simplify**, one step at a time, each checked against the port: the blocks, Read and the
+   carreographer, the deletions above.
