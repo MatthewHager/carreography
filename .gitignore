@@ -38,3 +38,9 @@ checks/
 preview3d/node_modules/
 
 .DS_Store
+
+# The browser app: dependencies and builds (GitHub Actions builds the site)
+app/node_modules/
+app/dist/
+# the analysis models: downloaded from the repository's release by the site build (tools/export_models.py)
+app/public/models/
