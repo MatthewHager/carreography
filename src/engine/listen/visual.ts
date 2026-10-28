@@ -193,8 +193,9 @@ function brightnessOf(mel: Float32Array, T: number, loud: Float32Array): Float32
 }
 
 /** The chroma on the grid, smoothed over a fifth of a second; and the harmony's strongest pitch class over
- * each beat (or each frame where there is no beat), so its colour changes on the beat, with how clearly it
- * leads: 1 for a lone note, about 0.8 for a triad, near 0 for noise, a drum or silence (`loud`). */
+ * each beat (or each frame where there is no beat, held through near ties), so its colour changes on the
+ * beat, with how clearly it leads: 1 for a lone note, about 0.8 for a triad, near 0 for noise, a drum or
+ * silence (`loud`). */
 function harmony(cq: Float32Array, T: number, loud: Float32Array, beats: number[], nFrames: number,
   step: number, g: Grid): Pick<Visuals, 'chroma' | 'pitchClass' | 'pitchClassStrength'> {
   const half = Math.round(0.1 * FPS);
@@ -221,6 +222,7 @@ function harmony(cq: Float32Array, T: number, loud: Float32Array, beats: number[
   }
   single(nFrames);
   const pitchClass = new Uint8Array(nFrames), clarity = new Float32Array(nFrames), sum = new Float64Array(12);
+  let held = 0;
   for (const [a, b] of spans) {
     sum.fill(0);
     let lv = 0;
@@ -233,6 +235,9 @@ function harmony(cq: Float32Array, T: number, loud: Float32Array, beats: number[
       tot += sum[c];
       if (sum[c] > mx) [mx, arg] = [sum[c], c];
     }
+    // frame by frame, a near tie doesn't flicker the colour: it changes once another class leads by 10 %
+    if (b - a === 1 && sum[held] >= 0.9 * mx) arg = held;
+    held = arg;
     pitchClass.fill(arg, a, b);
     const leads = clip(((1 - tot / mx / 12) * 12) / 11, 0, 1);
     if (mx > 0) clarity.fill(leads * Math.min(1, (2 * lv) / (b - a)), a, b);

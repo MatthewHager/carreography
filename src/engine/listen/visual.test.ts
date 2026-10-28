@@ -158,6 +158,22 @@ describe('harmony', () => {
       expect(k < 10 ? [0, 4, 7] : [6, 10, 1]).toContain([...each][0]);
     }
   });
+
+  it('holds the colour of a near tie where there are no beats', () => {
+    // C and G (louder, so the chroma ties them) taking turns at a few percent ahead, three times a second
+    const y = new Float32Array(6 * SR);
+    for (const [f, gain, sign] of [[261.63, 1, 1], [392.0, 1.22, -1]]) {
+      for (let i = 0; i < y.length; i++) {
+        const u = i / SR;
+        y[i] += 0.2 * gain * (1 + sign * 0.03 * Math.sin(3 * Math.PI * u)) * Math.sin(2 * Math.PI * f * u);
+      }
+    }
+    const an = listen(y, Array.from({ length: 16 }, (_, k) => 3 * k));   // too far apart to read it over
+    expect(an.beats[1] - an.beats[0]).toBe(3);
+    const pc = an.pitchClass.subarray(Math.round(1 / an.step), Math.round(5 / an.step));
+    expect(new Set(pc).size).toBe(1);
+    expect([0, 7]).toContain(pc[0]);
+  });
 });
 
 describe('novelty, bands and brightness', () => {
@@ -200,7 +216,6 @@ it('gives the same measurements every time', () => {
   expect(a.bands).toEqual(b.bands);
   expect([a.kick, a.snare, a.hats, a.noveltyPeaks]).toEqual([b.kick, b.snare, b.hats, b.noveltyPeaks]);
 });
-
 
 it('shows nothing in silence', () => {
   const an = listen(new Float32Array(6 * SR));
