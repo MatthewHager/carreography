@@ -13,10 +13,11 @@
 //              4  every headlight - the bloom           (the loudest ~10 %: the climax)
 //            thresholds come from the whole song's loudness, with hysteresis and a minimum dwell so
 //            a layer never flickers; the stage is never dark while music plays
-//   swoop    the melody as one soft light gliding across the stage by pitch (low = crowd's left):
-//            a bright spot sliding along the truck's bar, and on the Ys the inner beam on that side
-//            fading in and out as the melody passes - legato, overlapping, never a blink. The
-//            headlights are kept for the swoop and the bloom, so the swoop always shows
+//   swoop    the melody as one soft light gliding across the stage by pitch (low = crowd's left),
+//            each phrase spread over the whole stage: a bright spot sliding along the truck's bar,
+//            and on the Ys the inner beam on that side fading in and out as the melody passes (a run
+//            sweeps through on half-second ramps, a held note swells over a second) - overlapping,
+//            never a blink. The headlights are kept for the swoop and the bloom, so it always shows
 //   colour   the interiors glow from deep blue toward warm gold as the music swells
 //   ending   a slow fade to dark as the music ends (no closing flash), when the song ends flowing
 //
