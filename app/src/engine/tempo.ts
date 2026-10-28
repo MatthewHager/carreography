@@ -19,7 +19,7 @@ export const barLen = (an: Analysis) => (4 * 60.0) / Math.max(an.tempo, 40);
 
 /** [times, strengths] of the played attacks: transcribed note events (chords count more) and the
  * bass onsets. */
-export function onsets(an: Analysis): [number[], number[]] {
+function onsets(an: Analysis): [number[], number[]] {
   const ev = an.events;
   let t = [...ev.t];
   let w = ev.amp.map((a, i) => a * (1 + 0.5 * (ev.kind[i] >= 2 ? 1 : 0)));
@@ -58,7 +58,7 @@ function fitLine(x: number[], y: number[]): [number, number] {
  *     played) it sits on the line. The tempo then glides through rubato and only ever lands on real
  *     attacks or on the smooth flow between them.
  */
-export function follow(an: Analysis, reach = 0.16, minStrength = 0.6, span = 3, agree = 0.06): number[] {
+function follow(an: Analysis, reach = 0.16, minStrength = 0.6, span = 3, agree = 0.06): number[] {
   const b0 = an.beats;
   const nb = b0.length;
   if (nb < 4) return [...b0];
@@ -131,7 +131,7 @@ function maxEnv(env: number[], a: number, b: number): number {
  * beats shifted by 0, +/-1/4 and 1/2 of the local beat; if a shift scores `gain` x better than the
  * beats as tracked, those beats move. Neighbouring windows vote, so a single loud fill doesn't flip
  * a section. */
-export function phaseLock(an: Analysis, window = 8, gain = 1.3): void {
+function phaseLock(an: Analysis, window = 8, gain = 1.3): void {
   const env = an.pulseEnv;
   const b = an.beats;
   if (!env || b.length < 2 * window) return;
@@ -168,7 +168,7 @@ export function phaseLock(an: Analysis, window = 8, gain = 1.3): void {
  * `reach` seconds, refined between analysis frames by fitting a parabola through the peak - the
  * tracker works on 23 ms frames and can sit a whole frame after the hit (Thriller did). Beats with no
  * peak nearby stay where they are. */
-export function snapToPulse(an: Analysis, reach = 0.045): void {
+function snapToPulse(an: Analysis, reach = 0.045): void {
   const env = an.pulseEnv;
   const b = an.beats;
   if (!env || b.length < 4) return;

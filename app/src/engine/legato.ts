@@ -98,10 +98,10 @@ function layers(L: ArrayLike<number>, live: ArrayLike<boolean>): Int32Array {
   return out;
 }
 
-function glow(car: Car, chs: readonly number[], t0: number, t1: number, up: number = C.ON_2000,
-  down: number = C.OFF_2000, downS = 2.0): void {
+/** The lamps ramp up (over 2 s, or as `up` says) and stay on from t0 to t1, then fade over 2 s. */
+function glow(car: Car, chs: readonly number[], t0: number, t1: number, up: number = C.ON_2000): void {
   car.light(chs, t0, t1, up);
-  car.light(chs, t1, t1 + downS, down);
+  car.light(chs, t1, t1 + 2.0, C.OFF_2000);
 }
 
 /**
@@ -197,7 +197,7 @@ export function choreograph(cars: Car[], an: Analysis): void {
     if (car === ct) continue;
     const here = Array.from(stage, (v) => !Number.isNaN(v) && Math.floor(v) === slot);
     for (const [a, b] of runs(here)) {
-      if ((b - a) * RES >= 0.5) glow(car, car.inner(side), a * RES, b * RES + 0.25, C.ON_1000, C.OFF_2000);
+      if ((b - a) * RES >= 0.5) glow(car, car.inner(side), a * RES, b * RES + 0.25, C.ON_1000);
     }
   }
   if (ct !== null) {

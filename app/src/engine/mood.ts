@@ -74,7 +74,7 @@ function energyCurve(an: Analysis): Float64Array {
 }
 
 /** Set ph.energy, ph.mood and ph.pace (seconds between hits) on every phrase. */
-export function assign(an: Analysis, phrases: Phrase[]): Phrase[] {
+export function assign(an: Analysis, phrases: Phrase[]): void {
   const e = energyCurve(an);
   an.energy = e;
   const beat = beatLen(an);
@@ -101,7 +101,6 @@ export function assign(an: Analysis, phrases: Phrase[]): Phrase[] {
       ph.pace = paceS(ph.mood, beat);
     }
   }
-  return phrases;
 }
 
 function moodFor(energy: number): string {

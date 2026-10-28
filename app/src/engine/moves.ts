@@ -419,7 +419,7 @@ function meter(cars: Car[], an: Analysis, ph: Phrase) {
   }
 }
 
-export function pulse(cars: Car[], an: Analysis, ph: Phrase) {
+function pulse(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events, [lo, hi] = phraseRange(ph);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = clip(ev.dur[i], 0.15, 1.5);
@@ -661,11 +661,13 @@ function yChords(ys: Car[], an: Analysis, ph: Phrase, beatLen: number) {
 
 // --- Cybertruck moves (the centre) --------------------------------------------------------------
 
-/** A comet scanning the bar over n frames: Gaussian blobs of the given width along `centre`. */
-function sweep(centre: ArrayLike<number>, width: number, scale = 1): Rows {
-  return rows(centre.length, (f, k) => {
+/** A comet crossing the bar over n frames, left to right (ltr) or back: a Gaussian blob `width` LEDs
+ * wide. */
+function sweep(n: number, ltr: boolean, width: number, scale = 1): Rows {
+  const centre = ltr ? linspace(0, BAR - 1, n) : linspace(BAR - 1, 0, n);
+  return rows(n, (f, k) => {
     const x = (k - centre[f]) / width;
-    return scale === 1 ? Math.exp(-(x * x)) : scale * Math.exp(-(x * x));
+    return scale * Math.exp(-(x * x));
   });
 }
 
@@ -675,8 +677,7 @@ function ctScan(ct: Car, an: Analysis, ph: Phrase) {
   for (let k = 0; k < beats.length - 1; k++) {
     const b0 = beats[k], b1 = Math.min(beats[k + 1], ph.t1);
     const n = Math.max(2, ct.fr(b1) - ct.fr(b0));
-    const centre = k % 2 === 0 ? linspace(0, BAR - 1, n) : linspace(BAR - 1, 0, n);
-    ct.pixels(C.FRONT_BAR, b0, sweep(centre, 4));
+    ct.pixels(C.FRONT_BAR, b0, sweep(n, k % 2 === 0, 4));
   }
 }
 
@@ -744,8 +745,7 @@ function wave(cars: Car[], an: Analysis, ph: Phrase) {
       if (st === null) {
         if (ct !== null) {
           const n = Math.max(2, ct.fr(t + per * 2) - ct.fr(t));
-          const centre = k % 2 === 0 ? linspace(0, BAR - 1, n) : linspace(BAR - 1, 0, n);
-          ct.pixels(C.FRONT_BAR, t, sweep(centre, 4));
+          ct.pixels(C.FRONT_BAR, t, sweep(n, k % 2 === 0, 4));
         }
       } else {
         st[0].light(st[1], t, t + Math.max(0.1, per * 1.5));
@@ -884,8 +884,7 @@ function pinball(cars: Car[], an: Analysis, ph: Phrase) {
     }
     if (ct !== null && b1 > b0 + 0.1) {
       const m = Math.max(2, ct.fr(b1) - ct.fr(b0 + 0.05));
-      const centre = k % 2 === 0 ? linspace(0, BAR - 1, m) : linspace(BAR - 1, 0, m);
-      ct.pixels(C.FRONT_BAR, b0 + 0.05, sweep(centre, 3.5));
+      ct.pixels(C.FRONT_BAR, b0 + 0.05, sweep(m, k % 2 === 0, 3.5));
     }
   }
 }
@@ -1191,8 +1190,7 @@ function cascade(cars: Car[], an: Analysis, ph: Phrase) {
       car.flash([...car.sig(), ...car.drl(), ...car.heads()], t, 0.16);
       if (car.isCt) {
         const n = Math.max(2, car.fr(t + 0.3) - car.fr(t));
-        const centre = k % 2 === 0 ? linspace(0, BAR - 1, n) : linspace(BAR - 1, 0, n);
-        car.pixels(C.FRONT_BAR, t, sweep(centre, 5));
+        car.pixels(C.FRONT_BAR, t, sweep(n, k % 2 === 0, 5));
       }
     });
   });
@@ -1238,10 +1236,8 @@ function bounceBuild(cars: Car[], an: Analysis, ph: Phrase) {
     car.flash([...car.sig(), ...car.drl(), ...car.heads()], ts, Math.min(0.14, step * 0.6));
     if (ct !== null) {
       const nxt = cars[hop[(k + 1) % 4] % cars.length];
-      const goesRight = nxt.x > car.x;
       const m = Math.max(2, ct.fr(ts + step) - ct.fr(ts));
-      const centre = goesRight ? linspace(0, BAR - 1, m) : linspace(BAR - 1, 0, m);
-      ct.pixels(C.FRONT_BAR, ts, sweep(centre, 4, 0.7));
+      ct.pixels(C.FRONT_BAR, ts, sweep(m, nxt.x > car.x, 4, 0.7));
     }
     t += step;
     k += 1;
@@ -1483,7 +1479,7 @@ function curtain(cars: Car[], an: Analysis, ph: Phrase) {
  * glow up on a 1 s ramp and fade on a 2 s ramp, the cars a beat apart so the breath rolls
  * across the stage and back; the truck's bar swells and ebbs with it. One breath per two bars,
  * started on the downbeats. The calmest collaborative move: intros, quiet verses, held chords. */
-export function breatheWash(cars: Car[], an: Analysis, ph: Phrase) {
+function breatheWash(cars: Car[], an: Analysis, ph: Phrase) {
   const downs = grid(an, ph, 'downbeats');
   const beat = beatLen(an);
   const bar = barLen(an);

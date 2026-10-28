@@ -87,9 +87,9 @@ const LYRIC_RULES: Record<string, Rule[]> = {
 };
 
 /** Resolve the song's lyric rules against the timed words -> [action, params]. */
-export function lyricCues(name: string, ws: Word[] | null): [string, Resolved][] {
+export function lyricCues(name: string, ws: Word[]): [string, Resolved][] {
   const rules = LYRIC_RULES[name] ?? [];
-  if (!rules.length || !ws || !ws.length) return [];
+  if (!rules.length || !ws.length) return [];
   let out: [string, Resolved][] = [];
   const cue = (t0: number, t1: number, extra: Partial<Resolved> = {}): Resolved => ({ at: '', do: '', t0, t1, ...extra });
   for (const [lstart, lend, text] of lines(ws)) {

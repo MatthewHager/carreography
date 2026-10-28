@@ -189,8 +189,7 @@ export function linspace(start: number, stop: number, num: number): Float64Array
 }
 
 /** np.arange(start, stop, step) for floats: numpy fills start + i * ((start + step) - start). */
-export function arange(start: number, stop?: number, step = 1): Float64Array {
-  if (stop === undefined) [start, stop] = [0, start];
+export function arange(start: number, stop: number, step: number): Float64Array {
   const n = Math.max(0, Math.ceil((stop - start) / step));
   const out = new Float64Array(n);
   if (n === 0) return out;
