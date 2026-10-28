@@ -523,8 +523,8 @@ function playFormation(cars: Car[], an: Analysis, ph: Phrase, play: Phrase, f: F
   }
   for (const c of cars) c.soft = info == null || !['build', 'self'].includes(info.grid) ? SOFT[ph.mood!] ?? null : null;
   if ((play.t1 - play.t0 >= 0.5 && play.b > play.a) || play === ph) {
-    if (f[0] === 'unison' || !ys.length) {
-      M.UNISON[f[0] === 'unison' ? f[1] : 'keyboard'](cars, an, play);
+    if (f[0] === 'unison') {
+      M.UNISON[f[1]](cars, an, play);
     } else {
       M.SIDE[f[1]](ys, an, play);
       if (ct !== null) M.CENTRE[f[2]](ct, an, play);        // no Cybertruck: every car plays the side cars' part
