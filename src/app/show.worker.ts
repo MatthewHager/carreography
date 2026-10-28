@@ -72,7 +72,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     const placed = await lyrics(req, found, an);
     an.lyricLines = placed.lines;
     progress('Choreographing');
-    const cars = choreograph(an, { layout: req.lineup, name: req.name });
+    const cars = choreograph(an, req.lineup);
     post({
       kind: 'done', nFrames: an.nFrames, cars: cars.map((c) => ({ name: c.name, frames: c.frames })),
       lyrics: placed.report, backend: lastBackend(),

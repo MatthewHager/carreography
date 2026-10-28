@@ -12,16 +12,16 @@ import { Car, makeLineup } from './car';
 import * as CAT from './catalog';
 import type { Formation } from './catalog';
 import * as C from './channels';
-import * as CUE from './cues';
-import type { Resolved } from './cues';
+import { feel, flowsAt, kitAt } from './feel';
 import { sectionAt } from './form';
 import * as LAMPS from './lamps';
 import * as LEGATO from './legato';
 import * as LY from './lyrics';
+import type { Moment } from './lyrics';
 import * as MD from './mood';
 import * as motors from './motors';
 import * as M from './moves';
-import { clip, corrcoef, interp, linspace, mean, median, round, runs, searchsorted, slope } from './np';
+import { clip, corrcoef, interp, linspace, mean, median, runs, searchsorted, slope } from './np';
 import * as PULSE from './pulse';
 import { frameSpan, segment } from './phrases';
 import * as TEMPO from './tempo';
@@ -30,68 +30,42 @@ const PURPLE = [110, 0, 200];
 const ORANGE = [255, 70, 0];
 const WHITE = [255, 255, 255];
 
-type Cues = [string, Resolved][];
-
 const key = CAT.formationKey;
 const same = (a: Formation | null | undefined, b: Formation | null | undefined) => !!a && !!b && key(a) === key(b);
 const parts = (f: Formation) => f.slice(1);
 const anyIn = (f: Formation, s: Set<string>) => parts(f).some((m) => s.has(m));
 const allIn = (f: Formation, s: Set<string>) => parts(f).every((m) => s.has(m));
 
-interface Options {
-  layout?: string;
-  name?: string | null;
-  style?: string | null;
-  driver?: string | null;
-}
-
-/** Phrase-level choreography: one whole-stage move per musical phrase (see moves.ts), shaped by the
- * form map (form.ts) and the song's cue sheet (cues.ts). style "legato" (slow, flowing music with no
- * beat to follow, e.g. Ave Maria) uses legato.ts for the lights instead. driver says what carries the
- * rhythm ("organ", "orchestra", "band", "vocal_band"; see cues.DRIVERS). */
-export function choreograph(an: Analysis, opts: Options = {}): Car[] {
-  const { layout = 'YCY', name = null, style = null, driver = null } = opts;
+/** The show for a lineup (car letters, crowd-left to right), from the song's analysis. Where the music
+ * has a beat to follow, one whole-stage move per phrase (moves.ts) shaped by the form map (form.ts), the
+ * beat layer (pulse.ts) and the drums under it; where it has none, flowing light (legato.ts). Section by
+ * section, as the music goes (feel.ts). Then the lyric moments, the interiors, the motors and the end. */
+export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   const cars = makeLineup(layout, an.nFrames, an.step);
-  // a sung line starts a phrase: LRCLIB's lines, or the word times in the frozen Python analyses (lyrics.ts)
-  const words = an.lyricWords?.length ? an.lyricWords : null;
-  const sung = !words && an.lyricLines?.length ? an.lyricLines : null;
-  const cutsAt = words ? LY.lines(words).map((l) => l[0]) : sung ? sung.map((l) => l.t) : null;
-  const phrases = segment(an.events, cutsAt);
+  const sung = an.lyricLines?.length ? an.lyricLines : null;     // a sung line starts a phrase
+  const phrases = segment(an.events, sung ? sung.map((l) => l.t) : null);
   an.phrases = phrases;
-  const cues: Cues = name ? CUE.resolve(name, an) : [];
-  if (words && name) cues.push(...LY.lyricCues(name, words));
-  else if (sung) cues.push(...LY.lineCues(sung, an));
-  an.cuePeaks = cues.filter(([a]) => a === 'peak').map(([, c]) => [c.t0, c.build!, c.hold ?? null, c.final ?? false]);
-  for (const [a, c] of cues) {                     // ceilings are needed before the plan is chosen
-    if (a === 'ceiling' && an.sections && an.sections.length) {
-      for (const sec of an.sections) if (sec.t0 < c.t1 && sec.t1 > c.t0) sec.ceiling = Math.trunc(c.value!);
-    }
-  }
-  an.driver = driver || (name ? CUE.driver(name) : 'orchestra');
+  const flowing = feel(an, phrases).filter((f) => f.flow);       // heard before tempo.ts moves the beats
   TEMPO.apply(an);          // beats moved onto what is played (rubato-aware)
   // Durations in the moves (a bar, a sixteenth) come from the tempo: make it the tracked beats' own
   // spacing so a bar-long sweep ends on the next downbeat rather than drifting off it.
   if (an.beats.length > 8) an.tempo = 60.0 / median(an.beats.slice(1).map((b, i) => b - an.beats[i]));
   MD.assign(an, phrases);
-  if (style === 'legato') {
-    LEGATO.choreograph(cars, an);
-    for (const ph of phrases) ph.move = 'legato';
-    applyCues(cars, an, cues);
-    applyColorCues(cars, cues);
-    motors.choreograph(cars, an);
-  } else {
-    pedal(cars, an);
-    playPhrases(cars, an, phrases);
-    darknessGuard(cars, an, phrases);
-    if (an.driver === 'band' || an.driver === 'vocal_band') drums(cars, an);
-    else if (an.driver === 'orchestra') percussion(cars, an);
-    PULSE.apply(cars, an, phrases);      // the beat layer owns the headlights
-    applyCues(cars, an, cues);
-    interior(cars, an);
-    applyColorCues(cars, cues);
-    motors.choreograph(cars, an);
-    finale(cars, an);
-  }
+  for (const ph of phrases) if (flowsAt(an, ph.t0)) ph.move = 'legato';
+  const moving = phrases.filter((ph) => ph.move !== 'legato');
+  const said = sung ? LY.moments(sung, an) : [];
+  const endsFlowing = flowing.length > 0 && LEGATO.choreograph(cars, an, flowing);
+  pedal(cars, an);
+  playPhrases(cars, an, moving);
+  darknessGuard(cars, an, moving);
+  drums(cars, an);
+  percussion(cars, an);
+  PULSE.apply(cars, an, phrases);      // the beat layer owns the headlights
+  strikes(cars, an, said);
+  interior(cars, an);
+  colours(cars, said);
+  motors.choreograph(cars, an);
+  if (!endsFlowing) finale(cars, an);      // (music that ends flowing has already faded out)
   for (const car of cars) {
     tidy(car);
     if (car.juniper) LAMPS.juniperOutput(car);
@@ -191,7 +165,7 @@ function formationsBase(ph: Phrase, an: Analysis): Formation[] {
   if (g === 'recitative') {
     const c: Formation[] = [['unison', 'pulse'], ['split', 'y_wink', 'ct_comets'], ['split', 'y_breathe', 'ct_comets'],
       ['split', 'y_keyboard', 'ct_swell']];
-    if ((an.driver === 'band' || an.driver === 'vocal_band') && beatOk && ceiling >= 2) {
+    if (kitAt(an, ph.t0) && beatOk && ceiling >= 2) {
       // sparse singing over a band: the beat carries the stage, not the few transcribed notes
       return [['unison', 'march'], ['unison', 'lr_channel'], ['unison', 'lr_beat'], ['unison', 'checker'],
         ['unison', 'beam'], ['unison', 'heartbeat']];
@@ -214,7 +188,7 @@ function formationsBase(ph: Phrase, an: Analysis): Formation[] {
     const loud = cands.filter((c) => !allIn(c, QUIET));
     cands = loud.length ? loud : cands;
   }
-  if ((an.driver === 'band' || an.driver === 'vocal_band') && beatOk) {
+  if (kitAt(an, ph.t0) && beatOk) {      // over a rhythm section the beat-locked moves come first
     const beatFirst = ['syncopate', 'pinball', 'lr_beat', 'march', 'cascade', 'tug_of_war', 'checker', 'beam', 'lr_channel'];
     if (ph.density < 3.0) {   // few notes to follow: only the beat-locked moves
       const locked = cands.filter((c) => beatFirst.includes(c[1]));
@@ -320,8 +294,7 @@ function lastBuild(plan: Formation[], phrases: Phrase[]): number {
 
 /** A build, for a phrase that is a real crescendo whatever its section did before: it is where the
  * frunk rises. Two kinds: the loudness rises (band recordings), or the music rises - the line climbs by
- * an octave or more and lands on a held chord (organ, where the loudness barely moves). A peak on the
- * cue sheet always gets one. */
+ * an octave or more and lands on a held chord (an organ, where the loudness barely moves). */
 function buildFor(an: Analysis, ph: Phrase, phrases: Phrase[], plan: Formation[]): Formation | null {
   if (ph.gesture !== 'figuration' || ph.b - ph.a < 10) return null;
   const ev = an.events;
@@ -331,16 +304,14 @@ function buildFor(an: Analysis, ph: Phrase, phrases: Phrase[], plan: Formation[]
   const lands = ev.dur[ph.b - 1] >= 0.8
     || (ph.b < ev.t.length && ev.kind[ph.b] >= 2 && ev.t[ph.b] - ph.t1 < 0.6);
   const musical = climb >= 12 && lands && ph.t1 - ph.t0 >= 3;
-  const cuePeak = (an.cuePeaks ?? []).some(([t]) => ph.t0 < t && t <= ph.t1 + 0.5);
   const nBuilds = countIf(plan, (f) => CAT.BUILDS.has(f[1]));
   const room = nBuilds < 1 + an.duration / 50.0;       // about one build per 50 s of song at most
   const spaced = ph.t0 - lastBuild(plan, phrases) >= (musical ? 12 : 20);
   const crescendo = ph.mood !== 'calm' && room && (louder || musical) && spaced;
-  if (!crescendo && !(cuePeak && ph.t1 - ph.t0 >= 3)) return null;
+  if (!crescendo) return null;
   const kinds = ['out_in', 'accelerando', 'fill_stage', 'implode', ...(an.beatScore >= 2.0 ? ['bounce_build'] : [])];
-  // accelerando is a club strobe-roll: organ climbs get fills
-  if (an.beatScore < 2.0 || an.driver === 'organ') kinds.splice(kinds.indexOf('accelerando'), 1);
-  return ['unison', cuePeak ? 'out_in' : kinds[nBuilds % kinds.length]];
+  if (an.beatScore < 2.0) kinds.splice(kinds.indexOf('accelerando'), 1);     // a strobe-roll on the beat
+  return ['unison', kinds[nBuilds % kinds.length]];
 }
 
 /** The formation this phrase had the k-th time round when its section was first heard, a step bigger for
@@ -559,8 +530,8 @@ function arrivals(cars: Car[], an: Analysis, ph: Phrase, nHits: number): number 
   return nHits;
 }
 
-/** A cue's moment moved onto the music's grid: onto the beat when it is within a quarter beat of one
- * (a shout detected from a chord can read a little late), else onto the nearest eighth. */
+/** A moment moved onto the music's grid: onto the beat when it is within a quarter beat of one (a line's
+ * strongest attack can read a little late), else onto the nearest eighth. */
 function onGrid(an: Analysis, t: number): number {
   const b = an.beats;
   if (b.length < 2) return t;
@@ -570,58 +541,48 @@ function onGrid(an: Analysis, t: number): number {
   return M.snap(an, t, 2);
 }
 
-function applyCues(cars: Car[], an: Analysis, cues: Cues) {
-  const ct = M.centreTruck(cars);
-  const ys = M.sides(cars);
-  const bars = [...C.FRONT_BAR, ...C.REAR_BAR];
-  for (const [action, c] of cues) {
-    let t0 = c.t0, t1 = c.t1;
-    if (action === 'hit' || action === 'lightning' || action === 'ping') t0 = t1 = onGrid(an, t0);
-    if (action === 'solo') {
-      const keep: Car[] = [];
-      for (const tag of c.cars ?? []) keep.push(...(tag === 'center' && ct ? [ct] : tag === 'sides' ? ys : []));
-      for (const car of cars) {
-        if (keep.includes(car)) continue;
-        car.set(car.everything(), t0, t1, 0);
-        car.set(bars, t0, t1, 0);
-      }
-    } else if (action === 'hit') {
-      M.allOn(cars, t0, c.hold ?? 0.4);
-    } else if (action === 'lightning') {
-      M.lightning(cars, t0);
-    } else if (action === 'ping') {
+/** A line's lightning strike or chant ping, on the music's grid, where the music has a beat. */
+function strikes(cars: Car[], an: Analysis, said: Moment[]) {
+  for (const m of said) {
+    if (m.do === 'color' || flowsAt(an, m.t0)) continue;
+    const t = onGrid(an, m.t0);
+    if (m.do === 'lightning') {
+      M.lightning(cars, t);
+    } else {
       // one word of a chant: one car's whole front, pinging across the lineup word by word
-      const car = cars[c.car! % cars.length];
-      car.flash([...car.sig(), ...car.drl(), ...car.heads()], t0, 0.22);
-      if (car.isCt) M.barFlash(car, t0, 0.3, 1.0);
+      const car = cars[m.car! % cars.length];
+      car.flash([...car.sig(), ...car.drl(), ...car.heads()], t, 0.22);
+      if (car.isCt) M.barFlash(car, t, 0.3, 1.0);
     }
   }
 }
 
-/** Interior colour from the lyrics (overrides the section colour for the span). */
-function applyColorCues(cars: Car[], cues: Cues) {
-  for (const [action, c] of cues) {
-    if (action !== 'color') continue;
-    const a = cars[0].fr(c.t0), b = cars[0].fr(c.t1);
+/** The interiors take a line's colour while it is sung. */
+function colours(cars: Car[], said: Moment[]) {
+  for (const m of said) {
+    if (m.do !== 'color') continue;
+    const a = cars[0].fr(m.t0), b = cars[0].fr(m.t1);
     for (const car of cars) {
       for (const base of C.ALL_RGB) {
-        for (let i = 0; i < 3; i++) for (let f = a; f < b; f++) car.put(f, base + i, Math.trunc(c.color![i]));
+        for (let i = 0; i < 3; i++) for (let f = a; f < b; f++) car.put(f, base + i, Math.trunc(m.color![i]));
       }
     }
   }
 }
 
-/** Band songs: the kit is the rhythm. Kicks (strong low onsets) thump the fogs, snares (strong high
- * onsets) flash the side cars' accents, hats (weak high onsets) tick every car's markers - all gated by
- * the section's ceiling and the mood, so quiet sections stay quiet. */
+/** Where a rhythm section plays (feel.ts), the kit is the rhythm: kicks (strong low onsets) thump the
+ * fogs, snares (strong high onsets) flash the side cars' accents, hats (weak high onsets) tick every
+ * car's markers - all gated by the section's ceiling and the mood, so quiet sections stay quiet. */
 function drums(cars: Car[], an: Analysis) {
   const ys = M.sides(cars);
   for (const [t, strength] of an.bass) {
+    if (!kitAt(an, t)) continue;
     const mood = MD.moodAt(an, t);
     if (ceilingAt(an, t) < 1 || strength < 0.25 || mood === 'calm' || (mood === 'groove' && strength < 0.5)) continue;
     for (const c of cars) if (!c.isCt) c.flash(c.fogs(), t, 0.08 + 0.06 * strength);
   }
   for (const [t, strength] of an.highs) {
+    if (!kitAt(an, t)) continue;
     const ceiling = ceilingAt(an, t);
     const mood = MD.moodAt(an, t);
     if (ceiling < 1 || mood === 'calm') continue;
@@ -631,17 +592,20 @@ function drums(cars: Car[], an: Analysis) {
   }
 }
 
-/** Orchestral pieces: timpani and low-brass hits (low onsets) thump the headlights in lively sections;
- * cymbal and string attacks (high onsets) tick the markers at full power. */
+/** Where the music beats without a rhythm section (an orchestra, an organ): timpani and low-brass hits
+ * (low onsets) thump the headlights in lively sections; cymbal and string attacks (high onsets) tick the
+ * markers at full power. */
 function percussion(cars: Car[], an: Analysis) {
+  const here = (t: number) => !flowsAt(an, t) && !kitAt(an, t);
   for (const [t, strength] of an.bass) {
     const mood = MD.moodAt(an, t);
-    if (ceilingAt(an, t) >= 2 && strength >= 0.5 && (mood === 'drive' || mood === 'frenzy')) {
+    if (here(t) && ceilingAt(an, t) >= 2 && strength >= 0.5 && (mood === 'drive' || mood === 'frenzy')) {
       for (const c of cars) c.flash(c.heads(), t, 0.1 + 0.08 * strength);
     }
   }
   for (const [t, strength] of an.highs) {
-    if (ceilingAt(an, t) >= 3 && strength >= 0.6) for (const c of cars) c.flash(c.markers(), t, 0.06);
+    if (!here(t) || ceilingAt(an, t) < 3 || strength < 0.6) continue;
+    for (const c of cars) c.flash(c.markers(), t, 0.06);
   }
 }
 
@@ -652,7 +616,7 @@ function pedal(cars: Car[], an: Analysis) {
   const trucks = cars.filter((c) => c.isCt);
   const anchor = trucks.length ? trucks : [cars[Math.floor(cars.length / 2)]];
   for (let i = 0; i < ev.t.length; i++) {
-    if (ev.low[i] <= 45 && ev.dur[i] >= 0.8 && ceilingAt(an, ev.t[i]) <= 1) {
+    if (ev.low[i] <= 45 && ev.dur[i] >= 0.8 && ceilingAt(an, ev.t[i]) <= 1 && !flowsAt(an, ev.t[i])) {
       const t = ev.t[i], d = Math.min(ev.dur[i], 2.5);
       for (const c of anchor) {
         c.light(c.inner(), t, t + d, C.ON_2000);
@@ -699,23 +663,28 @@ function tidy(car: Car) {
 }
 
 /** The cabins glow with the intensity tier, purple to orange, flash on the beats and the accents when
- * the music is lively, and warm through each crescendo. */
+ * the music is lively, and warm through each crescendo (where the music flows, legato.ts colours them). */
 function interior(cars: Car[], an: Analysis) {
   const base: Record<number, [number[], number]> = { 0: [PURPLE, 0.3], 1: [PURPLE, 0.6], 2: [ORANGE, 0.6], 3: [ORANGE, 1.0] };
   const tiers = an.tier;
+  const beating = (t: number) => !flowsAt(an, t);
   let i = 0;
   while (i < an.nFrames) {
     let j = i;
-    while (j < an.nFrames && tiers[j] === tiers[i]) j++;
+    const on = beating(i * an.step);
+    while (j < an.nFrames && tiers[j] === tiers[i] && beating(j * an.step) === on) j++;
     const [color, scale] = base[Math.trunc(tiers[i])];
-    for (const c of cars) c.rgb(i * an.step, j * an.step, color, scale);
+    if (on) for (const c of cars) c.rgb(i * an.step, j * an.step, color, scale);
     i = j;
   }
   for (const bt of an.beats) {
-    if (tierAt(an, bt) >= 2) for (const c of cars) c.rgb(bt, bt + 0.1, tierAt(an, bt) === 3 ? ORANGE : PURPLE, 1.0);
+    if (tierAt(an, bt) < 2 || !beating(bt)) continue;
+    for (const c of cars) c.rgb(bt, bt + 0.1, tierAt(an, bt) === 3 ? ORANGE : PURPLE, 1.0);
   }
-  for (const h of an.hits) if (tierAt(an, h) >= 1) for (const c of cars) c.rgb(h, h + 0.12, WHITE);
-  for (const [a, b] of runs(an.build.map((x) => x > 0))) {
+  for (const h of an.hits) {
+    if (tierAt(an, h) >= 1 && beating(h)) for (const c of cars) c.rgb(h, h + 0.12, WHITE);
+  }
+  for (const [a, b] of runs(an.build.map((x, f) => x > 0 && beating(f * an.step)))) {
     for (let k = 0; k < b - a; k += 5) {
       const p = an.build[a + k];
       const col = [0, 1, 2].map((q) => Math.trunc(PURPLE[q] + (ORANGE[q] - PURPLE[q]) * p));
@@ -733,11 +702,10 @@ function finalBeat(an: Analysis, end: number): number | null {
   if (!env || !b.length) return null;
   const hop = an.pulseHop ?? 512 / 22050;
   const strength = b.map((x) => {
-    const i = clip(round(x / hop), 1, env.length - 2);
+    const i = clip(Math.round(x / hop), 1, env.length - 2);
     return Math.max(env[i - 1], env[i], env[i + 1]);
   });
-  // a float32 array compared with a float: numpy casts the threshold to float32
-  const threshold = Math.fround(0.6 * Math.max(...strength));
+  const threshold = 0.6 * Math.max(...strength);
   const strong = b.filter((_, k) => strength[k] >= threshold);
   return strong.length ? strong[strong.length - 1] : null;
 }

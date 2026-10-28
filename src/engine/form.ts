@@ -12,7 +12,7 @@ import { chromaCqt } from './listen/cqt';
 import {
   agglomerative, beatTrackY, framesToTime, mfcc, normalizeColumns, SR, sync, type Spectrum,
 } from './listen/dsp';
-import { clip, mean, mean32, round } from './np';
+import { clip, mean } from './np';
 
 /** The form map of `y` (mono, 22050 Hz): its sections, from the spectrum audio.ts already took of the
  * same samples. */
@@ -29,18 +29,14 @@ export function analyzeForm(y: Float32Array, intensity: ArrayLike<number>, step:
   const X = new Float32Array(25 * nc);
   X.set(Cn);
   for (let i = 0; i < 13 * nc; i++) X[12 * nc + i] = 0.5 * Mn[i];
-  let k = clip(round(duration / 22.0), 3, 14);
+  let k = clip(Math.round(duration / 22.0), 3, 14);
   k = Math.min(k, nc - 1);
   const raw = agglomerative(X, 25, nc, k);
   const bt = beatFrames.map((f) => framesToTime(f));
   const bounds = [...new Set([0, ...raw])].sort((a, b) => a - b);
   const colMean = (b: number, e: number) => {
-    const out = new Float64Array(25), row = new Float32Array(Math.max(0, Math.min(e, nc) - b));
-    for (let r = 0; r < 25; r++) {
-      for (let c = 0; c < row.length; c++) row[c] = X[r * nc + b + c];
-      out[r] = row.length ? mean32(row) : NaN;
-    }
-    return out;
+    const n = Math.max(0, Math.min(e, nc) - b);
+    return Float64Array.from({ length: 25 }, (_, r) => (n ? mean(X, r * nc + b, r * nc + b + n) : NaN));
   };
   const spans: [number, number, Float64Array][] = [];
   for (let i = 0; i < bounds.length; i++) {

@@ -6,7 +6,7 @@
 // LEDs from the vehicle's left).
 
 import * as C from './channels';
-import { round, u8 } from './np';
+import { u8 } from './np';
 import { lineupCars } from './vehicles';
 
 const LIGHT_LEAD_S = 0.02;   // lights fire one frame before the sound so they read as on the beat
@@ -63,7 +63,7 @@ export class Car {
   }
 
   fr(t: number): number {
-    return Math.min(Math.max(round((t - LIGHT_LEAD_S) / this.step), 0), this.nFrames);
+    return Math.min(Math.max(Math.round((t - LIGHT_LEAD_S) / this.step), 0), this.nFrames);
   }
 
   light(chs: Chs, t0: number, t1: number, value = C.ON) {

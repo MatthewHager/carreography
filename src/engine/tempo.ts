@@ -7,15 +7,13 @@
 // smoothly, and the result is the grid every move quantizes to (moves.subGrid / snap).
 
 import type { Analysis } from './analysis';
-import { argmax, argsort, clip, mean, mean32, median, median32, round, searchsorted } from './np';
-
-const f32 = Math.fround;
+import { argmax, argsort, clip, mean, median, searchsorted } from './np';
 
 /** The piece's nominal beat, in seconds (never slower than 40 BPM). */
 export const beatLen = (an: Analysis) => 60.0 / Math.max(an.tempo, 40);
 
-/** Four of those beats (computed on its own, so its rounding stays what the shows were made with). */
-export const barLen = (an: Analysis) => (4 * 60.0) / Math.max(an.tempo, 40);
+/** Four of those beats. */
+export const barLen = (an: Analysis) => 4 * beatLen(an);
 
 /** [times, strengths] of the played attacks: transcribed note events (chords count more) and the
  * bass onsets. */
@@ -37,7 +35,7 @@ function onsets(an: Analysis): [number[], number[]] {
   return [t, w];
 }
 
-/** A least-squares line through (x, y): [slope, intercept], as np.polyfit(x, y, 1). */
+/** The least-squares line through (x, y): [slope, intercept]. */
 function fitLine(x: number[], y: number[]): [number, number] {
   const mx = mean(x), my = mean(y);
   let sxy = 0, sxx = 0;
@@ -136,9 +134,9 @@ function phaseLock(an: Analysis, window = 8, gain = 1.3): void {
   const b = an.beats;
   if (!env || b.length < 2 * window) return;
   const hop = an.pulseHop ?? 512 / 22050;
-  const w = Math.max(1, Math.trunc(round(0.03 / hop)));
+  const w = Math.max(1, Math.round(0.03 / hop));
   const score = (times: number[]) => times.map((x) => {
-    const i = clip(round(x / hop), 0, env.length - 1);
+    const i = clip(Math.round(x / hop), 0, env.length - 1);
     return maxEnv(env, Math.max(0, i - w), i + w + 1);
   });
   const gaps = b.slice(1).map((x, i) => x - b[i]);
@@ -149,7 +147,7 @@ function phaseLock(an: Analysis, window = 8, gain = 1.3): void {
   const half = Math.floor(window / 2);
   for (let a = 0; a < b.length; a += half) {
     const s0 = Math.max(0, a - half), s1 = Math.min(b.length, a + window + half);
-    const sc = perBeat.map((row) => mean32(row, s0, s1));
+    const sc = perBeat.map((row) => mean(row, s0, s1));
     const k = argmax(sc);
     if (k !== 0 && sc[k] > gain * sc[0]) for (let i = a; i < Math.min(b.length, a + half); i++) choice[i] = shifts[k];
   }
@@ -173,18 +171,18 @@ function snapToPulse(an: Analysis, reach = 0.045): void {
   const b = an.beats;
   if (!env || b.length < 4) return;
   const hop = an.pulseHop ?? 512 / 22050;
-  const w = Math.max(1, Math.trunc(round(reach / hop)));
+  const w = Math.max(1, Math.round(reach / hop));
   const out = [...b];
   b.forEach((t, k) => {
-    const i = Math.trunc(round(t / hop));
+    const i = Math.round(t / hop);
     const lo = Math.max(1, i - w), hi = Math.min(env.length - 1, i + w + 1);
     if (hi - lo < 2) return;
     const seg = env.slice(lo, hi);
     const j = lo + argmax(seg);
-    if (j <= 0 || j >= env.length - 1 || env[j] <= median32(seg) * 1.5) return;   // no real attack near this beat
+    if (j <= 0 || j >= env.length - 1 || env[j] <= median(seg) * 1.5) return;   // no real attack near this beat
     const [y0, y1, y2] = [env[j - 1], env[j], env[j + 1]];
     const den = y0 - 2 * y1 + y2;
-    const d = den < 0 ? (0.5 * f32(y0 - y2)) / den : 0.0;
+    const d = den < 0 ? (0.5 * (y0 - y2)) / den : 0.0;
     out[k] = (j + clip(d, -0.5, 0.5)) * hop;
   });
   for (let k = 1; k < out.length; k++) out[k] = Math.max(out[k], out[k - 1]);

@@ -1,7 +1,6 @@
-// numpy's default_rng (PCG64 seeded through SeedSequence), bit for bit, so the "random" twinkles in a
-// show are the same ones the Python version (tag python-final) drew. Only the calls the choreography
-// makes are here: random(), integers(high) and choice(n, size, replace=false). Ported from numpy 1.26
-// (bit_generator.pyx, pcg64.h, distributions.c, _generator.pyx).
+// numpy's default_rng (PCG64 seeded through SeedSequence), bit for bit. The shows don't use it (they use
+// seeded.ts); it stays only because listen/align.test.ts builds its test signals from these exact numbers.
+// Delete it once that test no longer depends on them.
 
 const M32 = 0xffffffffn;
 const M64 = 0xffffffffffffffffn;

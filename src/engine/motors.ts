@@ -3,7 +3,7 @@
 // Lights flash in 20 ms; the motors move in seconds (mirrors 2 s, windows 4 s, frunk and liftgates
 // 14 s up / 4 s down - the Cybertruck's frunk 10 s up - charge port 2 s), and Tesla counts their commands per show *per closure*
 // (liftgate 6, each window 6, each mirror 20, charge port 3). So they get their own choreography,
-// planned from the form map and the crescendos rather than from the light cues, with its own moves:
+// planned from the form map and the crescendos rather than from the lights, with its own moves:
 //
 //   Lids (frunk + liftgates), one gesture per crescendo, biggest first:
 //     dance        the biggest builds: every lid opens fully, lands on the peak a beat after its
@@ -27,7 +27,7 @@ import { BUILDS } from './catalog';
 import * as np from './np';
 import { barLen, beatLen } from './tempo';
 
-const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };   // Cybertruck frunk: timed on the truck, Oct 2026
+export const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };   // Cybertruck frunk: timed on the truck, Oct 2026
 const LIFTGATE_CLOSE_S = 4.0;
 export const WINDOW_S = 4.0, PORT_S = 2.0, MIRROR_S = 2.0;
 const WINDOW_BURST_S = 4.5, WINDOW_PEAK_DANCE_S = 10.0;   // window dances: ~3 x 4.5 + 10 = 24 s, under Tesla's ~30 s
@@ -37,8 +37,8 @@ const PORT_DANCE_MAX_S = 112.0;         // the port's rainbow, closed before its
 const STILL_LIVELY_S = 12.0, STILL_CALM_S = 30.0;   // longest stretch with no motor moving (stretched to the mirrors' budget)
 const MIRROR_PULSE_CYCLES = 4;          // the steady mirror pulse, leaving commands for the rest of the song
 
-/** (peak_time, build_length, hold_until, score, forced) */
-type Crescendo = [number, number, number, number, boolean];
+/** (peak_time, build_length, hold_until, score) */
+type Crescendo = [number, number, number, number];
 /** The mirrors in a row, crowd-left to crowd-right: [car, mirror channel]. */
 type Line = [Car, number][];
 /** Commands spent so far per (car, mirror). */
@@ -77,7 +77,8 @@ function liftgateWindows(car: Car, an: Analysis): [number, number][] {
   return spans;
 }
 
-/** (peak_time, build_length, hold_until, score, forced) for the biggest crescendos, in time order.
+/** (peak_time, build_length, hold_until, score) for the biggest crescendos, the final climax first and
+ * then the rest by size.
  *
  * A crescendo peak is where a sustained rise in loudness tops out: the end of each detected
  * build, plus every arrival chord. Its build length is how long the loudness had been rising
@@ -88,7 +89,6 @@ function crescendos(an: Analysis, lead: number): Crescendo[] {
   const spacing = 24.0;
   const step = an.step, inten = an.intensity;
   const cands: [number, number | null, number][] = [];
-  const forced = an.cuePeaks ?? [];
   // The choreographer's own crescendo phrases are the best source: they end on the peak.
   for (const ph of an.phrases ?? []) {
     if (ph.move !== undefined && BUILDS.has(ph.move)) {
@@ -142,17 +142,11 @@ function crescendos(an: Analysis, lead: number): Crescendo[] {
   let final: [number, number, number, number] | null = null;
   for (const p of late) if (final === null || p[0] > final[0]) final = p;
   const ranked: Crescendo[] = [];
-  for (const [t, blen, hold, isFinal] of forced) {   // cue-sheet peaks come first, whatever the meter says
-    const holdUntil = isFinal ? an.duration : (hold ? t + hold : Math.min(t + 8.0, an.duration));
-    ranked.push([t, np.clip(blen, 1.0, lead), holdUntil, isFinal ? 10.0 : 9.0, true]);
-  }
-  if (final && ranked.every((q) => Math.abs(final![0] - q[0]) >= 6)) {
-    ranked.push([final[0], final[1], an.duration, final[3] + 1.0, false]);
-  }
+  if (final) ranked.push([final[0], final[1], an.duration, final[3] + 1.0]);
   const byScore = merged.slice().sort((p, q) => q[3] * (0.5 + q[1] / lead) - p[3] * (0.5 + p[1] / lead));
   for (const p of byScore) {
     if (ranked.every((q) => Math.abs(p[0] - q[0]) >= spacing)) {
-      ranked.push([p[0], p[1], p[2], p[3], false]);
+      ranked.push([p[0], p[1], p[2], p[3]]);
     }
   }
   return ranked;
@@ -201,12 +195,12 @@ function windows(cars: Car[], an: Analysis): void {
     const peaks = crescendos(an, LIFTGATE_OPEN_S[c.kind]).sort((p, q) => -p[3] - -q[3]);
     const bar = barLen(an);
     const beat = bar / 4;
-    const burst = beat * Math.max(2, np.round(WINDOW_BURST_S / beat));      // ~4.5 s, a whole number of beats
-    const half = beat * Math.max(1, Math.floor(np.round(burst / beat) / 2));
+    const burst = beat * Math.max(2, Math.round(WINDOW_BURST_S / beat));      // ~4.5 s, a whole number of beats
+    const half = beat * Math.max(1, Math.floor(Math.round(burst / beat) / 2));
     const peakT = peaks.length ? onBeat(an, peaks[0][0]) : null;
     // wave moments: starts of lively sections, spread over the piece, clear of the peak dance
     const waveCands = Array.from(new Set(
-      secs.filter((sc) => sc.ceiling >= 2 && 8 < sc.t0 && sc.t0 < end - 20).map((sc) => np.pyRound(sc.t0, 1)),
+      secs.filter((sc) => sc.ceiling >= 2 && 8 < sc.t0 && sc.t0 < end - 20).map((sc) => Math.round(sc.t0 * 10) / 10),
     )).sort((p, q) => p - q);
     const waves: number[] = [];
     let last = -1e9;
@@ -440,7 +434,7 @@ function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
     // stays on the music's grid even when the tempo drifts a little.
     let grid: number[] = [];
     if (beats.length >= 8) {
-      const per = Math.max(1, np.round(cycle / Math.max(np.median(np.diff(beats)), 0.2)));
+      const per = Math.max(1, Math.round(cycle / Math.max(np.median(np.diff(beats)), 0.2)));
       for (let i = 0; i < beats.length; i += per) grid.push(beats[i]);
     }
     if (grid.length < 4 || Math.abs(np.median(np.diff(grid)) - cycle) > 0.3 * cycle) {
@@ -588,11 +582,10 @@ function stillRuns(mask: ArrayLike<number | boolean>, an: Analysis): [number, nu
 }
 
 /** Still stretches, longest (relative to its threshold) first: [(need, t0, t1, lively)]. */
-function gaps(mask: ArrayLike<number | boolean>, an: Analysis, livelyOnly: boolean): Gap[] {
+function gaps(mask: ArrayLike<number | boolean>, an: Analysis): Gap[] {
   const step = an.step;
   const out: Gap[] = [];
   for (const [a, b, lively] of stillRuns(mask, an)) {
-    if (livelyOnly && !lively) continue;
     const need = (b - a) * step / (lively ? STILL_LIVELY_S : STILL_CALM_S);
     out.push([need, a * step, b * step, lively]);
   }
@@ -610,13 +603,12 @@ function gaps(mask: ArrayLike<number | boolean>, an: Analysis, livelyOnly: boole
 function spendLeftovers(cars: Car[], an: Analysis, line: Line, spent: Spent): void {
   const beat = beatLen(an);
   const step = an.step;
-  const livelyOnly = Math.trunc(np.max(an.tier)) <= 1;      // a song held quiet on purpose (Ave Maria) stays gentle
   // 1. Windows: extra travelling dances in the stillness (one command kept for the final Open).
-  const burst = beat * Math.max(2, np.round(WINDOW_BURST_S / beat));
+  const burst = beat * Math.max(2, Math.round(WINDOW_BURST_S / beat));
   for (let k = 0; k < 12; k++) {
     const mask = motion(cars, an);
     let placed = false;
-    for (const [need, g0, g1] of gaps(mask, an, livelyOnly)) {
+    for (const [need, g0, g1] of gaps(mask, an)) {
       if (g1 - g0 < burst + 3 * beat + 2 || need < 0.5) continue;
       const t0 = onBeat(an, (g0 + g1) / 2 - (burst + 2 * beat) / 2);
       cars.forEach((c, idx) => {
@@ -639,7 +631,7 @@ function spendLeftovers(cars: Car[], an: Analysis, line: Line, spent: Spent): vo
   for (let k = 0; k < 3; k++) {
     const mask = motion(cars, an);
     let placed = false;
-    for (const [, g0, g1] of gaps(mask, an, livelyOnly)) {
+    for (const [, g0, g1] of gaps(mask, an)) {
       cars.forEach((c, idx) => {
         const left = C.CLOSURE_LIMITS[C.LIFTGATE] - used(c, C.LIFTGATE);
         if (left < 2) return;

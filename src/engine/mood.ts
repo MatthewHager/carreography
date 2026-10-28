@@ -19,7 +19,7 @@ import type { Analysis, Events, Phrase } from './analysis';
 import { ceilingAt } from './arc';
 import { frameSpan } from './phrases';
 import { argsort, clip, convolveSame, diff, max, mean, median } from './np';
-import { clarity } from './pulse';
+import { clarity } from './feel';
 import { beatLen } from './tempo';
 
 const BEATS_PER_HIT: Record<string, number> = { calm: 4, groove: 2, drive: 1, frenzy: 0.5 };
@@ -84,7 +84,7 @@ export function assign(an: Analysis, phrases: Phrase[]): void {
     ph.mood = moodFor(ph.energy);
     // a steady, clearly struck beat keeps a phrase out of "calm" (Thriller's quiet groove intro),
     // but rhythm alone never pushes it higher - the dynamics still come from the music's energy
-    if (ph.mood === 'calm' && clarity(an, ph.t0, ph.t1) >= 4.0 && (an.driver ?? '') !== 'organ') ph.mood = 'groove';
+    if (ph.mood === 'calm' && clarity(an, ph.t0, ph.t1) >= 4.0) ph.mood = 'groove';
     ph.pace = paceS(ph.mood, beat);
   }
   // A trill or a dense run in a lively section is frenzy material whatever the loudness says.
@@ -92,13 +92,6 @@ export function assign(an: Analysis, phrases: Phrase[]): void {
     if (ph.gesture === 'trill' && (ph.energy as number) >= 0.45) {
       ph.mood = 'frenzy';
       ph.pace = paceS('frenzy', beat);
-    }
-  }
-  // A song held quiet on purpose (--max-level 1, Ave Maria) never goes past groove, and is mostly calm.
-  if (Math.trunc(max(an.tier)) <= 1) {
-    for (const ph of phrases) {
-      ph.mood = (ph.energy as number) < 0.6 ? 'calm' : 'groove';
-      ph.pace = paceS(ph.mood, beat);
     }
   }
 }
