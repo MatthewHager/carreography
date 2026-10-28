@@ -156,7 +156,7 @@ export async function main(argv: string[]): Promise<number> {
     console.log(`Lyrics: ${got}`);
   }
   const t = Date.now();
-  const cars = choreograph(an, { layout: lineup, name: fileName(title) });
+  const cars = choreograph(an, lineup);
   console.log(`Choreographed in ${Date.now() - t} ms`);
 
   mkdirSync(path.join(out, 'show'), { recursive: true });
@@ -169,8 +169,8 @@ export async function main(argv: string[]): Promise<number> {
   const tenth = (c: ArrayLike<number> | undefined) =>
     c && Array.from({ length: Math.ceil(c.length / 5) }, (_, i) => Math.round(c[i * 5] * 100) / 100);
   writeFileSync(path.join(out, 'show.json'), JSON.stringify({
-    title, lineup, duration: an.duration, tempo: an.tempo, beatScore: an.beatScore, driver: an.driver,
-    sections: an.sections, phrases: an.phrases, cuePeaks: an.cuePeaks, beats: an.beats,
+    title, lineup, duration: an.duration, tempo: an.tempo, beatScore: an.beatScore,
+    sections: an.sections, phrases: an.phrases, beats: an.beats,
     downbeats: an.downbeats, hits: an.hits, bass: an.bass, highs: an.highs, lyricLines: an.lyricLines ?? null,
     curves: { hz: 10, intensity: tenth(an.intensity), tier: tenth(an.tier), build: tenth(an.build),
       loudFast: tenth(an.loudFast), energy: tenth(an.energy) },

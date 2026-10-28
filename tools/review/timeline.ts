@@ -69,7 +69,7 @@ export function drawTimeline(r: Review, t0: number, t1: number, pxPerS: number):
   // --- the header and the clock ---
   const sec = an.sections ?? [];
   const head = `${r.title} · ${r.lineup} · ${clock(t0)}-${clock(t1)} · ${Math.round(bpm(an.beats))} bpm · `
-    + `beat score ${an.beatScore.toFixed(1)} · driver ${an.driver ?? '?'} · ${sec.length} sections`;
+    + `beat score ${an.beatScore.toFixed(1)} · ${sec.length} sections`;
   bands.push({ h: 14, draw: (y) => pic.text(4, y + 3, head, WHITE) });
   bands.push({ h: 12, draw: (y) => pic.text(4, y + 2, "Pairs: upper half = crowd's left, lower half = crowd's "
     + 'right. Closures: brightness = how open, magenta = dancing. Grid: beats, brighter on downbeats.', FAINT) });
@@ -152,11 +152,6 @@ export function drawTimeline(r: Review, t0: number, t1: number, pxPerS: number):
       pic.set(GUTTER + x, y + 39 - Math.round(colMax(an.loudFast, x) * 38), [235, 235, 235]);
     }
     for (const t of an.hits.filter(inView)) pic.rect(X(t), y, 1, 5, WHITE);
-    for (const [t] of an.cuePeaks ?? []) {
-      if (!inView(t)) continue;
-      pic.rect(X(t), y, 1, 39, DANCING);
-      pic.text(X(t) + 3, y + 1, 'peak', DANCING);
-    }
   } });
   const strip = (label: string, s: ArrayLike<number> | undefined, c: Rgb) => s && bands.push({ h: PITCH, label,
     draw: (y) => {

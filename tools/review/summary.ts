@@ -52,7 +52,7 @@ export function summarize(r: Review, frames: Uint8Array[]): string {
   const onBeat = nearMask(an.beats, n), onNote = nearMask(an.events.t, n);
   const stats = r.cars.map((c) => busy(c.lamps, n));
   out.push(`${r.title} · lineup ${r.lineup} · ${clock(an.duration)} · ${bpm(an.beats).toFixed(0)} bpm · `
-    + `beat score ${an.beatScore.toFixed(2)} (2+ = a beat to follow) · driver ${an.driver} · `
+    + `beat score ${an.beatScore.toFixed(2)} (2+ = a beat to follow) · `
     + `${an.events.t.length} note events · ${(an.phrases ?? []).length} phrases`);
   out.push('Per car: lit = frames with any lamp at half or more; light = mean level of all its lamps; '
     + 'flashes/s = frames where a lamp switches on; on beat / on note = share of those within 60 ms of one.');
@@ -133,10 +133,5 @@ export function summarize(r: Review, frames: Uint8Array[]): string {
     out.push(`    ${car.name}: ${counts || 'none'}`);
     for (const [, c] of cmds) out.push(`        ${c}`);
   });
-  if (an.cuePeaks?.length) {
-    out.push('');
-    const peaks = an.cuePeaks.map(([t, b, h, fin]) => `${clock(t)} build ${b} s hold ${h ?? '-'}${fin ? ' final' : ''}`);
-    out.push(`PEAKS (cue sheet): ${peaks.join('; ')}`);
-  }
   return out.join('\n') + '\n';
 }

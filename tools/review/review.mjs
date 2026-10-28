@@ -11,6 +11,6 @@ const { module } = await runnerImport(path.join(root, 'tools/review/main.ts'), {
 try {
   process.exitCode = await module.main(process.argv.slice(2));
 } catch (err) {
-  console.error(err instanceof Error ? err.message : err);
+  console.error(err instanceof Error ? err.stack : err);
   process.exitCode = 1;
 }
