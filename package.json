@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc -b",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "review": "node tools/review/review.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
