@@ -1,5 +1,0 @@
-# The neural beat tracker's own environment (.venv_beats) - kept separate because it brings its
-# own torchaudio, which can clash with Demucs. setup.sh creates it.
-beat-this==1.1.0
-soundfile==0.14.0
-torch==2.14.1

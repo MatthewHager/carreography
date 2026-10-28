@@ -1,46 +1,16 @@
-# Python environments (setup.sh recreates them)
-.venv*/
-__pycache__/
-*.pyc
+# The app's dependencies and build (GitHub Actions builds the site)
+app/node_modules
+app/dist
 
-# Third-party files: Tesla's repo (lightshow/tesla_files.py), the viewer's car models from the Tesla
-# app (lightshow/tesla_app_models.py), and
-# local study material: none of it is ours to redistribute
-vendor/
-preview3d/public/models/
-preview3d/dist/models/
+# The analysis models and Tesla's car models: downloaded from the repository's releases, never committed
+app/public/models
 
-# Recordings: bring your own (songs/README.md); they're never committed
-songs/*
-!songs/README.md
-
-# Voice tracks for diagnostic shows of other lineups (build.py --diagnostic)
+# The frozen comparison with the Python version (bridge.test.ts): it describes copyrighted
+# recordings, so it stays on your machine
 cache/
 
-# Generated from songs/ by build.py (--assemble regenerates them in a minute)
-output/**/*.wav
-output/**/stems/
-usb/
+# Your recordings, for trying shows: never committed
+songs/
 
-# Analysis caches and logs (rebuilt by build.py)
-output/**/*.pkl
-output/**/*.npy
-output/**/*.json
-output/**/build.log
-output/.demucs.lock
-output/**/*.mp4
-
-# The web app's uploads and results (deleted after a day anyway)
-webapp/jobs/
-
-# Review images, viewer dependencies
-checks/
-preview3d/node_modules/
-
+.claude/worktrees/
 .DS_Store
-
-# The browser app: dependencies and builds (GitHub Actions builds the site)
-app/node_modules/
-app/dist/
-# the analysis models: downloaded from the repository's release by the site build (tools/export_models.py)
-app/public/models/
