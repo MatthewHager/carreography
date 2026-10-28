@@ -1,152 +1,149 @@
 # Contributing
 
-Thanks for helping. This project turns songs into Tesla light shows. Most contributions fall into
-one of these:
+Thanks for helping. Most contributions are one of these: a new move, a new car, better listening, a fix
+to the page or the 3D preview, or a report of how a show played on your car. Read
+[How it works](docs/HOW_IT_WORKS.md) first; if you work with a coding agent, [AGENTS.md](AGENTS.md) is
+written for it.
 
-- **A new move**: a new way for the lineup to play the music.
-- **Better listening**: beat tracking, transcription, form detection.
-- **A new vehicle**: Model 3, S, X, and so on.
-- **Car test reports**: what the diagnostic show actually did on your car. Especially wanted for
-  the 2025+ Model Y and any car not yet supported.
-- **The web app and the 3D preview.**
+## Develop
 
-Read [docs/CHOREOGRAPHY.md](docs/CHOREOGRAPHY.md) first. It explains how the pieces fit and the rules
-every show keeps. If you work with a coding agent, [AGENTS.md](AGENTS.md) is written for it.
-
-## Setup
+The app is in `app/`: Vite, React and TypeScript, with shadcn/ui and three.js. You need Node.js 24.
 
 ```bash
-./setup.sh                                   # Python 3.12 environments (.venv312, .venv_beats) + Tesla's files
-.venv312/bin/python -m pytest                # the tests (about 20 s)
-.venv312/bin/python -m pyflakes build.py make_usb.py lightshow tools tests webapp
+cd app
+npm install
+npm run dev          # http://localhost:5173/carreography/
+npx vitest run       # the tests
+npx tsc -b           # the type check
+npx oxlint src       # lint
+npm run build        # the site, in dist/
 ```
 
-You need uv, ffmpeg and git (`brew install uv ffmpeg` on a Mac). For the 3D preview you also need
-Node.js 22 (`cd preview3d && npm install && npm run build`). For the diagnostic's voice you need
-macOS's `say` or `espeak-ng`.
+The listening models and Tesla's car models aren't in the repository. Download them from the releases
+once (with the [GitHub CLI](https://cli.github.com/)), as the site build does:
 
-**Never commit recordings.** `songs/` is ignored. Use your own music locally. The tests make their
-own synthetic song.
+```bash
+gh release download models --dir app/public/models --pattern "*.onnx"
+gh release download car-models --dir app/public/models/tesla-app
+```
 
-## The development loop
+**Never commit recordings, Tesla's files or anything in `cache/`.** Keep songs for trying shows in
+`songs/`, which git ignores. The tests make up their own signals and lyrics.
 
-1. **Build a song** with your change:
-   `python3 build.py --song ~/Music/song.mp3 --lineup YCY --out /tmp/try`. It takes a few minutes the
-   first time. The analysis is cached next to the audio, so rebuilding after a choreography change is
-   quick.
-2. **Watch it.** Serve the repo with `python3 -m http.server 8765` and open
-   `http://localhost:8765/preview3d/dist/?manifest=/<path to try>/shows.json` (the manifest must be
-   inside the served folder: use `--out cache/try` and the URL `?manifest=/cache/try/shows.json`).
-   Add `&labels=1` to label each car and `&t=60` to start at 60 s.
-3. **Check it** with the tools ([tools/README.md](tools/README.md)):
-   - `tools/closure_audit.py --summary <fseq files>` for the motor rules;
-   - `tools/feel.py <show>` for how clearly the lights pulse on the beat;
-   - `tools/quantize_check.py <show>` for how many hits land on notes and beats;
-   - `tools/move_lab.py <show> <move>` to play one move alone on a song's analysis.
+## Where things are
 
-   These tools read a show in `output/<name>/`, so build it there (`build.py --song ... --name x`)
-   rather than with `--out`.
-4. **Run the tests.**
+| Folder | What |
+|---|---|
+| `app/src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. A port of the Python generator, module for module: `choreo.ts` (the pipeline and the move chooser), `moves.ts` (every move), `catalog.ts` (the move catalogue), `car.ts` (one car's frames and lamp groups), `vehicles.ts` (the lineup letters), `pulse.ts` (the beat layer), `motors.ts` (the closures), `lamps.ts` (the 2025+ Model Y), `legato.ts`, `cues.ts`, `lyrics.ts`, and the reading of the music (`texture.ts`, `form.ts`, `phrases.ts`, `mood.ts`, `tempo.ts`, `arc.ts`). |
+| `app/src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend), song tags, LRCLIB and lyric alignment. |
+| `app/src/viewer/` | The 3D preview (three.js), adapted from Tesla Lightshow Studio (AGPL-3.0): `core/` reads, writes and simulates show files, `car/appBody.ts` draws Tesla's app models. |
+| `app/src/app/` | The page: the 3D stage, the panels, the worker that makes a show (`show.worker.ts`), the WAV and the ZIP. |
+| `app/src/components/ui/` | shadcn/ui components, as the shadcn CLI writes them. Don't edit them; restyle through the theme in `app/src/index.css`. |
+| `tools/` | The two scripts that make the releases (below). |
+| `MOVES.md` | The move catalogue, generated from `catalog.ts`. |
 
-### Did I change the shows?
+## The bridge test
 
-Choreography changes are meant to change shows. Changes to infrastructure (refactors, the web app,
-the preview, new vehicles) should leave existing shows byte-identical. To check:
+The engine is a faithful port of the Python choreographer (tag `python-final`), and
+`app/src/engine/bridge.test.ts` proves it: it choreographs 24 shows (12 songs, some in several lineups)
+from the Python version's own analyses and compares every car's frames with the Python version's, byte
+for byte. `vehicles.test.ts` uses the same analyses to check every car letter against Tesla's motor
+limits.
 
-- Build a song before and after your change and compare the `.fseq` files with `cmp`. The FSEQ
-  writer is deterministic, so identical input gives identical bytes.
-- `tests/test_diagnostic.py` pins the classic lineup's diagnostic wording, because its recorded voice
-  track sets every cue's timing.
+The analyses and frames live in `cache/bridge/`, made by `tools/export_bridge.py` at `python-final`. They
+describe copyrighted recordings, so they stay on the machines that have them and out of the repository.
+Without `cache/bridge/` both tests are skipped, as they are in CI; everything else runs. With it, the dev
+server can also choreograph a song from its Python analysis:
+`http://localhost:5173/carreography/?bridge=02_this_is_halloween`.
+
+Refactors must keep the bridge test passing: the same input gives byte-identical shows. If you have the
+cache, run it before and after; if you don't, say so in the pull request.
 
 ## Adding a move
 
-1. **Write it** in `lightshow/moves.py` as a function `my_move(cars, an, ph)`.
-   - `cars` is the lineup, crowd-left to right (`choreo.Car` objects); `an` is the analysis; `ph` is
-     the phrase (`ph.t0`, `ph.t1`, `ph.a`/`ph.b` index its notes in `an.events`).
-   - Light lamps with the `Car` methods: `car.flash(car.heads("L"), t, 0.12)`,
-     `car.light(car.accents(), t0, t1)`, `car.pixels(C.FRONT_BAR, t, values)` (truck bar, 0–1 per
-     LED, crowd-left to right).
-   - Use `sides(cars)` and `centre_truck(cars)` (which may be `None`) for the two roles. Never
-     assume three cars.
-   - Take times from the music: `an.events.t`, `an.beats`, `an.downbeats`, `_grid(an, ph, ...)`,
-     `_beat_at(an, t)`. Never use a fixed tempo.
-   - Follow the design notes in [docs/CHOREOGRAPHY.md](docs/CHOREOGRAPHY.md#designing-a-new-move).
-2. **Catalogue it** in `lightshow/catalog.py`:
-   ```python
-   "my_move": Move("one line: what the crowd sees", ("groove", "drive"), ("figuration",), "beat"),
-   ```
-   The fields are moods, the phrase gestures it fits, what it locks to (`note`, `beat`, `bar`,
-   `build`, `self`), and `collab=False` if the cars don't pass anything between them. That's enough
-   for the choreographer to choose it: `choreo.py` calls `moves.my_move(cars, an, ph)` by name. If
-   it needs extra arguments, add it to `special` in `choreo._play_phrases`.
-3. **Classify it** (optional) in the sets at the top of `choreo.py`'s choreographer section:
-   - `BEAT_MOVES` makes it need a clear beat;
-   - `CALM` allows it in calm passages;
-   - `QUIET`/`STRONG` say how much of the stage it lights;
-   - `BIG` gives it a breath of black before it.
-4. **Try it alone**: `.venv312/bin/python tools/move_lab.py <show> my_move` shows how its hits sit on
-   the beat and notes. Then build a song and watch it in the preview, in at least a one-car, the
-   classic three-car and a five-car lineup.
-5. **Test.** `tests/test_catalog.py` checks the catalogue entry and the function agree;
-   `tests/test_choreography.py` runs the choreographer across lineups. Run `build.py` once more so
-   `MOVES.md` regenerates, and commit it.
+1. **Write it** in `app/src/engine/moves.ts` as a function `(cars, an, ph) => void`.
+   - `cars` is the lineup, crowd-left to right (`Car` objects); `an` is the analysis; `ph` is the phrase
+     (`ph.t0`, `ph.t1`, and `ph.a` to `ph.b`, its notes in `an.events`).
+   - Light lamps with the `Car` methods: `car.flash(car.heads('L'), t, 0.12)`,
+     `car.light(car.accents(), t0, t1)`, `car.pixels(C.FRONT_BAR, t, values)` (a truck's bar, 0–1 per LED,
+     crowd-left to right). They take the crowd's left and right.
+   - Use `sides(cars)` and `centreTruck(cars)` (which may be `null`) for the two roles. Never assume
+     three cars, and never take `cars[1]` as the truck.
+   - Take times from the music: `an.events.t`, `an.beats`, `an.downbeats`, and the helpers in `moves.ts`.
+     Never use a fixed tempo.
+2. **Name it** in `BY_NAME` at the end of `moves.ts`, under the name the catalogue uses.
+3. **Catalogue it** in `catalog.UNISON`: what the crowd sees, the moods, the phrase gestures it fits,
+   what it locks to (`note`, `beat`, `bar`, `build`, `self`), and `false` last if the cars pass nothing
+   between them. That's enough for the choreographer to choose it. If it needs extra arguments, add it to
+   `special` in `choreo.playPhrases`.
+4. **Classify it** (optional) in the sets in `choreo.ts`: `BEAT_MOVES` makes it need a clear beat, `CALM`
+   allows it in calm passages, `QUIET` and `STRONG` say how much of the stage it lights, `BIG` gives it a
+   breath of black before it.
+5. **Watch it** in the 3D preview in at least a one-car, the classic three-car and a five-car lineup, and
+   regenerate `MOVES.md` from the catalogue.
 
-A split move (side cars and centrepiece doing different things) is two functions, one for each
-role, added to `sides`/`centre` in `choreo._play_phrases` and to `catalog.SPLIT`.
+A split move (the side cars and the centrepiece doing different things) is two functions, one for each
+role, added to `sideMoves` and `centre` in `choreo.playPhrases` and to `catalog.SPLIT`.
 
-## Adding a vehicle
+What makes a move good:
 
-Tesla's channel map is the same for every car, but which lamps exist, which channels share an
-output, and what the motors do differ. To add, say, a Model 3:
+- **Readable from 30 m.** A crowd sees lamps, not LEDs. Use whole lamps and big contrasts; an effect that
+  needs the bar's 60 LEDs belongs on the centrepiece.
+- **Locked to the music**, never to a clock.
+- **Darkness between hits.** Flash for about 100–160 ms, not the whole beat.
+- **One idea per move.** If it needs a paragraph to describe, it's two moves.
 
-1. **`lightshow/vehicles.py`**: a new letter (e.g. `3`) with its kind, folder name, label, and the
-   viewer body.
-2. **`lightshow/choreo.py` `Car`**: the lamp groups (`sig`, `drl`, `accents`, `markers`, `rear`...)
-   for the new kind. These are what every move uses. Keep the eight-lamp `lamps()` line if the car
-   has the lamps for it.
-3. **`lightshow/lamps.py`**: if the car's hardware differs from the channel names (like the 2025+
-   Model Y, whose bar is driven by channels 4 and 6), translate the frames at the end, as
-   `juniper_output` does.
-4. **`lightshow/motors.py`**: travel times (`LIFTGATE_OPEN_S`) and anything the car lacks. A Model 3
-   has a trunk, not a liftgate; check the channel's behaviour.
-5. **`lightshow/diagnostic.py`**: the wording for the new car (what it lacks, its lid's name).
-6. **The 3D preview**: a profile in `preview3d/src/core/vehicles.ts`, and the car's Tesla app model in
-   `preview3d/src/car/appBody.ts` (its id in `lightshow/tesla_app_models.py`, and rules mapping its
-   lamp meshes to channels and its animation clips to closures). Only Tesla's official models.
-7. **Tests**: add the letter to the lineup lists in `tests/`.
-8. **A test report**: run the diagnostic on the real car, then fill in what each lamp channel did.
+## Adding a car
 
-Tesla's own documentation is in `vendor/light-show/README.md` after setup. The community's
-findings for the 2025+ Model Y are summarised in
-[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md#the-2025-model-ys-lamps).
+Tesla's channel map is the same for every car, but which lamps exist, which channels share an output, and
+what the motors do differ.
 
-## Car test reports
+1. **`app/src/engine/vehicles.ts`**: a letter, with the choreographer's body type, the folder name, a
+   label, and the app model the preview draws. Add the letter to the test in `vehicles.test.ts`.
+2. **`app/src/engine/car.ts`**: the lamp groups, if the car's lamps differ. Every move uses them.
+3. **`app/src/engine/lamps.ts`**: if the hardware differs from the channel names (like the 2025+ Model Y,
+   whose bar is driven by channels 4 and 6), translate the frames at the end.
+4. **`app/src/engine/motors.ts`**: travel times, and anything the car lacks or adds.
+5. **The preview**: a profile in `app/src/viewer/core/vehicles.ts`, and the car's Tesla app model in
+   `app/src/viewer/car/appBody.ts` (its rules map lamp meshes to channels and animation clips to closures)
+   and in `tools/export_car_models.py`. Only Tesla's official models: no hand-built or approximated cars.
 
-The most useful thing you can do with a car is to run the diagnostic and write down what happened.
-Make one with `python3 build.py --diagnostic --lineup <your cars> --out diag` (or tick the box in the
-web app). Put it on the car, play it, and open an issue with the **Car test report** template:
+## The releases and the site
 
-- your car and year;
-- what each announced lamp channel lit;
-- whether bar test A or B lit the bar;
-- how long the liftgate or frunk took to open and close;
-- anything that didn't move.
+The site's large files come from two GitHub releases, so they never enter the git history. Each script
+installs what it needs when run with [uv](https://docs.astral.sh/uv/), and its docstring says how to
+publish:
+
+| Release | Script | What |
+|---|---|---|
+| `models` | `uv run tools/export_models.py OUT_DIR` | the two ONNX listening models (beat-this exported from PyTorch and checked against it; basic-pitch's own file) |
+| `car-models` | `uv run tools/export_car_models.py BUNDLE.apkm OUT_DIR` | Tesla's nine car models and the paint table, from a Tesla Android app bundle you have |
+
+Then `gh release upload <release> OUT_DIR/* --clobber`.
+
+`.github/workflows/pages.yml` builds the site on every push to `main`: it runs the tests, downloads both
+releases into `app/public/models/`, builds, and deploys `app/dist` to GitHub Pages at
+matthewhager.github.io/carreography/ (Vite's `base` is `/carreography/`). GitHub serves Pages from a
+free account's repository only once it's public.
+
+## Car reports
+
+The most useful thing you can do with a car is to play a show on it and write down what didn't match the
+3D preview: a lamp that stayed dark or lit the wrong way, a lid that didn't open fully, how long the
+liftgate or frunk took. Open an issue with the **Car report** template. Reports on the 2025+ Model Y and
+the Model Y L are especially welcome, since Tesla hasn't documented them.
 
 ## Pull requests
 
-- Keep a PR to one thing (one move, one fix).
-- Tests and pyflakes must pass. CI runs them on every push, without the machine-learning stack; run
-  the full suite locally.
+- Keep a pull request to one thing (one move, one fix).
+- The type check, lint and tests must pass; CI runs them on every push.
 - Say what you watched in the preview, and on which lineups.
-- Match the surrounding code:
-  - plain-English docstrings that say what something does for the audience or the user;
-  - lines up to about 110 columns;
-  - the crowd's left and right, never the vehicle's.
-- If your change alters shows on purpose, say so. If it shouldn't, check it doesn't (see above).
+- If your change alters shows on purpose, say so. If it shouldn't, check it doesn't (see the bridge test).
+- Match the code around you: docstrings say what the audience or the user experiences, comments are
+  sparse and say why, lines are up to about 110 columns, and sides are the crowd's, never the vehicle's.
 
 ## Licence
 
-The project is AGPL-3.0 (see [LICENSE](LICENSE)); contributions are accepted under the same licence.
-Don't add files you don't have the right to share: no commercial recordings, and none of Tesla's
-models or files (the validator is fetched at setup; the car models are extracted from the Tesla
-app). The preview draws only Tesla's official models: don't add hand-built or approximated cars.
+The project is AGPL-3.0 (see [LICENSE](LICENSE)), and contributions are accepted under the same licence.
+Don't add files you don't have the right to share: no commercial recordings, and none of Tesla's models
+or files.
