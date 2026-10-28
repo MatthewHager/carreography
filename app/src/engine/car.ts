@@ -32,7 +32,8 @@ export class Car {
     readonly x: number,
     readonly nFrames: number,
     readonly step: number,
-    /** A 2025+ Model Y: what a Model Y shows on its signature strips and fogs goes to its light bar (lamps.ts). */
+    /** A 2025+ Model Y: what a Model Y shows on its signature strips and fogs goes to the light bar
+     * (lamps.ts). */
     readonly juniper: boolean,
     /** A Model X: falcon doors (motors.ts). */
     readonly falcon: boolean,

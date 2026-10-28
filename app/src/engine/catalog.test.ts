@@ -27,6 +27,7 @@ describe('the move catalogue', () => {
   it('is what MOVES.md says', () => {
     const file = join(repoRoot(), 'MOVES.md');
     if (process.env.UPDATE_MOVES) writeFileSync(file, markdown());
-    expect(readFileSync(file, 'utf8'), 'MOVES.md is stale: UPDATE_MOVES=1 npx vitest run catalog').toBe(markdown());
+    const stale = 'MOVES.md is stale: UPDATE_MOVES=1 npx vitest run catalog';
+    expect(readFileSync(file, 'utf8'), stale).toBe(markdown());
   });
 });

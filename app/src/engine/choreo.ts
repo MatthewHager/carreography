@@ -284,7 +284,8 @@ function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
     const letter = sec ? sec.letter : 'A';
     if (!sectionLean.has(letter)) sectionLean.set(letter, sectionLean.size % 2 ? 'split' : 'unison');
     let choice = buildFor(an, ph, phrases, plan);
-    const replay = sec !== null && sec.repeatOf >= 0 && sectionPlans.has(letter) && !SELF_PACED.includes(ph.gesture);
+    const replay = sec !== null && sec.repeatOf >= 0 && sectionPlans.has(letter)
+      && !SELF_PACED.includes(ph.gesture);
     if (choice === null && replay) {
       const k = countIf(phrases.slice(0, phIndex), (q) => sectionAt(secs, q.t0) === sec);
       choice = callback(an, ph, sec, sectionPlans.get(letter)!, k, plan);
