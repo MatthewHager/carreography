@@ -28,9 +28,10 @@ npm run review -- song.mp3 --lineup YCY --from 60 --to 90 --video
    anything else by ffmpeg, where the page uses the browser's decoder, so an MP3's show can differ a
    little), `monoAt22050`, `trackBeats`, `transcribe` (ONNX Runtime on WASM, one thread, about 15-20 s per
    minute of music), `analyze`, `choreograph`. The beats and notes are kept in `review-out/.listen/` by the
-   samples' hash, so a second run takes a second or two: change the choreography, run it again. The show
-   files are byte for byte the page's: Hall of the Mountain King and the Addams Family (WAV, `YCY`) match
-   the ZIP the built site makes in Chromium.
+   samples' hash (whatever `--out` says), so a second run takes a second or two: change the choreography,
+   run it again. The show files are byte for byte the page's when the page listens on the CPU: Hall of
+   the Mountain King and the Addams Family (WAV, `YCY`) match the ZIP the built site makes in headless
+   Chromium (the worker pool). A browser that listens on WebGPU hasn't been compared.
 2. **Writes** `show/CarN_*.fseq` (as the page's download), `show.json` (sections, phrases with their mood,
    gesture and move, beats, downbeats, hits, bass and treble hits, the cue sheet's peaks, and the
    intensity, tier, build, loudness and energy curves at 10 a second), the pictures and `summary.txt`.

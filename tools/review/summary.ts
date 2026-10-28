@@ -3,7 +3,7 @@
 
 import * as C from '@/engine/channels';
 import { CLOSURE_CLOSE, CLOSURE_DANCE, CLOSURE_LIMITS, CLOSURE_OPEN, CLOSURE_STOP, N_CHANNELS } from '@/engine/channels';
-import type { Review } from './timeline';
+import { bpm, type Review } from './timeline';
 
 const STEP = 0.02;
 const NEAR = 3;                 // frames (60 ms) either side of a beat or a note that count as "on" it
@@ -51,8 +51,7 @@ export function summarize(r: Review, frames: Uint8Array[]): string {
   const out: string[] = [];
   const onBeat = nearMask(an.beats, n), onNote = nearMask(an.events.t, n);
   const stats = r.cars.map((c) => busy(c.lamps, n));
-  const beatsPerS = an.beats.length > 1 ? (an.beats.length - 1) / (an.beats.at(-1)! - an.beats[0]) : 0;
-  out.push(`${r.title} · lineup ${r.lineup} · ${clock(an.duration)} · ${(beatsPerS * 60).toFixed(0)} bpm · `
+  out.push(`${r.title} · lineup ${r.lineup} · ${clock(an.duration)} · ${bpm(an.beats).toFixed(0)} bpm · `
     + `beat score ${an.beatScore.toFixed(2)} (2+ = a beat to follow) · driver ${an.driver} · `
     + `${an.events.t.length} note events · ${(an.phrases ?? []).length} phrases`);
   out.push('Per car: lit = frames with any lamp at half or more; light = mean level of all its lamps; '

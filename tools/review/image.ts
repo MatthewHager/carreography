@@ -101,9 +101,7 @@ const GLYPHS = new Map<string, string[]>(FONT.split('\n').filter((l) => l.length
   .map((l) => [l[0], l.slice(2).split(' ')]));
 const SAME: Record<string, string> = { '→': '>', '′': "'", '×': 'x', '–': '-', '—': '-' };
 
-/** Pixels a line of text takes. */
-export const CHAR_W = 6, TEXT_H = 8;
-export const textWidth = (s: string) => s.length * CHAR_W;
+const CHAR_W = 6;                  // a glyph and the gap after it
 
 export class Picture {
   readonly px: Uint8Array;

@@ -130,15 +130,20 @@ export async function main(argv: string[]): Promise<number> {
   const outRoot = path.join(ROOT, 'review-out');
   const out = path.resolve(o.out ?? path.join(outRoot, `${fileName(title)}_${lineup}`));
   mkdirSync(out, { recursive: true });
-  // what an earlier run left would be mistaken for this show
+  // what an earlier run left (another stretch, another lineup's cars) would be mistaken for this show
   for (const f of readdirSync(out)) if (/^timeline_.*\.png$|^video\.mp4$/.test(f)) rmSync(path.join(out, f));
-  if (!o.out) writeFileSync(path.join(outRoot, '.gitignore'), '# made by tools/review: never committed\n*\n');
+  const shows = path.join(out, 'show');
+  for (const f of existsSync(shows) ? readdirSync(shows) : []) {
+    if (/^Car\d.*\.fseq$/.test(f)) rmSync(path.join(shows, f));
+  }
+  mkdirSync(outRoot, { recursive: true });
+  writeFileSync(path.join(outRoot, '.gitignore'), '# made by tools/review: never committed\n*\n');
 
   const bytes = readFileSync(song);
   const { channels, sampleRate } = decode(song, bytes);
   // as pipeline.ts and show.worker.ts do: mixed down first, then to 22050 Hz
   const y = monoAt22050([mixdown(channels)], sampleRate);
-  const heard = await listen(y, path.join(o.out ? out : outRoot, '.listen'), !!o.fresh);
+  const heard = await listen(y, path.join(outRoot, '.listen'), !!o.fresh);     // shared, whatever --out says
   const an = analyze(y, { stepMs: STEP_MS, notes: heard.notes, neuralBeats: heard.beats });
   if (o.lyrics) {
     const tags = readTags(new Uint8Array(bytes), path.basename(song));
@@ -175,7 +180,7 @@ export async function main(argv: string[]): Promise<number> {
   if (!(to > from)) throw new Error(`--from ${from} --to ${to}: nothing to draw`);
   const stretch = Math.max(1, Number(o.stretch));
   const pictures: string[] = [];
-  const stamp = (s: number) => String(Math.round(s)).padStart(4, '0');
+  const stamp = (s: number) => String(Math.floor(s)).padStart(4, '0');      // as the picture's own clock
   const pieces = Math.max(1, Math.round((to - from) / stretch));     // even stretches: no stub at the end
   for (let k = 0; k < pieces; k++) {
     const a = from + ((to - from) * k) / pieces, b = from + ((to - from) * (k + 1)) / pieces;
