@@ -2,6 +2,6 @@
 
 ## How I checked it
 
-- [ ] `.venv312/bin/python -m pytest` passes
+- [ ] `npx tsc -b`, `npx oxlint src` and `npx vitest run` pass (in `app/`)
 - [ ] Watched it in the 3D preview (lineups: )
-- [ ] Shows change on purpose / existing shows are byte-identical (say which)
+- [ ] Shows change on purpose / the bridge test still passes / I don't have `cache/bridge` (say which)

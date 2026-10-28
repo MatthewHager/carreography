@@ -1,5 +1,5 @@
-name: Car test report
-description: What the diagnostic show did on your car (helps map cars Tesla hasn't documented)
+name: Car report
+description: How a show played on your car, against the 3D preview (helps map cars Tesla hasn't documented)
 labels: ["car report"]
 body:
   - type: input
@@ -13,31 +13,18 @@ body:
   - type: input
     id: lineup
     attributes:
-      label: Lineup letter you used
+      label: Lineup letter you picked
       placeholder: Y
   - type: textarea
     id: lamps
     attributes:
-      label: Lamp check
-      description: For each announced channel, what lit (or "nothing")
-      value: |
-        Outer main beams:
-        Inner main beams:
-        Signature lights:
-        Channel four:
-        Channel five:
-        Channel six:
-        Front turn signals:
-        Fog lights:
-        Aux park lights:
-        Side markers:
-        Light bar test A (LED channels):
-        Light bar test B (channel six):
+      label: Lamps
+      description: Lamps that stayed dark, or lit where the preview showed something else
   - type: textarea
     id: motors
     attributes:
       label: Motors
-      description: Liftgate/frunk open and close times (the voice counts the seconds), and anything that didn't move
+      description: How long the liftgate or frunk took to open and close, and anything that didn't move or stopped part way
   - type: textarea
     id: other
     attributes:
