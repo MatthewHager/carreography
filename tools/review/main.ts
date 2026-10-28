@@ -160,10 +160,15 @@ export async function main(argv: string[]): Promise<number> {
   }
   const views = cars.map((c, i) => carView(c.name, lineup[i], c.frames, an.nFrames));
   const review: Review = { title, lineup, an, notes: heard.notes, cars: views };
+  // the per-frame curves every fifth frame (10 a second), rounded: enough to read, small enough to load
+  const tenth = (c: ArrayLike<number> | undefined) =>
+    c && Array.from({ length: Math.ceil(c.length / 5) }, (_, i) => Math.round(c[i * 5] * 100) / 100);
   writeFileSync(path.join(out, 'show.json'), JSON.stringify({
     title, lineup, duration: an.duration, tempo: an.tempo, beatScore: an.beatScore, driver: an.driver,
     sections: an.sections, phrases: an.phrases, cuePeaks: an.cuePeaks, beats: an.beats,
-    downbeats: an.downbeats, hits: an.hits, lyricLines: an.lyricLines ?? null,
+    downbeats: an.downbeats, hits: an.hits, bass: an.bass, highs: an.highs, lyricLines: an.lyricLines ?? null,
+    curves: { hz: 10, intensity: tenth(an.intensity), tier: tenth(an.tier), build: tenth(an.build),
+      loudFast: tenth(an.loudFast), energy: tenth(an.energy) },
   }, null, 1));
 
   const from = Math.max(0, Number(o.from ?? 0)), to = Math.min(an.duration, Number(o.to ?? an.duration));

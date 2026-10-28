@@ -82,6 +82,25 @@ export function summarize(r: Review, frames: Uint8Array[]): string {
   };
 
   line('WHOLE SONG', 0, n);
+
+  // does the light follow the song's arc? the music's loudness against each car's light, 10 s at a time
+  out.push('');
+  out.push('ARC (every 10 s: loudness, then each car\'s light and flashes/s)');
+  const W = 10 / STEP;
+  for (let f0 = 0; f0 < n; f0 += W) {
+    const f1 = Math.min(n, f0 + W), span = f1 - f0;
+    const loud = an.intensity.slice(f0, f1).reduce((a, b) => a + b, 0) / span;
+    const cars = stats.map((s) => {
+      let mass = 0, on = 0;
+      for (let f = f0; f < f1; f++) {
+        mass += s.mass[f];
+        on += s.onset[f];
+      }
+      return `${(mass / span).toFixed(2)} ${(on / (span * STEP)).toFixed(1).padStart(4)}/s`;
+    });
+    out.push(`    ${clock(f0 * STEP)}  loudness ${loud.toFixed(2)}  |  ${cars.join('  |  ')}`);
+  }
+
   for (const s of an.sections ?? []) {
     out.push('');
     out.push(`SECTION ${s.letter} (${s.nth ? `heard ${s.nth + 1}x` : 'first'})  ${clock(s.t0)}-${clock(s.t1)}  `

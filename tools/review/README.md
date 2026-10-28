@@ -32,10 +32,13 @@ npm run review -- song.mp3 --lineup YCY --from 60 --to 90 --video
    files are byte for byte the page's: Hall of the Mountain King and the Addams Family (WAV, `YCY`) match
    the ZIP the built site makes in Chromium.
 2. **Writes** `show/CarN_*.fseq` (as the page's download), `show.json` (sections, phrases with their mood,
-   gesture and move, beats, downbeats, hits, the cue sheet's peaks), the pictures and `summary.txt`.
-3. **Prints the summary**: per section, each phrase's mood, gesture and move, then per car how much of the
-   time it's lit, how much light it gives, how many flashes a second, and how many of those land within
-   60 ms of a beat or a note; then every motor command with its time and the count against Tesla's limit.
+   gesture and move, beats, downbeats, hits, bass and treble hits, the cue sheet's peaks, and the
+   intensity, tier, build, loudness and energy curves at 10 a second), the pictures and `summary.txt`.
+3. **Prints the summary**: the arc (every 10 s, the music's loudness against each car's light and flashes
+   a second: does the show grow with the song?), then per section each phrase's mood, gesture and move,
+   and per car how much of the time it's lit, how much light it gives, how many flashes a second, and how
+   many of those land within 60 ms of a beat or a note; then every motor command with its time and the
+   count against Tesla's limit.
 
 The code runs through Vite's module runner (`review.mjs` imports `main.ts` with `runnerImport`), so it
 uses `src/` as it is, with no build. `npx tsc -p tools/review` type-checks it.
