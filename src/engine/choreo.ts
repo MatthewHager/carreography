@@ -54,7 +54,7 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   for (const ph of phrases) if (flowsAt(an, ph.t0)) ph.move = 'legato';
   const moving = phrases.filter((ph) => ph.move !== 'legato');
   const said = sung ? LY.moments(sung, an) : [];
-  if (flowing.length) LEGATO.choreograph(cars, an, flowing);
+  const endsFlowing = flowing.length > 0 && LEGATO.choreograph(cars, an, flowing);
   pedal(cars, an);
   playPhrases(cars, an, moving);
   darknessGuard(cars, an, moving);
@@ -65,7 +65,7 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   interior(cars, an);
   colours(cars, said);
   motors.choreograph(cars, an);
-  if (!flowsAt(an, an.duration)) finale(cars, an);
+  if (!endsFlowing) finale(cars, an);      // (music that ends flowing has already faded out)
   for (const car of cars) {
     tidy(car);
     if (car.juniper) LAMPS.juniperOutput(car);

@@ -147,8 +147,9 @@ function melodyPath(an: Analysis, t0: number, t1: number, n: number): Float64Arr
   return out;
 }
 
-/** The lights for the stretches that flow (the motors are scheduled separately, as for any song). */
-export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): void {
+/** The lights for the stretches that flow (the motors are scheduled separately, as for any song). Says
+ * whether the music ends flowing, in which case this has already faded the show out. */
+export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
   const ct = M.centreTruck(cars);
   const [start, end] = musicSpan(an);
   const flows = (t: number) => t >= start && t < end && spans.some((s) => s.t0 <= t && t < s.t1);
@@ -227,11 +228,12 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): void {
   }
 
   // 4. the ending, when the song ends flowing: everything that's lit fades out slowly as the music ends
-  if (!flows(end - RES)) return;
+  if (!flows(end - RES)) return false;
   for (const c of cars) {
     c.set(c.everything(), end, an.duration, 0);
     const row = Math.max(0, Math.min(c.fr(end) - 1, c.nFrames - 1));
     const lit = c.everything().filter((ch) => c.get(row, ch) > 0);
     if (lit.length) c.light(lit, end, Math.min(an.duration, end + 2.0), C.OFF_2000);
   }
+  return true;
 }
