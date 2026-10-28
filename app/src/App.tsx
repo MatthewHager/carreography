@@ -34,6 +34,7 @@ export default function App() {
   const stale = show !== null && show.lineup !== lineup;
 
   useEffect(() => {
+    if (import.meta.env.DEV) (window as unknown as { __show: Show | null }).__show = show;   // for checks
     player.load(show?.audio, show ? show.nFrames * 0.02 : 0);
   }, [player, show]);
 
@@ -55,6 +56,14 @@ export default function App() {
   const bridge = import.meta.env.DEV ? params.get('bridge') : null;
 
   useEffect(() => {
+    const dev = import.meta.env.DEV ? params.get('song') : null;    // a recording in output/, as if dropped in
+    if (dev) {
+      void fetch(`${import.meta.env.BASE_URL}dev/output/${dev}/${dev}.wav`).then(async (r) => {
+        const f = new File([await r.blob()], `${dev}.wav`, { type: 'audio/wav' });
+        setSong(f);
+        void make(() => showFromFile(f, lineup, progress));
+      });
+    }
     if (bridge) void make(async () => ({ show: await showFromBridge(bridge, lineup, progress) }));
     // only on load
     // eslint-disable-next-line react-hooks/exhaustive-deps

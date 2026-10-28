@@ -2,11 +2,13 @@
 // progress.
 
 import type { Reply, Request } from './show.worker';
+import { fileName } from './DownloadSheet';
 import type { Show } from './show';
+import { encodeWav } from './wav';
 
 export type Progress = (step: string, fraction?: number) => void;
 
-function run(req: Request, onProgress: Progress): Promise<Extract<Reply, { kind: 'done' }>> {
+function run(req: Request, onProgress: Progress, transfer: Transferable[] = []): Promise<Extract<Reply, { kind: 'done' }>> {
   const worker = new Worker(new URL('./show.worker.ts', import.meta.url), { type: 'module' });
   return new Promise((resolve, reject) => {
     worker.onmessage = (e: MessageEvent<Reply>) => {
@@ -22,7 +24,7 @@ function run(req: Request, onProgress: Progress): Promise<Extract<Reply, { kind:
       worker.terminate();
       reject(new Error(e.message));
     };
-    worker.postMessage(req);
+    worker.postMessage(req, transfer);
   });
 }
 
@@ -46,7 +48,25 @@ export async function showFromBridge(song: string, lineup: string, onProgress: P
   };
 }
 
-/** A song from this device: analysed and choreographed in the browser. */
-export async function showFromFile(_file: File, _lineup: string, _onProgress: Progress): Promise<{ show: Show; wav?: Blob }> {
-  throw new Error('Analysing songs in the browser is still being built');
+/** A song from this device: decoded at 44.1 kHz (Tesla's rate, and the one the analysis was tuned on),
+ * then listened to and choreographed in the worker. */
+export async function showFromFile(file: File, lineup: string, onProgress: Progress): Promise<{ show: Show; wav: Blob }> {
+  onProgress('Opening the song');
+  const ctx = new OfflineAudioContext(2, 1, 44100);
+  let audio: AudioBuffer;
+  try {
+    audio = await ctx.decodeAudioData(await file.arrayBuffer());
+  } catch {
+    throw new Error(`${file.name} couldn't be read as audio`);
+  }
+  const channels = Array.from({ length: Math.min(2, audio.numberOfChannels) }, (_, i) => audio.getChannelData(i));
+  const wav = encodeWav(channels, audio.sampleRate);
+  const title = file.name.replace(/\.[^.]+$/, '');
+  const copies = channels.map((c) => c.slice());
+  const done = await run({ kind: 'song', channels: copies, sampleRate: audio.sampleRate, name: fileName(title), lineup },
+    onProgress, copies.map((c) => c.buffer));
+  return {
+    show: { title, lineup, nFrames: done.nFrames, cars: done.cars.map((c, i) => ({ ...c, letter: lineup[i] })), audio: wav },
+    wav,
+  };
 }
