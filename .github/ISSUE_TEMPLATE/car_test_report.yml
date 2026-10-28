@@ -13,8 +13,8 @@ body:
   - type: input
     id: lineup
     attributes:
-      label: Lineup letter you picked
-      placeholder: Y
+      label: Car you picked in the app
+      placeholder: Model Y (2025+)
   - type: textarea
     id: lamps
     attributes:

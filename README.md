@@ -46,21 +46,9 @@ their cars ([how it works](docs/HOW_IT_WORKS.md#the-2025-model-ys-lamps)).
 
 ## Browsers
 
-A recent Chrome, Edge, Firefox or Safari makes shows, on a computer, an iPad or an iPhone. The listening
-runs on the GPU with WebGPU, else on a few WASM workers, else on one thread, and falls back by itself.
-Times for Hall of the Mountain King (2:34) and three cars, on an M1 Max:
-
-| Browser | WebGPU | Workers | One thread |
-|---|---|---|---|
-| Chromium (Chrome) | 10.7 s | 20.0 s | 38.0 s |
-| Firefox | no adapter on macOS | 26.7 s | 42.8 s |
-| WebKit (Safari) | 15.8 s | 24.3 s | 40.4 s |
-| WebKit as an iPad / iPhone | 15.1 / 11.5 s | none on tablets and phones | 36.5 / 37.1 s |
-
-A 44.1 kHz WAV makes the same show in every browser, give or take a few bytes, since the app reads it
-itself. Other formats go
-through the browser's own decoder, so an MP3's show can differ a little from browser to browser. The
-details are in [How it works](docs/HOW_IT_WORKS.md#browsers).
+A recent Chrome, Edge, Firefox or Safari makes shows, on a computer, an iPad or an iPhone, in about
+10–40 s for a 2½-minute song. The listening runs on the GPU where it can and falls back by itself. Times,
+memory and the details are in [How it works](docs/HOW_IT_WORKS.md#browsers).
 
 ## Privacy
 

@@ -1,3 +1,5 @@
+// Adapted from Tesla Lightshow Studio (github.com/nathanjgrace/tesla-lightshow-studio, AGPL-3.0-only,
+// Nathan Grace); modified for Carreography.
 // Writer for FSEQ v2 uncompressed files, the format Tesla cars play.
 // Layout (little-endian):
 //

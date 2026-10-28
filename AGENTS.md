@@ -8,7 +8,7 @@ hosted on GitHub Pages. Humans: see [CONTRIBUTING.md](CONTRIBUTING.md). This fil
 
 ```bash
 npm install                           # once
-npm run dev                           # http://localhost:5173/carreography/ (5173 is the owner's: use your own port)
+npm run dev                           # http://localhost:5173/carreography/ (npm run dev -- --port N if 5173 is taken)
 npx vitest run                        # the tests, including the bridge test when cache/bridge exists
 npx tsc -b && npx oxlint src          # type check and lint
 npm run build                         # the site, in dist/
@@ -25,8 +25,8 @@ gh release download car-models --dir public/models/tesla-app           # Tesla's
   - `car.ts`: `Car` (one car's frames, the lamp groups, crowd-side flipping, closure command counting).
   - `choreo.ts`: `choreograph()` (the pipeline), the move chooser (`choosePlan`, `formationsFor`), and
     the dispatch (`playPhrases`).
-  - `moves.ts`: every move as `(cars, an, ph) => void`, `BY_NAME`, the role helpers `centreTruck` and
-    `sides`, and `slotFor` (pitch to a place on the stage).
+  - `moves.ts`: every move as `(cars, an, ph) => void`, the name tables `UNISON`, `SIDE` and `CENTRE`,
+    the role helpers `centreTruck` and `sides`, and `slotFor` (pitch to a place on the stage).
   - `catalog.ts`: the move catalogue (`UNISON`, `SPLIT`); `MOVES.md` is generated from it.
   - `pulse.ts` (beat layer), `motors.ts` (closures), `legato.ts` (no-beat style), `cues.ts` and
     `lyrics.ts` (moments), `lamps.ts` (2025+ Model Y output), `channels.ts` (Tesla's channel map and
@@ -60,14 +60,13 @@ gh release download car-models --dir public/models/tesla-app           # Tesla's
   Refactors must keep it passing.
 - **Times come from the music** (`an.events`, `an.beats`, `an.downbeats`), never a fixed tempo. Lights
   lead the sound by one 20 ms frame (`LIGHT_LEAD_S` in `car.ts`).
-- **Official Tesla models only** in the preview, from the release; never committed.
 - **Never commit:** recordings (`songs/`, or any audio), Tesla's files (`public/models/`), anything in
   `cache/`, `dist/`. `.gitignore` covers them; don't force-add.
 
 ## Adding things
 
-- **A move:** a function in `moves.ts`, its name in `BY_NAME`, and an entry in `catalog.UNISON`. Dispatch
-  is by name. Details in CONTRIBUTING.md.
+- **A move:** a function in `moves.ts`, its name in the `UNISON` table at the end of `moves.ts`, and an
+  entry in `catalog.UNISON`. Dispatch is by name. Details in CONTRIBUTING.md.
 - **A car:** `vehicles.ts`, the `Car` lamp groups, `lamps.ts` if the hardware differs, `motors.ts`
   travel times, the viewer profile (`viewer/core/vehicles.ts`) and app model (`viewer/car/appBody.ts`,
   `tools/export_car_models.py`). Details in CONTRIBUTING.md.

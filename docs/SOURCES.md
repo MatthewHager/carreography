@@ -13,7 +13,7 @@
 | [Tesla Lightshow Studio](https://github.com/nathanjgrace/tesla-lightshow-studio) by Nathan Grace | the 3D preview (below) | AGPL-3.0-only |
 | [three.js](https://threejs.org/) | the 3D preview | MIT |
 | [React](https://react.dev/), [Vite](https://vite.dev/), [Tailwind CSS](https://tailwindcss.com/) | the page | MIT |
-| [shadcn/ui](https://ui.shadcn.com/) with [Radix](https://www.radix-ui.com/), [vaul](https://github.com/emilkowalski/vaul), [sonner](https://github.com/emilkowalski/sonner), [react-dropzone](https://github.com/react-dropzone/react-dropzone) | the controls | MIT |
+| [shadcn/ui](https://ui.shadcn.com/) with [Radix](https://www.radix-ui.com/), [vaul](https://github.com/emilkowalski/vaul), [sonner](https://github.com/emilkowalski/sonner) | the controls | MIT |
 | [Lucide](https://lucide.dev/) | icons | ISC |
 | [Geist](https://vercel.com/font) | the typeface | OFL-1.1 |
 
@@ -37,7 +37,7 @@ Carreography is not affiliated with Tesla.
 ## The 3D preview
 
 `src/viewer/` is adapted from Tesla Lightshow Studio (AGPL-3.0-only), so the whole project is
-AGPL-3.0. From the studio: `core/` (the FSEQ reader, the channel map, the byte encodings, the vehicle
+AGPL-3.0. From the studio: `core/` (the FSEQ writer, the channel map, the byte encodings, the vehicle
 profiles and the simulation) and the scene code of its `CarScene.ts`, reworked into `rig.ts` and
 `viewer.ts` for a lineup, and the parking lot (`car/lot.ts`). Changes: lowered windows can dance, the
 lineup stands in a driving aisle, the lamp poles' light is painted into the asphalt instead of real

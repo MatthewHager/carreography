@@ -1,3 +1,5 @@
+// Adapted from Tesla Lightshow Studio (github.com/nathanjgrace/tesla-lightshow-studio, AGPL-3.0-only,
+// Nathan Grace); modified for Carreography.
 // The Tesla light show channel map. Every show file uses this same 200-channel
 // layout regardless of vehicle; each car plays the channels it physically has.
 // Source: StartChannel values in Tesla's xLights project

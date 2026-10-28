@@ -1,3 +1,5 @@
+// Adapted from Tesla Lightshow Studio (github.com/nathanjgrace/tesla-lightshow-studio, AGPL-3.0-only,
+// Nathan Grace); modified for Carreography.
 // Turns raw show bytes into what a specific car will physically do, frame by
 // frame: how bright each light is (following Tesla's ramp rules) and where
 // each closure is (following approximate travel times). The 3D preview draws

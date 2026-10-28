@@ -1,3 +1,5 @@
+// Adapted from Tesla Lightshow Studio (github.com/nathanjgrace/tesla-lightshow-studio, AGPL-3.0-only,
+// Nathan Grace); modified for Carreography.
 // Vehicle capability profiles: which channels a car physically has and how it
 // treats them. The show file is the same for every car; a profile shapes what
 // the preview draws of it.

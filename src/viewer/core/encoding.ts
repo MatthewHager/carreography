@@ -1,3 +1,5 @@
+// Adapted from Tesla Lightshow Studio (github.com/nathanjgrace/tesla-lightshow-studio, AGPL-3.0-only,
+// Nathan Grace); modified for Carreography.
 // Byte values the car understands. xLights stores an effect's brightness
 // percentage as floor(pct * 2.55), and Tesla assigns meanings to specific
 // percentages. All values below were confirmed by decoding Tesla's example

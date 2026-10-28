@@ -14,3 +14,7 @@ songs/
 
 .claude/worktrees/
 .DS_Store
+
+# Local settings and logs
+*.local
+*.log

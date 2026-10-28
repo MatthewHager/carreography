@@ -10,7 +10,6 @@ written for it.
 The repository is the app: Vite, React and TypeScript, with shadcn/ui and three.js. You need Node.js 24.
 
 ```bash
-cd app
 npm install
 npm run dev          # http://localhost:5173/carreography/
 npx vitest run       # the tests
@@ -52,9 +51,7 @@ limits.
 
 The analyses and frames live in `cache/bridge/`, made by `tools/export_bridge.py` at `python-final`. They
 describe copyrighted recordings, so they stay on the machines that have them and out of the repository.
-Without `cache/bridge/` both tests are skipped, as they are in CI; everything else runs. With it, the dev
-server can also choreograph a song from its Python analysis:
-`http://localhost:5173/carreography/?bridge=02_this_is_halloween`.
+Without `cache/bridge/` both tests are skipped, as they are in CI; everything else runs.
 
 Refactors must keep the bridge test passing: the same input gives byte-identical shows. If you have the
 cache, run it before and after; if you don't, say so in the pull request.
@@ -71,19 +68,19 @@ cache, run it before and after; if you don't, say so in the pull request.
      three cars, and never take `cars[1]` as the truck.
    - Take times from the music: `an.events.t`, `an.beats`, `an.downbeats`, and the helpers in `moves.ts`.
      Never use a fixed tempo.
-2. **Name it** in `BY_NAME` at the end of `moves.ts`, under the name the catalogue uses.
+2. **Name it** in the `UNISON` table at the end of `moves.ts`, under the name the catalogue uses.
 3. **Catalogue it** in `catalog.UNISON`: what the crowd sees, the moods, the phrase gestures it fits,
    what it locks to (`note`, `beat`, `bar`, `build`, `self`), and `false` last if the cars pass nothing
-   between them. That's enough for the choreographer to choose it. If it needs extra arguments, add it to
-   `special` in `choreo.playPhrases`.
+   between them. That's enough for the choreographer to choose it. If it needs extra arguments, wrap
+   it in the `UNISON` table, as `keyboard` and `block` are.
 4. **Classify it** (optional) in the sets in `choreo.ts`: `BEAT_MOVES` makes it need a clear beat, `CALM`
-   allows it in calm passages, `QUIET` and `STRONG` say how much of the stage it lights, `BIG` gives it a
-   breath of black before it.
+   allows it in calm passages, `QUIET` keeps it out of full-power sections, `BIG` gives it a breath of
+   black before it.
 5. **Watch it** in the 3D preview in at least a one-car, the classic three-car and a five-car lineup, and
-   regenerate `MOVES.md` from the catalogue.
+   regenerate `MOVES.md` with `UPDATE_MOVES=1 npx vitest run catalog` (the tests fail while it's stale).
 
 A split move (the side cars and the centrepiece doing different things) is two functions, one for each
-role, added to `sideMoves` and `centre` in `choreo.playPhrases` and to `catalog.SPLIT`.
+role, named in `SIDE` and `CENTRE` at the end of `moves.ts` and paired in `catalog.SPLIT`.
 
 What makes a move good:
 
