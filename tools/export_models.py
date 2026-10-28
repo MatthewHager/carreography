@@ -1,23 +1,34 @@
+# /// script
+# requires-python = "==3.12.*"
+# dependencies = [
+#     "beat-this==1.1.0",
+#     "torch==2.14.1",
+#     "onnx==1.23.2",
+#     "onnxruntime==1.31.0",
+#     "numpy",
+# ]
+# ///
 """The two models the browser app runs, as ONNX files for its site build.
 
-    .venv_beats/bin/python tools/export_models.py OUT_DIR
-
-(.venv_beats has beat-this and PyTorch; add the ONNX tools once with
-`uv pip install --python .venv_beats/bin/python onnx onnxruntime`.)
+    uv run tools/export_models.py OUT_DIR
 
 - beat-this (CPJKU, MIT): the "final0" checkpoint, exported without its log-mel front end (the app
   computes that itself, app/src/engine/listen/beats.ts), with fp16 weights cast back to fp32 at load,
   which halves the download and keeps the arithmetic fp32. Checked against PyTorch before it's written.
-- basic-pitch (Spotify, Apache-2.0): its own nmp.onnx, copied from the basic_pitch package in .venv312.
+- basic-pitch (Spotify, Apache-2.0): its own nmp.onnx from its v0.3.0 release, checked by its hash.
 
-The site build downloads both from the repository's "models" release (.github/workflows/pages.yml),
-so the files never enter the git history. To publish new ones:
+The first run installs PyTorch and beat-this (a few GB) and downloads the checkpoint. The site build
+downloads both files from the repository's "models" release (.github/workflows/pages.yml), so they
+never enter the git history. To publish new ones:
 
     gh release upload models OUT_DIR/*.onnx --clobber
+
+To use them while developing, make OUT_DIR app/public/models.
 """
 
-import shutil
+import hashlib
 import sys
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +38,9 @@ import torch
 from beat_this.inference import load_model
 from onnx import TensorProto, helper, numpy_helper
 
-ROOT = Path(__file__).resolve().parents[1]
+BASIC_PITCH = ("https://raw.githubusercontent.com/spotify/basic-pitch/v0.3.0/"
+               "basic_pitch/saved_models/icassp_2022/nmp.onnx")
+BASIC_PITCH_SHA256 = "2c3c1d144bfa61ad236e92e169c13535c880469a12a047d4e73451f2c059a0ec"
 
 
 class Logits(torch.nn.Module):
@@ -83,10 +96,12 @@ def beat_this(out):
 
 
 def basic_pitch(out):
-    venv = ROOT / ".venv312" / "lib"
-    src = next(venv.glob("python3*/site-packages/basic_pitch/saved_models/icassp_2022/nmp.onnx"))
-    shutil.copyfile(src, out / "basic_pitch-nmp.onnx")
-    print(f"basic_pitch-nmp.onnx: {src.stat().st_size / 1e3:.0f} kB")
+    with urllib.request.urlopen(BASIC_PITCH) as r:
+        data = r.read()
+    if hashlib.sha256(data).hexdigest() != BASIC_PITCH_SHA256:
+        sys.exit(f"{BASIC_PITCH} isn't the model the app was checked with")
+    (out / "basic_pitch-nmp.onnx").write_bytes(data)
+    print(f"basic_pitch-nmp.onnx: {len(data) / 1e3:.0f} kB")
 
 
 def main():
