@@ -207,7 +207,7 @@ export function onsetStrength(S: Float32Array, T: number, r0: number, r1: number
 }
 
 /** librosa.util.peak_pick. */
-function peakPick(x: ArrayLike<number>, preMax: number, postMax: number, preAvg: number, postAvg: number,
+export function peakPick(x: ArrayLike<number>, preMax: number, postMax: number, preAvg: number, postAvg: number,
   delta: number, wait: number): number[] {
   const N = x.length, peaks: number[] = [];
   const mx = (a: number, b: number) => {
