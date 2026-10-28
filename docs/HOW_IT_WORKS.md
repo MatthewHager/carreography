@@ -288,25 +288,25 @@ and the peak memory of the busiest browser process. Every run played and downloa
 |---|---|---|---|
 | Chromium 156 | 10.7 s, 1.3 GB | 20.0 s (4 workers), 6.1 GB | 38.0 s, 1.8 GB |
 | Firefox 157 | no adapter | 26.7 s (2 workers), 2.6 GB | 42.8 s, 1.8 GB |
-| WebKit 27.2 (Safari) | 15.8 s, 2.1 GB | 24.3 s (2 workers), 3.8 GB | 40.4 s, 2.6 GB |
-| WebKit as iPad Pro 11 | 15.1 s, 2.2 GB | none on tablets | 36.5 s, 2.6 GB |
-| WebKit as iPhone 17 | 11.5 s, 2.5 GB | none on phones | 37.1 s, 2.5 GB |
+| WebKit 27.2 (Safari) | not used (below) | 24.3 s (2 workers), 3.8 GB | 40.4 s, 2.6 GB |
+| WebKit as iPad Pro 11 | not used | none on tablets | 36.5 s, 2.6 GB |
+| WebKit as iPhone 17 | not used | none on phones | 37.1 s, 2.5 GB |
 
 | Forced failure | Chromium | Firefox | WebKit |
 |---|---|---|---|
-| WebGPU device refused: pool | 24.9 s | | 27.5 s |
-| WebGPU device lost mid-run: pool | 22.0 s | | 33.2 s |
+| WebGPU device refused: pool | 24.9 s | | |
+| WebGPU device lost mid-run: pool | 22.0 s | | |
 | A pool worker dies mid-run: one thread | 43.3 s | 48.1 s | 45.7 s |
 
-Danse Macabre (6:46) takes 19 s in Chromium and 26 s in WebKit on WebGPU, 55 s in Firefox's pool. A second
-show takes about half as long on WebGPU (the worker and its sessions are kept). MP3 and FLAC were checked
-in all three too.
+Danse Macabre (6:46) takes 19 s in Chromium on WebGPU and 55 s in Firefox's pool. MP3 and FLAC were
+checked in all three too.
 
-- **Safari** crashed the page a few seconds after a worker that had used WebGPU was terminated, even with
-  its device destroyed, so the show worker that used WebGPU is kept and makes the next show too.
+- **Safari** (WebKit, which every browser on an iPhone or iPad is) crashed the page whenever a worker that
+  had used WebGPU ended: a few seconds after the show, or on reload, even with its device destroyed. WebGPU
+  was 1.5–3 times faster there, but a crash is worse than a wait, so WebKit listens on the CPU.
 - **Firefox** has `navigator.gpu` but gives no adapter on macOS, so it uses the pool.
 - **iPhone and iPad** were emulated with WebKit's device profiles, which can't show a real device's memory
-  limit or frame rate. Safari 26 has WebGPU; older versions listen on one thread (about 1 GB at its peak).
+  limit or frame rate. They listen on one thread (about 1 GB at its peak).
 - **The same show everywhere.** With a 44.1 kHz WAV, Hall of the Mountain King's files are byte-identical
   in every browser and on every backend; Danse Macabre's are too, except 6 bytes of the Cybertruck's in
   Firefox (one brightness level on a light-bar pixel). An MP3's or FLAC's show can differ a little.

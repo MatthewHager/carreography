@@ -6,8 +6,8 @@
 //           which GitHub Pages can't give);
 //   wasm:   one single-thread session on this thread, 72 + 15 s: Node, one core, or no nested workers.
 // Whatever fails along the way (no adapter, a lost device, workers that won't start or die) falls back
-// to the next backend by itself; the visitor never has to choose. Sessions are kept for the next song;
-// a pool's workers are let go after each run, since each holds its own copy of the model.
+// to the next backend by itself; the visitor never has to choose. Sessions last as long as the show's
+// worker; a pool's workers are let go after each run, since each holds its own copy of the model.
 
 import { createSession, ort, runSession, type Ep } from './session';
 
@@ -56,23 +56,21 @@ export const lastBackend = () => used;
 
 const withoutGpu = (): Backend => (typeof Worker !== 'undefined' && poolSize() > 1 ? 'pool' : 'wasm');
 
+// Safari, and every browser on an iPhone or iPad (all WebKit), crashes the page when a worker that has
+// used WebGPU ends: after a show, on reload, or when the tab closes. So WebKit listens on the CPU.
+const webkit = nav ? /AppleWebKit/.test(nav.userAgent) && !/Chrome|Chromium|Edg/.test(nav.userAgent) : false;
+
 /** WebGPU when the browser gives a real (not software) adapter, else a worker pool when there are cores
  * and memory for one. */
 function bestBackend(): Promise<Backend> {
   best ??= (async (): Promise<Backend> => {
-    const gpu = nav && 'gpu' in nav ? nav.gpu : undefined;
+    const gpu = nav && 'gpu' in nav && !webkit ? nav.gpu : undefined;
     const adapter = gpu ? await gpu.requestAdapter().catch(() => null) : null;
     if (adapter && !adapter.info?.isFallbackAdapter) return 'webgpu';
     return withoutGpu();
   })();
   return best;
 }
-
-let gpuTouched = false;
-
-/** Whether this thread has used WebGPU. Safari crashes the page a few seconds after terminating a worker
- * that has, even with its device destroyed, so such a worker must be kept. */
-export const touchedGpu = () => gpuTouched;
 
 async function fetchModel(url: string): Promise<ArrayBuffer> {
   const res = await fetch(url);
@@ -86,7 +84,6 @@ function session(model: Model, ep: Ep, bytes?: ArrayBuffer): Promise<ort.Inferen
   const key = `${ep} ${model.url}`;
   let s = sessions.get(key);
   if (!s) {
-    if (ep === 'webgpu') gpuTouched = true;
     s = (async () => createSession(bytes ?? (await fetchModel(model.url)), ep))();
     s.catch(() => sessions.delete(key));
     sessions.set(key, s);

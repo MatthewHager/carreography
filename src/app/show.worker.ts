@@ -7,7 +7,7 @@ import { place, type LyricsReport } from '@/engine/listen/align';
 import { analyze } from '@/engine/listen/audio';
 import { trackBeats } from '@/engine/listen/beats';
 import { lookup, type Candidate, type LookupStatus } from '@/engine/listen/lrclib';
-import { lastBackend, touchedGpu } from '@/engine/listen/infer';
+import { lastBackend } from '@/engine/listen/infer';
 import { transcribe } from '@/engine/listen/notes';
 import { monoAt22050 } from '@/engine/listen/resample';
 import type { SongTags } from '@/engine/listen/tags';
@@ -21,16 +21,12 @@ export interface Request {
   vocals: Float64Array | null;     // align.ts's vocalCurve, from the stereo the page had
 }
 
-type Body =
+export type Reply =
   | { kind: 'progress'; step: string; fraction?: number }
   | { kind: 'done'; nFrames: number; cars: { name: string; frames: Uint8Array }[]; lyrics: LyricsReport; backend?: string }
   | { kind: 'error'; message: string };
 
-/** Every reply also says whether to keep this worker rather than end it (infer.ts's touchedGpu). */
-export type Reply = Body & { keep: boolean };
-
-const post = (r: Body, transfer: Transferable[] = []) =>
-  (self as unknown as Worker).postMessage({ ...r, keep: touchedGpu() } satisfies Reply, transfer);
+const post = (r: Reply, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(r, transfer);
 const progress = (step: string, fraction?: number) => post({ kind: 'progress', step, fraction });
 
 const LYRICS_GRACE_MS = 15_000;     // how long the show waits for LRCLIB once the listening is done

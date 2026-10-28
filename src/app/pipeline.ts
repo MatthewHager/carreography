@@ -15,23 +15,13 @@ export type Progress = (step: string, fraction?: number) => void;
 export const SONG_TYPES = 'MP3, M4A, WAV or FLAC';
 export const SONG_EXTENSIONS = ['.mp3', '.m4a', '.wav', '.flac'];
 
-// The worker is ended after each show, unless it used WebGPU: Safari crashes the page a few seconds
-// after such a worker is terminated. Then it's kept and makes the next show too, its GPU sessions ready.
-let kept: Worker | undefined;
-
+/** One show in a worker of its own, ended when it's done: each holds its own copy of the models. */
 function run(req: Request, onProgress: Progress, transfer: Transferable[]): Promise<Extract<Reply, { kind: 'done' }>> {
-  const reused = kept;
-  const worker = reused ?? new Worker(new URL('./show.worker.ts', import.meta.url), { type: 'module' });
-  kept = undefined;
-  let keep = reused !== undefined;
-  const end = () => {
-    if (keep) kept = worker;
-    else worker.terminate();
-  };
+  const worker = new Worker(new URL('./show.worker.ts', import.meta.url), { type: 'module' });
+  const end = () => worker.terminate();
   return new Promise((resolve, reject) => {
     worker.onmessage = (e: MessageEvent<Reply>) => {
       const r = e.data;
-      keep = r.keep;
       if (r.kind === 'progress') return onProgress(r.step, r.fraction);
       end();
       if (r.kind === 'done') resolve(r);
