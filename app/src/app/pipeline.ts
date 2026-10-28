@@ -1,6 +1,7 @@
 // Making a show: the work runs in a worker (show.worker.ts); this side sends it the song and reports
 // progress.
 
+import { mixdown } from '@/engine/listen/resample';
 import type { Reply, Request } from './show.worker';
 import { fileName } from './DownloadSheet';
 import type { Show } from './show';
@@ -8,19 +9,23 @@ import { encodeWav } from './wav';
 
 export type Progress = (step: string, fraction?: number) => void;
 
+// The worker is ended after each show, unless it used WebGPU: Safari crashes the page a few seconds
+// after such a worker is terminated. Then it's kept and makes the next show too, its GPU sessions ready.
+let kept: Worker | undefined;
+
 function run(req: Request, onProgress: Progress, transfer: Transferable[] = []): Promise<Extract<Reply, { kind: 'done' }>> {
-  const worker = new Worker(new URL('./show.worker.ts', import.meta.url), { type: 'module' });
+  const worker = kept ?? new Worker(new URL('./show.worker.ts', import.meta.url), { type: 'module' });
+  kept = undefined;
   return new Promise((resolve, reject) => {
     worker.onmessage = (e: MessageEvent<Reply>) => {
       const r = e.data;
-      if (r.kind === 'progress') onProgress(r.step, r.fraction);
-      else {
-        worker.terminate();
-        if (r.kind === 'done') resolve(r);
-        else reject(new Error(r.message));
-      }
+      if (r.kind === 'progress') return onProgress(r.step, r.fraction);
+      if (r.keep) kept = worker;
+      else worker.terminate();
+      if (r.kind === 'done') resolve(r);
+      else reject(new Error(r.message));
     };
-    worker.onerror = (e) => {
+    worker.onerror = (e) => {        // it couldn't start, or died
       worker.terminate();
       reject(new Error(e.message));
     };
@@ -62,9 +67,12 @@ export async function showFromFile(file: File, lineup: string, onProgress: Progr
   const channels = Array.from({ length: Math.min(2, audio.numberOfChannels) }, (_, i) => audio.getChannelData(i));
   const wav = encodeWav(channels, audio.sampleRate);
   const title = file.name.replace(/\.[^.]+$/, '');
-  const copies = channels.map((c) => c.slice());
-  const done = await run({ kind: 'song', channels: copies, sampleRate: audio.sampleRate, name: fileName(title), lineup },
-    onProgress, copies.map((c) => c.buffer));
+  // mixed down here, as the worker would, so only one channel is copied over
+  const mono = mixdown(channels);
+  const start = performance.now();
+  const done = await run({ kind: 'song', channels: [mono], sampleRate: audio.sampleRate, name: fileName(title), lineup },
+    onProgress, [mono.buffer]);
+  console.info(`Made the show in ${((performance.now() - start) / 1000).toFixed(1)} s, listening on ${done.backend}`);
   return {
     show: { title, lineup, nFrames: done.nFrames, cars: done.cars.map((c, i) => ({ ...c, letter: lineup[i] })), audio: wav },
     wav,

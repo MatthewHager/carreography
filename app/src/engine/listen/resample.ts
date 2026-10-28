@@ -56,10 +56,16 @@ export function resample(x: Float32Array, srIn: number, srOut: number, zeroCross
   return out;
 }
 
-/** Mono 22050 Hz from decoded channels (an AudioBuffer's getChannelData), averaged then resampled. */
-export function monoAt22050(channels: readonly Float32Array[], sr: number): Float32Array {
+/** The channels averaged, as librosa.to_mono does. */
+export function mixdown(channels: readonly Float32Array[]): Float32Array {
   const n = channels[0]?.length ?? 0, mono = new Float32Array(n);
   for (const ch of channels) for (let i = 0; i < n; i++) mono[i] += ch[i];
   if (channels.length > 1) for (let i = 0; i < n; i++) mono[i] /= channels.length;
+  return mono;
+}
+
+/** Mono 22050 Hz from decoded channels (an AudioBuffer's getChannelData), averaged then resampled. */
+export function monoAt22050(channels: readonly Float32Array[], sr: number): Float32Array {
+  const mono = mixdown(channels);
   return sr === SR ? mono : resample(mono, sr, SR);
 }

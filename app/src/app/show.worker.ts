@@ -5,6 +5,7 @@ import { STEP_MS } from '@/engine/channels';
 import { choreograph } from '@/engine/choreo';
 import { analyze } from '@/engine/listen/audio';
 import { trackBeats } from '@/engine/listen/beats';
+import { lastBackend, touchedGpu } from '@/engine/listen/infer';
 import { transcribe } from '@/engine/listen/notes';
 import { monoAt22050 } from '@/engine/listen/resample';
 
@@ -14,8 +15,8 @@ export type Request =
 
 export type Reply =
   | { kind: 'progress'; step: string; fraction?: number }
-  | { kind: 'done'; nFrames: number; cars: { name: string; frames: Uint8Array }[] }
-  | { kind: 'error'; message: string };
+  | { kind: 'done'; nFrames: number; cars: { name: string; frames: Uint8Array }[]; backend?: string; keep: boolean }
+  | { kind: 'error'; message: string; keep: boolean };   // keep: don't end this worker (infer.ts's touchedGpu)
 
 const post = (r: Reply, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(r, transfer);
 const progress = (step: string, fraction?: number) => post({ kind: 'progress', step, fraction });
@@ -44,9 +45,10 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     }
     progress('Choreographing');
     const cars = choreograph(an, { layout: req.lineup, name, style, driver });
-    post({ kind: 'done', nFrames: an.nFrames, cars: cars.map((c) => ({ name: c.name, frames: c.frames })) },
+    post({ kind: 'done', nFrames: an.nFrames, cars: cars.map((c) => ({ name: c.name, frames: c.frames })),
+      backend: lastBackend(), keep: touchedGpu() },
       cars.map((c) => c.frames.buffer));
   } catch (err) {
-    post({ kind: 'error', message: (err as Error).message ?? String(err) });
+    post({ kind: 'error', message: (err as Error).message ?? String(err), keep: touchedGpu() });
   }
 };
