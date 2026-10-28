@@ -58,6 +58,13 @@ export interface Phrase {
   pulse?: string;
 }
 
+/** One sung line of the lyrics, timed by line only (LRCLIB): when it starts and stops, and what it says. */
+export interface LyricLine {
+  t: number;
+  end: number;
+  text: string;
+}
+
 export interface Analysis {
   duration: number;
   nFrames: number;
@@ -82,7 +89,8 @@ export interface Analysis {
   climax: number;
   pulseEnv: number[];
   pulseHop: number;
-  lyricWords: [number, number, string][] | null;
+  lyricWords: [number, number, string][] | null;     // Whisper's words (the Python analyses only)
+  lyricLines?: LyricLine[] | null;                   // LRCLIB's lines, lined up with this recording
   // set while choreographing
   phrases?: Phrase[];
   cuePeaks?: [number, number, number | null, boolean][];
