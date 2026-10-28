@@ -1,6 +1,6 @@
 // The 3D view: the lineup on Tesla's own models, playing the show in time with the player.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { CarRig } from '@/viewer/rig';
 import { simulate } from '@/viewer/core/simulate';
 import { Viewer } from '@/viewer/viewer';
@@ -15,11 +15,13 @@ interface Props {
   show: Show | null;
   player: Player;
   camera: string;
+  /** The part of the page the panels leave uncovered: the cars are framed in it. */
+  clear: RefObject<HTMLElement | null>;
   /** Called when a model this lineup needs couldn't be loaded. */
   onMissing: () => void;
 }
 
-export function Stage({ lineup, paints, show, player, camera, onMissing }: Props) {
+export function Stage({ lineup, paints, show, player, camera, clear, onMissing }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const viewer = useRef<Viewer | null>(null);
   const rigs = useRef<CarRig[]>([]);
@@ -39,21 +41,30 @@ export function Stage({ lineup, paints, show, player, camera, onMissing }: Props
       setNoGl(true);
       return;
     }
-    v.setBloom(true);
     v.onTick = () => {
       const t = player.now();
       for (const r of rigs.current) r.setFrame(Math.floor(t / STEP_S), t);
     };
     // once the show plays, a device that can't keep up loses the bloom rather than the frame rate
     const unsubscribe = player.subscribe(() => player.playing && v.armPerfCheck());
+    const fit = () => {
+      if (!clear.current) return;
+      const r = clear.current.getBoundingClientRect(), b = el.getBoundingClientRect();
+      v.setClear({ x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height });
+    };
+    const watch = new ResizeObserver(fit);
+    watch.observe(el);
+    if (clear.current) watch.observe(clear.current);
+    fit();
     viewer.current = v;
     return () => {
+      watch.disconnect();
       unsubscribe();
       v.dispose();
       el.replaceChildren();
       viewer.current = null;
     };
-  }, [player]);
+  }, [player, clear]);
 
   useEffect(() => {
     let live = true;
@@ -108,8 +119,7 @@ function applyShow(rigs: CarRig[], show: Show | null) {
   rigs.forEach((rig, i) => {
     const car = show?.cars[i];
     rig.setSimulation(car ? simulate({
-      channelCount: CHANNELS, frameCount: show!.nFrames, stepTimeMs: STEP_S * 1000, minorVersion: 0,
-      uniqueId: 0n, variableHeaders: [], data: car.frames,
+      channelCount: CHANNELS, frameCount: show!.nFrames, stepTimeMs: STEP_S * 1000, data: car.frames,
     }, rig.profile) : undefined);
   });
 }

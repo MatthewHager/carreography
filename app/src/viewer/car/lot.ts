@@ -1,14 +1,7 @@
-// preview3d (adapted from tesla-lightshow-studio, AGPL-3.0): the
-// lineup stands in a driving aisle, the stall rows and planted islands ahead
-// of and behind it. The lamp poles cast no real lights (too costly for an
-// iPad); their pools of light are painted into the asphalt shader instead,
-// and the wet-ground mirror is off unless asked for.
-//
-// The set the car sits on: an empty parking lot at night, after rain. The
-// ground is lit asphalt with a mirror (Reflector) laid just above it; the
-// mirror's shader blurs, streaks and fades the reflection by a procedural
-// puddle mask, so the car's lights smear across the wet ground the way they
-// do in real life.
+// The set the cars stand on (adapted from tesla-lightshow-studio, AGPL-3.0): an empty parking lot at
+// night, after rain, the lineup in a driving aisle with the stall rows and planted islands ahead of
+// and behind it. The lamp poles cast no real lights (too costly for an iPad); their pools of light, the
+// puddles and the stall lines are painted into the asphalt shader instead.
 //
 // Layout (meters, x = forward, z = right): the car is backed into a stall,
 // facing +x toward the driving aisle, with a planted island just behind it.
@@ -17,7 +10,6 @@
 // the island edge x = -HEAD_X.
 
 import * as THREE from 'three';
-import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 
 const HEAD_X = -11.3;
 const ISLAND = 2;
@@ -34,8 +26,7 @@ const f = (n: number) => n.toFixed(3);
 /** Ground positions (x, z) under the nearest islands' lamps, lit in the asphalt shader. */
 const POOLS: [number, number][] = [0, -1].flatMap((k) => POLE_Z.slice(0, 2).map((z): [number, number] => [-(HEAD_X + ISLAND / 2 + k * MODULE), z]));
 
-// Value noise and fbm shared by the asphalt and the mirror, so puddles line
-// up in both.
+// Value noise and fbm for the asphalt's grain and puddles.
 const NOISE_GLSL = /* glsl */ `
   float st_hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
@@ -76,88 +67,15 @@ const NOISE_GLSL = /* glsl */ `
   }
 `;
 
-const MIRROR_SHADER = {
-  name: 'WetLotMirror',
-  uniforms: {
-    color: { value: null },
-    tDiffuse: { value: null },
-    textureMatrix: { value: null },
-    fadeNear: { value: 14 },
-    fadeFar: { value: 42 },
-    strength: { value: 1.2 },
-  },
-  vertexShader: /* glsl */ `
-    uniform mat4 textureMatrix;
-    varying vec4 vUv;
-    varying vec3 vWorld;
-    varying float vDepth;
-    void main() {
-      vUv = textureMatrix * vec4(position, 1.0);
-      vec4 world = modelMatrix * vec4(position, 1.0);
-      vWorld = world.xyz;
-      vec4 mv = viewMatrix * world;
-      vDepth = -mv.z;
-      gl_Position = projectionMatrix * mv;
-    }
-  `,
-  fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse;
-    uniform float fadeNear;
-    uniform float fadeFar;
-    uniform float strength;
-    varying vec4 vUv;
-    varying vec3 vWorld;
-    varying float vDepth;
-    ${NOISE_GLSL}
-    void main() {
-      vec2 p = vWorld.xz;
-      float puddle = st_puddle(p);
-      float paint = max(st_paint(p).r, st_paint(p).g);
-      // Ripples and grain bend the reflection; less so in standing water.
-      vec2 grain = vec2(st_noise(p * 11.0), st_noise(p * 11.0 + 9.1)) - 0.5;
-      vec2 uv = vUv.xy / vUv.w + grain * mix(0.018, 0.003, puddle);
-      // Wet asphalt smears lights into vertical streaks; puddles keep them sharp.
-      float spread = mix(0.016, 0.0025, puddle);
-      float lod = mix(4.0, 0.6, puddle);
-      vec3 sum = vec3(0.0);
-      float total = 0.0;
-      for (int i = -2; i <= 4; i++) {
-        float w = exp(-float(i * i) * 0.18);
-        sum += w * textureLod(tDiffuse, uv + vec2(0.0, float(i) * spread), lod).rgb;
-        total += w;
-      }
-      vec3 reflection = sum / total;
-      // Lights reflect at full strength; lit paint and the lot only faintly,
-      // so the wet ground never glows when every lamp on the car is off.
-      float lum = dot(reflection, vec3(0.2126, 0.7152, 0.0722));
-      reflection *= mix(0.22, 1.0, smoothstep(0.7, 1.8, lum));
-      vec3 v = normalize(cameraPosition - vWorld);
-      float fresnel = 0.02 + 0.98 * pow(1.0 - max(v.y, 0.0), 5.0);
-      float amount = (0.4 + 0.6 * fresnel) * mix(0.5, 1.0, puddle) * mix(1.0, 0.55, paint);
-      float fade = 1.0 - smoothstep(fadeNear, fadeFar, vDepth);
-      gl_FragColor = vec4(reflection * amount * fade * strength, 1.0);
-    }
-  `,
-};
-
-export interface Lot {
-  /** Matches the mirror's resolution to the canvas. */
-  setSize(width: number, height: number): void;
-  /** Wet-ground reflections (an extra render of the scene each frame). */
-  setReflections(on: boolean): void;
-  dispose(): void;
-}
-
-export function buildLot(scene: THREE.Scene): Lot {
+/** Builds the lot into the scene; the function it returns takes it down again. */
+export function buildLot(scene: THREE.Scene): () => void {
   const group = new THREE.Group();
   group.name = 'lot';
   scene.add(group);
   const owned: { dispose(): void }[] = [];
   const own = <T extends { dispose(): void }>(x: T) => (owned.push(x), x);
 
-  // Lit asphalt underneath the mirror.
-  // The mirror supplies the ground's reflections, so the sky map is off here.
-  // Its own highlights are kept low too: broad glare from the fill lights
+  // Lit asphalt, with the sky map off and its highlights kept low: broad glare from the fill lights
   // washed the whole lot out.
   const asphalt = own(
     new THREE.MeshPhysicalMaterial({ color: '#16181c', roughness: 0.6, metalness: 0, envMapIntensity: 0, specularIntensity: 0.12 }),
@@ -199,31 +117,10 @@ export function buildLot(scene: THREE.Scene): Lot {
       .replace('#include <common>', `#include <common>\nuniform vec2 uPools[${POOLS.length}];`);
     shader.uniforms.uPools = { value: POOLS.map(([x, z]) => new THREE.Vector2(x, z)) };
   };
-  const groundGeometry = own(new THREE.PlaneGeometry(120, 120));
-  const ground = new THREE.Mesh(groundGeometry, asphalt);
+  const ground = new THREE.Mesh(own(new THREE.PlaneGeometry(120, 120)), asphalt);
   ground.rotation.x = -Math.PI / 2;
   ground.name = 'ground';
   group.add(ground);
-
-  const mirror = new Reflector(groundGeometry, {
-    textureWidth: 512,
-    textureHeight: 512,
-    multisample: 0,
-    shader: MIRROR_SHADER,
-  });
-  mirror.name = 'groundMirror';
-  mirror.rotation.x = -Math.PI / 2;
-  mirror.position.y = 0.002;
-  mirror.visible = false;
-  const mirrorMaterial = mirror.material as THREE.ShaderMaterial;
-  mirrorMaterial.transparent = true;
-  mirrorMaterial.blending = THREE.AdditiveBlending;
-  mirrorMaterial.depthWrite = false;
-  const target = mirror.getRenderTarget();
-  // Mipmaps give the shader cheap blur levels for damp, rough asphalt.
-  target.texture.generateMipmaps = true;
-  target.texture.minFilter = THREE.LinearMipmapLinearFilter;
-  group.add(mirror);
 
   // Planted islands at the head of each pair of rows: a concrete curb
   // around dark mulch, with the lot's light poles.
@@ -251,23 +148,12 @@ export function buildLot(scene: THREE.Scene): Lot {
       const glow = new THREE.Mesh(headGeometry, head);
       glow.position.set(x, CURB_HEIGHT + LAMP_HEIGHT, z);
       group.add(base, post, glow);
-
     }
   }
 
-  return {
-    setReflections(on) {
-      mirror.visible = on;
-    },
-    setSize(width, height) {
-      // Half resolution is plenty for a blurred reflection.
-      target.setSize(Math.max(64, Math.round(width / 2)), Math.max(64, Math.round(height / 2)));
-    },
-    dispose() {
-      mirror.dispose();
-      for (const o of owned) o.dispose();
-      scene.remove(group);
-    },
+  return () => {
+    for (const o of owned) o.dispose();
+    scene.remove(group);
   };
 }
 

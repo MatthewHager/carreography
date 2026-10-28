@@ -1,8 +1,8 @@
 // Tesla's own car models from the Tesla app, with Tesla's own closure
 // animations (frunk, liftgate, doors, windows, mirrors, charge port).
 //
-// They're the only car models the viewer draws, and they're not in the repo or on the site (they're
-// Tesla's): people add the files they extracted themselves, and models.ts keeps them in the browser.
+// They're the only car models the viewer draws. They're Tesla's, so they're not in the repository: the
+// site serves them from a release (app/models.ts).
 //
 // The app keeps each kind of lamp in one mesh (all the DRLs, all the brake
 // lights...), so lamps are split here by where each triangle sits: per side,
@@ -483,14 +483,11 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
   if (id === 'cybertruck') {
     b.light(b.car, ['leftAuxPark'], W, COLORS.lensFront, [0.4, 0.01, 0.08], [body.max.x - 0.55, 0.95, 0], 3);
   }
-  b.cabinLight.position.set(body.max.x * 0.25, body.max.y * 0.6, 0);
-  b.car.add(b.cabinLight);
 
   return {
     halfLength: Math.max(-body.min.x, body.max.x),
     height: body.max.y,
     halfWidth: Math.max(-body.min.z, body.max.z),
-    cabinGain: 1.5,
     paints: [...paints.values()],
   };
 }

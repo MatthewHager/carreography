@@ -1,5 +1,5 @@
-// Reader and writer for FSEQ v2 uncompressed files, the format Tesla cars
-// play. Layout (little-endian):
+// Writer for FSEQ v2 uncompressed files, the format Tesla cars play.
+// Layout (little-endian):
 //
 //   0  magic "PSEQ"          20 compression type (must be 0)
 //   4  u16 channel data offset   21 # compression blocks
@@ -32,71 +32,8 @@ export interface FseqFile {
   data: Uint8Array;
 }
 
-export class FseqFormatError extends Error {}
-
 const MAGIC = 'PSEQ';
 const FIXED_HEADER_LENGTH = 32;
-
-export function readFseq(bytes: Uint8Array): FseqFile {
-  if (bytes.length < FIXED_HEADER_LENGTH) {
-    throw new FseqFormatError('File is too small to be an FSEQ file');
-  }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const magic = String.fromCharCode(...bytes.subarray(0, 4));
-  if (magic !== MAGIC) {
-    throw new FseqFormatError(`Not an FSEQ v2 file (magic is "${magic}")`);
-  }
-  const dataOffset = view.getUint16(4, true);
-  const minorVersion = view.getUint8(6);
-  const majorVersion = view.getUint8(7);
-  const headerLength = view.getUint16(8, true);
-  const channelCount = view.getUint32(10, true);
-  const frameCount = view.getUint32(14, true);
-  const stepTimeMs = view.getUint8(18);
-  const compressionType = view.getUint8(20) & 0x0f;
-  const compressionBlocks = view.getUint8(21);
-  const sparseRanges = view.getUint8(22);
-  const uniqueId = view.getBigUint64(24, true);
-
-  if (majorVersion !== 2) {
-    throw new FseqFormatError(`Unsupported FSEQ version ${majorVersion}.${minorVersion}`);
-  }
-  if (compressionType !== 0) {
-    throw new FseqFormatError('Compressed FSEQ files are not supported; Tesla requires uncompressed');
-  }
-  if (sparseRanges !== 0) {
-    throw new FseqFormatError('Sparse FSEQ files are not supported');
-  }
-
-  const variableHeaders: VariableHeader[] = [];
-  let offset = headerLength + compressionBlocks * 8;
-  while (offset + 4 <= dataOffset) {
-    const length = view.getUint16(offset, true);
-    if (length < 4 || offset + length > dataOffset) break; // reached padding
-    variableHeaders.push({
-      code: String.fromCharCode(bytes[offset + 2]!, bytes[offset + 3]!),
-      data: bytes.slice(offset + 4, offset + length),
-    });
-    offset += length;
-  }
-
-  const dataLength = channelCount * frameCount;
-  if (dataOffset + dataLength > bytes.length) {
-    throw new FseqFormatError(
-      `File is truncated: expected ${dataOffset + dataLength} bytes, got ${bytes.length}`,
-    );
-  }
-
-  return {
-    channelCount,
-    frameCount,
-    stepTimeMs,
-    minorVersion,
-    uniqueId,
-    variableHeaders,
-    data: bytes.slice(dataOffset, dataOffset + dataLength),
-  };
-}
 
 export function writeFseq(file: FseqFile): Uint8Array<ArrayBuffer> {
   const { channelCount, frameCount, data } = file;
@@ -106,7 +43,7 @@ export function writeFseq(file: FseqFile): Uint8Array<ArrayBuffer> {
     );
   }
   const varLength = file.variableHeaders.reduce((sum, h) => sum + 4 + h.data.length, 0);
-  const dataOffset = roundUpTo4(FIXED_HEADER_LENGTH + varLength);
+  const dataOffset = Math.ceil((FIXED_HEADER_LENGTH + varLength) / 4) * 4;
   if (dataOffset > 0xffff) throw new Error('Variable headers are too large');
 
   const out = new Uint8Array(dataOffset + data.length);
@@ -141,8 +78,4 @@ export function stringHeader(code: string, value: string): VariableHeader {
   const data = new Uint8Array(encoded.length + 1);
   data.set(encoded);
   return { code, data };
-}
-
-function roundUpTo4(n: number): number {
-  return Math.ceil(n / 4) * 4;
 }

@@ -16,25 +16,35 @@ function fmt(t: number): string {
 
 /** The player's position, refreshed a few times a second while it plays. */
 function usePosition(player: Player): number {
-  const [t, setT] = useState(0);
-  const playing = useSyncExternalStore((fn) => player.subscribe(fn), () => player.playing);
+  const [t, setT] = useState(() => player.now());
   useEffect(() => {
-    setT(player.now());
-    if (!playing) return player.subscribe(() => setT(player.now()));
-    const id = setInterval(() => setT(player.now()), 100);
-    return () => clearInterval(id);
-  }, [player, playing]);
+    const tick = () => setT(player.now());
+    const off = player.subscribe(tick);
+    const id = setInterval(() => player.playing && tick(), 100);
+    return () => {
+      off();
+      clearInterval(id);
+    };
+  }, [player]);
   return t;
 }
 
-export function PlayerBar({ player, camera, onCamera }: { player: Player; camera: string; onCamera: (c: string) => void }) {
+// Keys that belong to what has focus (a button's Space, a slider's arrows), not to the player.
+const OWNS_KEYS =
+  'button, a, input, textarea, select, [role="slider"], [role="radio"], [role="combobox"], [role="option"]';
+
+export function PlayerBar({ player, camera, onCamera }: {
+  player: Player;
+  camera: string;
+  onCamera: (c: string) => void;
+}) {
   const playing = useSyncExternalStore((fn) => player.subscribe(fn), () => player.playing);
   const duration = useSyncExternalStore((fn) => player.subscribe(fn), () => player.duration);
   const t = usePosition(player);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (!player.duration || (e.target instanceof Element && e.target.closest(OWNS_KEYS))) return;
       if (e.code === 'Space') {
         e.preventDefault();
         player.toggle();
@@ -46,20 +56,27 @@ export function PlayerBar({ player, camera, onCamera }: { player: Player; camera
   }, [player]);
 
   return (
-    <div className="flex w-full items-center gap-3 rounded-2xl border bg-card px-3 py-2 shadow-2xl backdrop-blur-xl">
-      <Button size="icon" variant="secondary" disabled={!duration} onClick={() => player.toggle()}
-        aria-label={playing ? 'Pause' : 'Play'}>
-        {playing ? <Pause /> : <Play />}
-      </Button>
-      <span className="w-24 shrink-0 text-xs tabular-nums text-muted-foreground">
-        {fmt(t)} / {fmt(duration)}
-      </span>
-      <Slider className="min-w-24 flex-1" min={0} max={duration || 1} step={0.02} value={[Math.min(t, duration)]}
-        disabled={!duration} onValueChange={([v]) => player.seek(v)} aria-label="Position" />
-      <ToggleGroup type="single" size="sm" value={camera} onValueChange={(v) => v && onCamera(v)}
-        className="hidden sm:flex" aria-label="Camera">
+    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+      {duration > 0 && (
+        <div className="flex min-w-0 flex-[1_1_20rem] items-center gap-3 rounded-full border bg-card/80 py-1.5 pr-5
+          pl-1.5 backdrop-blur-xl">
+          <Button size="icon-lg" className="rounded-full" onClick={() => player.toggle()}
+            aria-label={playing ? 'Pause' : 'Play'}>
+            {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
+          </Button>
+          <span className="w-10 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{fmt(t)}</span>
+          <Slider className="min-w-16 flex-1" min={0} max={duration} step={0.02} value={[Math.min(t, duration)]}
+            onValueChange={([v]) => player.seek(v)} aria-label="Position in the show" />
+          <span className="w-10 shrink-0 text-xs text-muted-foreground tabular-nums">{fmt(duration)}</span>
+        </div>
+      )}
+      <ToggleGroup type="single" value={camera} onValueChange={(v) => v && onCamera(v)} aria-label="Camera"
+        spacing={0} className="rounded-full border bg-card/80 p-1 backdrop-blur-xl">
         {CAMERA_PRESETS.map((p) => (
-          <ToggleGroupItem key={p.name} value={p.name} className="px-2.5 text-xs">{p.name}</ToggleGroupItem>
+          <ToggleGroupItem key={p.name} value={p.name} className="h-8 rounded-full px-3.5 text-xs text-muted-foreground
+            data-[state=on]:bg-secondary data-[state=on]:text-foreground">
+            {p.name}
+          </ToggleGroupItem>
         ))}
       </ToggleGroup>
     </div>

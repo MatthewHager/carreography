@@ -16,7 +16,7 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GlowEntry } from './glow';
 
 /** Which channels each app model's car has, and how it treats them (core/vehicles.ts). */
-export const PROFILES: Record<AppModelId, VehicleProfile> = {
+const PROFILES: Record<AppModelId, VehicleProfile> = {
   s_palladium: MODEL_S_2021,
   model3_high: MODEL_3_2020,
   poppyseed: MODEL_3_2024,
@@ -102,7 +102,6 @@ export class CarRig {
   private freeGlows: { handle: GlowHandle; entry: GlowEntry }[] = [];
   private cabin: CabinGlow[] = [];
   private sim: Simulation | undefined;
-  private readonly cabinLight = new THREE.PointLight('#fff', 0, 4, 1.5);
   private frame = 0;
 
   constructor(
@@ -111,7 +110,6 @@ export class CarRig {
     private readonly app: { id: AppModelId; gltf: GLTF },
   ) {
     this.profile = PROFILES[app.id];
-    this.cabinLight.visible = false;
     this.group.add(this.car);
     this.build();
   }
@@ -137,7 +135,6 @@ export class CarRig {
     const car = this.car;
     const builder: Builder = {
       car,
-      cabinLight: this.cabinLight,
       light: (parent, ids, color, lens, size, position, gain = 5) => {
         const material = new THREE.MeshStandardMaterial({ color: lens, roughness: 0.2, metalness: 0.1 });
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
@@ -169,9 +166,6 @@ export class CarRig {
 
     this.bounds = buildAppBody(builder, this.app.gltf, this.app.id);
     this.ownPaint = (this.bounds.paints ?? []).map((m) => ({ color: m.color.clone(), metalness: m.metalness, roughness: m.roughness }));
-    // The body builder adds the cabin light to the car; it stays
-    // hidden (no per-pixel light cost) and only marks where the display is.
-    this.cabinLight.visible = false;
     car.updateMatrixWorld(true);
     this.placeGlows();
     this.placeCabin();
@@ -534,9 +528,3 @@ function ledStrip(material: THREE.MeshStandardMaterial, levels: Float32Array, fr
   };
   material.needsUpdate = true;
 }
-
-/**
- * Recolors Tesla's paint bake: where the texture is red (paint), its
- * brightness becomes shading under the material color. (From the studio.)
- */
-
