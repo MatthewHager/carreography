@@ -95,7 +95,8 @@ export interface Analysis {
   hats: number[][];             // hi-hat and cymbal ticks: noise above 8 kHz
   brightness: Float32Array;     // dull to bright (the spectral centroid): a colour temperature
   chroma: Float32Array;         // nFrames x 12, frame-major from C: each pitch class's share, the loudest 1
-  pitchClass: Uint8Array;       // the strongest pitch class (0 C .. 11 B): a colour per note of the harmony
+  pitchClass: Uint8Array;       // the harmony's strongest pitch class over each beat (0 C .. 11 B): a colour
+                                // that changes on the beat
   pitchClassStrength: Float32Array;   // how clearly it leads (0 in noise, drums or silence)
   novelty: Float32Array;        // how much the sound changes from the second before to the second after
   noveltyPeaks: number[][];     // the moments it changes most (an entry, a drop, a new texture), 1 s apart

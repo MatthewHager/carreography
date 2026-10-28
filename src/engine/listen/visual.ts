@@ -192,39 +192,64 @@ function brightnessOf(mel: Float32Array, T: number, loud: Float32Array): Float32
   return boxSmooth(cent.map((v) => clip((v - lo) / Math.max(hi - lo, 1e-9), 0, 1)), 2);
 }
 
-/** The chroma on the grid, smoothed over a fifth of a second so a chord reads as one colour, its strongest
- * pitch class, and how clearly that leads: 1 for a lone note, about 0.8 for a triad, near 0 for noise, a
- * drum or silence (`loud`, per grid frame). */
-function harmony(cq: Float32Array, T: number, loud: Float32Array, nFrames: number,
-  g: Grid): Pick<Visuals, 'chroma' | 'pitchClass' | 'pitchClassStrength'> {
+/** The chroma on the grid, smoothed over a fifth of a second; and the harmony's strongest pitch class over
+ * each beat (or each frame where there is no beat), so its colour changes on the beat, with how clearly it
+ * leads: 1 for a lone note, about 0.8 for a triad, near 0 for noise, a drum or silence (`loud`). */
+function harmony(cq: Float32Array, T: number, loud: Float32Array, beats: number[], nFrames: number,
+  step: number, g: Grid): Pick<Visuals, 'chroma' | 'pitchClass' | 'pitchClassStrength'> {
   const half = Math.round(0.1 * FPS);
   const pcs = Array.from({ length: 12 }, (_, c) => g(boxSmooth(cq.subarray(c * T, (c + 1) * T), half)));
-  const chroma = new Float32Array(12 * nFrames), pitchClass = new Uint8Array(nFrames);
-  const clarity = new Float32Array(nFrames);
+  const chroma = new Float32Array(12 * nFrames);
   for (let i = 0; i < nFrames; i++) {
-    let mx = 0, sum = 0, arg = 0;
-    for (let c = 0; c < 12; c++) {
-      const v = pcs[c][i];
-      sum += v;
-      if (v > mx) [mx, arg] = [v, c];
+    let mx = 0;
+    for (let c = 0; c < 12; c++) mx = Math.max(mx, pcs[c][i]);
+    if (mx > 0) for (let c = 0; c < 12; c++) chroma[i * 12 + c] = pcs[c][i] / mx;
+  }
+  // the spans the pitch class is read over: beat to beat, else single frames
+  const spans: [number, number][] = [];
+  let at = 0;
+  const single = (to: number) => {
+    while (at < to) spans.push([at, ++at]);
+  };
+  for (let k = 0; k + 1 < beats.length; k++) {
+    const a = Math.min(nFrames, Math.round(beats[k] / step));
+    const b = Math.min(nFrames, Math.round(beats[k + 1] / step));
+    if (beats[k + 1] - beats[k] > 2.5 || b <= Math.max(a, at)) continue;
+    single(a);
+    spans.push([at, b]);
+    at = b;
+  }
+  single(nFrames);
+  const pitchClass = new Uint8Array(nFrames), clarity = new Float32Array(nFrames), sum = new Float64Array(12);
+  for (const [a, b] of spans) {
+    sum.fill(0);
+    let lv = 0;
+    for (let i = a; i < b; i++) {
+      for (let c = 0; c < 12; c++) sum[c] += chroma[i * 12 + c];
+      lv += loud[i];
     }
-    if (mx <= 0) continue;
-    for (let c = 0; c < 12; c++) chroma[i * 12 + c] = pcs[c][i] / mx;
-    pitchClass[i] = arg;
-    clarity[i] = clip(((1 - sum / mx / 12) * 12) / 11, 0, 1) * Math.min(1, 2 * loud[i]);
+    let mx = 0, tot = 0, arg = 0;
+    for (let c = 0; c < 12; c++) {
+      tot += sum[c];
+      if (sum[c] > mx) [mx, arg] = [sum[c], c];
+    }
+    pitchClass.fill(arg, a, b);
+    const leads = clip(((1 - tot / mx / 12) * 12) / 11, 0, 1);
+    if (mx > 0) clarity.fill(leads * Math.min(1, (2 * lv) / (b - a)), a, b);
   }
   return { chroma, pitchClass, pitchClassStrength: scaled(clarity) };
 }
 
 /** How different the second after each frame sounds from the second before (the mean change of 32 bands'
- * dB levels), on the grid; and its peaks, at least a second apart and standing out from the 3 s around. */
+ * dB levels, a band 60 dB under the song's peak counting as silent), on the grid; and its peaks, at least
+ * a second apart and standing out from the 3 s around. */
 function noveltyOf(db: Float32Array, T: number, g: Grid, step: number)
   : Pick<Visuals, 'novelty' | 'noveltyPeaks'> {
   const B = 32, W = Math.round(FPS), cs = new Float64Array((T + 1) * B);
   for (let t = 0; t < T; t++) {
     for (let b = 0; b < B; b++) {
       let s = 0;
-      for (let r = 4 * b; r < 4 * b + 4; r++) s += db[r * T + t];
+      for (let r = 4 * b; r < 4 * b + 4; r++) s += Math.max(db[r * T + t], -60);
       cs[(t + 1) * B + b] = cs[t * B + b] + s / 4;
     }
   }
@@ -240,7 +265,7 @@ function noveltyOf(db: Float32Array, T: number, g: Grid, step: number)
     nov[t] = d / B;
   }
   const novelty = scaled(g(nov)), sec = Math.round(1 / step);
-  const peaks = peakPick(novelty, sec, sec, 3 * sec, 3 * sec, 0.1, sec);
+  const peaks = peakPick(novelty, sec, sec, 3 * sec, 3 * sec, 0.2, sec);
   return { novelty, noveltyPeaks: peaks.map((i) => [i * step, novelty[i]]) };
 }
 
@@ -298,7 +323,7 @@ export function visuals(y: Float32Array, spec: Spectrum, env: Float32Array, beat
     bands: bandsOf(mel, T, g, step),
     kick, snare, hats,
     brightness: g(brightnessOf(mel, T, loud)),
-    ...harmony(chromaCqt(y, spec.tuning), T, g(loud), nFrames, g),
+    ...harmony(chromaCqt(y, spec.tuning), T, g(loud), beats, nFrames, step, g),
     ...noveltyOf(db, T, g, step),
     kit: kitOf(beats, kick, snare, hats, nFrames, step),
     beatConfidence: beatConfidenceOf(env, beats, nFrames, step),

@@ -144,6 +144,20 @@ describe('harmony', () => {
       expect(an.pitchClassStrength[i]).toBeGreaterThan(0.5);
     }
   });
+
+  it('changes the harmony\'s colour on the beat', () => {
+    // C major for ten beats, then F# major (no note in common) for ten
+    const y = new Float32Array(10 * SR), cut = Math.round(5.25 * SR);
+    y.set(chord([60, 64, 67], 10).subarray(0, cut));
+    y.set(chord([66, 70, 73], 10).subarray(0, y.length - cut), cut);
+    const beats = gridOf(19, 0.25), an = listen(y, beats);
+    expect(an.beats).toEqual(beats);
+    for (const [k, t] of beats.slice(0, -1).entries()) {
+      const each = new Set(an.pitchClass.subarray(Math.round(t / an.step), Math.round((t + BEAT) / an.step)));
+      expect(each.size).toBe(1);
+      expect(k < 10 ? [0, 4, 7] : [6, 10, 1]).toContain([...each][0]);
+    }
+  });
 });
 
 describe('novelty, bands and brightness', () => {
