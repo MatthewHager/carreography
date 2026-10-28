@@ -29,9 +29,9 @@ export interface Move {
 }
 
 /** A formation is ['unison', move] or ['split', y_move, ct_move]. Arrays compare by reference in JS: use formationKey. */
-export type Formation = string[];
+export type Formation = readonly string[];
 
-export function formationKey(f: readonly string[]): string {
+export function formationKey(f: Formation): string {
   return f.join('|');
 }
 
@@ -172,19 +172,19 @@ const SPLIT: [string, string, Move][] = [
 const SPLIT_MAP = new Map<string, Move>(SPLIT.map(([y, c, m]) => [formationKey([y, c]), m]));
 
 /** Catalogue entry for ("unison", move) or ("split", y, ct), or null. */
-export function info(formation: readonly string[]): Move | null {
+export function info(formation: Formation): Move | null {
   if (formation[0] === 'unison') return Object.hasOwn(UNISON, formation[1]) ? UNISON[formation[1]] : null;
   return SPLIT_MAP.get(formationKey([formation[1], formation[2]])) ?? null;
 }
 
-export function fits(formation: readonly string[], mood: string): boolean {
+export function fits(formation: Formation, mood: string): boolean {
   const i = info(formation);
   return i === null || i.moods.includes(mood);
 }
 
 /** Every catalogued formation (not builds or self-paced moves) that suits this gesture and mood. */
-export function candidates(gesture: string, mood: string): string[][] {
-  const out: string[][] = [];
+export function candidates(gesture: string, mood: string): Formation[] {
+  const out: Formation[] = [];
   for (const [m, i] of Object.entries(UNISON)) {
     if (i.moods.includes(mood) && i.gestures.includes(gesture) && !['build', 'self'].includes(i.grid)) {
       out.push(['unison', m]);
