@@ -1,7 +1,8 @@
 # The browser app
 
 Carreography in the browser: drop in a song, pick 1 to 5 cars, watch the show on Tesla's own 3D
-models, and download each car's `LightShow` folder. Everything runs on the visitor's device; the site
+models, and download each car's `LightShow` folder. Everything runs on the visitor's device, except that
+the song's artist, title and length are sent to [LRCLIB](https://lrclib.net) to find its lyrics. The site
 is static and hosted on GitHub Pages ([matthewhager.github.io/carreography](https://matthewhager.github.io/carreography/)).
 The plan behind it is [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
 

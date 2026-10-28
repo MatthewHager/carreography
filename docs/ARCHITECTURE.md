@@ -67,6 +67,17 @@ the middle of a line. Songs with no synced lyrics on LRCLIB play without lyric e
 word timing is dropped: it needed a download of a few hundred MB plus vocal separation, and it was
 unreliable (it never caught "Ghostbusters").
 
+The song is looked up by the artist and title in its tags (ID3, FLAC, M4A or WAV), else its file name,
+and its length (`listen/tags.ts`, `listen/lrclib.ts`). LRCLIB's times belong to some release of the song,
+so the lines are slid, up to 15 s either way, to where the singing is (`listen/align.ts`): the voice is
+nearly always in the middle of the stereo picture, so the voice band leaning to the middle marks it.
+The slide counts only when the song's first, middle and last thirds mostly agree on it. Otherwise
+LRCLIB's own times are kept for a release of the same length, or the lyrics are left out. On the five
+sung Halloween songs, line starts land a median 0.13-0.75 s from Whisper's, about what LRCLIB's own
+times allow. The moments come from one table of words (`LYRIC_WORDS` in `engine/lyrics.ts`): a colour
+word colours the interiors for the line, a scream-type word strikes lightning on its loudest attack, a
+word sung twice in a line pings across the cars on its beats, and every line start is a phrase cut.
+
 ## 2. Read
 
 Read turns the score into the facts the carreographer works with. It runs in milliseconds, so it isn't
