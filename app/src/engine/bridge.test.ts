@@ -11,13 +11,16 @@
 // A change that moves a single byte fails here, naming the first frame and channel that differ.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { fromBridge } from './analysis';
 import * as C from './channels';
 import { choreograph } from './choreo';
 
-const ROOT = join(import.meta.dirname, '..', '..', '..', 'cache', 'bridge');
+/** The top of this checkout: the nearest folder up that holds .git. */
+const top = (dir: string): string =>
+  (existsSync(join(dir, '.git')) || dirname(dir) === dir ? dir : top(dirname(dir)));
+const ROOT = join(top(import.meta.dirname), 'cache', 'bridge');
 const songs = existsSync(ROOT) ? readdirSync(ROOT).filter((d) => existsSync(join(ROOT, d, 'analysis.json'))).sort() : [];
 
 /** "frame 812 channel 46 (ours 0, Python 255)", or null when identical. */

@@ -7,15 +7,9 @@ import { describe, expect, it } from 'vitest';
 import { markdown, SPLIT, UNISON } from './catalog';
 import * as M from './moves';
 
-/** The checkout's top folder: the nearest one holding .git. */
-function repoRoot(): string {
-  let dir = import.meta.dirname;
-  while (!existsSync(join(dir, '.git'))) {
-    if (dirname(dir) === dir) throw new Error('not inside a git checkout');
-    dir = dirname(dir);
-  }
-  return dir;
-}
+/** The top of this checkout: the nearest folder up that holds .git. */
+const top = (dir: string): string =>
+  (existsSync(join(dir, '.git')) || dirname(dir) === dir ? dir : top(dirname(dir)));
 
 describe('the move catalogue', () => {
   it('lists exactly the moves there are', () => {
@@ -25,7 +19,7 @@ describe('the move catalogue', () => {
   });
 
   it('is what MOVES.md says', () => {
-    const file = join(repoRoot(), 'MOVES.md');
+    const file = join(top(import.meta.dirname), 'MOVES.md');
     if (process.env.UPDATE_MOVES) writeFileSync(file, markdown());
     const stale = 'MOVES.md is stale: UPDATE_MOVES=1 npx vitest run catalog';
     expect(readFileSync(file, 'utf8'), stale).toBe(markdown());
