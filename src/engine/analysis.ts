@@ -57,6 +57,14 @@ export interface LyricLine {
   text: string;
 }
 
+/** The energy in four bands, per frame 0..1: a level meter's, rising at once and falling over about 0.1 s. */
+export interface Bands {
+  low: Float32Array;      // below 150 Hz: kick and bass, the thump
+  lowMid: Float32Array;   // 150-600 Hz: the body of chords, voices and drums
+  highMid: Float32Array;  // 600 Hz-4 kHz: the voice, leads, the snare's crack
+  high: Float32Array;     // above 4 kHz: cymbals, hats, breath and sparkle
+}
+
 export interface Analysis {
   duration: number;
   nFrames: number;
@@ -78,6 +86,21 @@ export interface Analysis {
   sections: Section[];
   pulseEnv: number[];    // the onset strength curve, one value per pulseHop seconds
   pulseHop: number;
+  // What a music visualizer shows (listen/visual.ts). Curves have one value per frame (nFrames), 0..1 over
+  // the song, except kit and beatConfidence, which mean the same in every song (a song without drums stays
+  // low); hit lists are rows of time, strength 0..1, in time order.
+  bands: Bands;
+  kick: number[][];             // kick hits: the low end jumping (a bass drum, timpani, a bass note's attack)
+  snare: number[][];            // snare hits: a body and noise up to 7 kHz at once (snare, claps, a crash)
+  hats: number[][];             // hi-hat and cymbal ticks: noise above 8 kHz
+  brightness: Float32Array;     // dull to bright (the spectral centroid): a colour temperature
+  chroma: Float32Array;         // nFrames x 12, frame-major from C: each pitch class's share, the loudest 1
+  pitchClass: Uint8Array;       // the strongest pitch class (0 C .. 11 B): a colour per note of the harmony
+  pitchClassStrength: Float32Array;   // how clearly it leads (0 in noise, drums or silence)
+  novelty: Float32Array;        // how much the sound changes from the second before to the second after
+  noveltyPeaks: number[][];     // the moments it changes most (an entry, a drop, a new texture), 1 s apart
+  kit: Float32Array;            // how much a drum kit is playing: the drum-kit layer vs. gentle percussion
+  beatConfidence: Float32Array; // how clearly the beats land on accents: beat lights vs. flowing (0: no beat)
   lyricLines?: LyricLine[] | null;                   // LRCLIB's lines, lined up with this recording
   lyricWords?: [number, number, string][] | null;    // only in the frozen Python analyses (see lyrics.ts)
   // set while choreographing

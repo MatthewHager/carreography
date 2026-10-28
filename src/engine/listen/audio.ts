@@ -8,6 +8,8 @@
 //   build     per frame: inside a crescendo (energy rising steadily), with its 0..1 progress
 //   events    the transcribed notes grouped into key presses and chords (texture.ts)
 //   sections  the form map (form.ts)
+//   and what a music visualizer shows: band levels, the drum kit piece by piece, brightness, chroma,
+//   novelty, how much a kit is playing and how clear the beat is (visual.ts)
 // Everything comes from the full mix: there is no source separation.
 
 import type { Analysis } from '../analysis';
@@ -21,6 +23,7 @@ import {
   beatTrack, framesToTime, HOP, localTempo, melFrequencies, onsetDetect, onsetStrength, powerToDb, spectrum,
   SR,
 } from './dsp';
+import { visuals } from './visual';
 
 const f32 = Math.fround;
 
@@ -246,5 +249,6 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
     duration, nFrames, step, tempo, beats, downbeats, bass, highs, hits, intensity, build, tier,
     loudFast, events, pitchLo, pitchHi, beatScore, sections,
     pulseEnv: Array.from(fullEnv), pulseHop: HOP / SR,
+    ...visuals(y, spec, fullEnv, beats, nFrames, step),
   };
 }
