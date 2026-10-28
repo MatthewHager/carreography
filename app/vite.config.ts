@@ -6,11 +6,10 @@ import { defineConfig, type Plugin } from 'vite'
 
 const repo = path.resolve(import.meta.dirname, '..')
 
-/** While developing only: Tesla's car models, the Python analyses (cache/bridge) and recordings
- * (output/) on this machine, served under dev/. None of it is ever part of a build. */
+/** While developing only: the Python analyses (cache/bridge) and recordings (output/) on this machine,
+ * served under dev/. None of it is ever part of a build. */
 function devFiles(): Plugin {
   const roots: Record<string, string> = {
-    models: path.join(repo, 'preview3d', 'public', 'models', 'tesla-app'),
     bridge: path.join(repo, 'cache', 'bridge'),
     output: path.join(repo, 'output'),
   }

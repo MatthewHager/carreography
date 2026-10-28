@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react';
 import { CarRig } from '@/viewer/rig';
 import { simulate } from '@/viewer/core/simulate';
 import { Viewer } from '@/viewer/viewer';
-import type { AppModelId } from '@/viewer/car/appBody';
 import { loadModel, paintsFor } from './models';
 import type { Player } from './player';
 import { CHANNELS, modelFor, STEP_S, type Show } from './show';
@@ -16,8 +15,8 @@ interface Props {
   show: Show | null;
   player: Player;
   camera: string;
-  /** The models this lineup needs that haven't been added (empty when all are there). */
-  onMissing: (ids: AppModelId[]) => void;
+  /** Called when a model this lineup needs couldn't be loaded. */
+  onMissing: () => void;
 }
 
 export function Stage({ lineup, paints, show, player, camera, onMissing }: Props) {
@@ -51,9 +50,8 @@ export function Stage({ lineup, paints, show, player, camera, onMissing }: Props
     const ids = [...new Set(letters.map(modelFor))];
     void Promise.all(ids.map(loadModel)).then((gltfs) => {
       if (!live || !viewer.current) return;
-      const missing = ids.filter((_, i) => !gltfs[i]);
-      onMissing(missing);
-      if (missing.length) {
+      if (gltfs.some((g) => !g)) {
+        onMissing();
         viewer.current.setCars([]);
         rigs.current = [];
         return;

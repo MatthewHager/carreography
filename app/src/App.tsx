@@ -5,11 +5,9 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import type { AppModelId } from '@/viewer/car/appBody';
 import { DownloadSheet } from '@/app/DownloadSheet';
 import { DEFAULT_PAINT, LineupEditor } from '@/app/LineupEditor';
 import { LyricsNote } from '@/app/LyricsNote';
-import { ModelsCard } from '@/app/ModelsCard';
 import { showFromBridge, showFromFile } from '@/app/pipeline';
 import { Player } from '@/app/player';
 import { PlayerBar } from '@/app/PlayerBar';
@@ -37,12 +35,10 @@ export default function App() {
   const [show, setShow] = useState<Show | null>(null);
   const [wav, setWav] = useState<Blob | undefined>();
   const [busy, setBusy] = useState<{ step: string; fraction?: number } | null>(null);
-  const [missing, setMissing] = useState<AppModelId[]>([]);
-  const [modelsVersion, setModelsVersion] = useState(0);
   const [camera, setCamera] = useState('3/4');
   const [open, setOpen] = useState(true);
 
-  const onMissing = useCallback((ids: AppModelId[]) => setMissing(ids), []);
+  const onMissing = useCallback(() => toast.error("The 3D cars couldn't load. The show files still work."), []);
   const stale = show !== null && show.lineup !== lineup;
   const carPaints = useMemo(() => [...lineup].map((_, i) => paints[i] ?? DEFAULT_PAINT), [lineup, paints]);
 
@@ -89,7 +85,7 @@ export default function App() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-background">
-      <Stage key={modelsVersion} lineup={lineup} paints={carPaints} show={stale ? null : show} player={player}
+      <Stage lineup={lineup} paints={carPaints} show={stale ? null : show} player={player}
         camera={camera} onMissing={onMissing} />
 
       <div className="pointer-events-none absolute inset-0 flex flex-col p-3 sm:p-4">
@@ -138,15 +134,7 @@ export default function App() {
           {show && !stale && !busy && <DownloadSheet show={show} wav={wav} />}
         </div>
 
-        {missing.length > 0 && (
-          <div className="pointer-events-auto mx-auto mt-auto mb-3 w-full max-w-md rounded-2xl border bg-card p-4
-            shadow-2xl backdrop-blur-xl">
-            <h2 className="mb-2 text-sm font-semibold">Add the car models</h2>
-            <ModelsCard missing={missing} onAdded={() => setModelsVersion((v) => v + 1)} />
-          </div>
-        )}
-
-        <div className={`pointer-events-auto mx-auto w-full max-w-3xl ${missing.length ? '' : 'mt-auto'}`}>
+        <div className="pointer-events-auto mx-auto mt-auto w-full max-w-3xl">
           <PlayerBar player={player} camera={camera} onCamera={setCamera} />
         </div>
       </div>
