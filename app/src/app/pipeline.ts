@@ -6,7 +6,7 @@ import type { Reply, Request } from './show.worker';
 import { fileName } from './DownloadSheet';
 import { explain, outOfMemory, unsupported } from './errors';
 import type { Show } from './show';
-import { encodeWav } from './wav';
+import { encodeWav, readWav } from './wav';
 
 export type Progress = (step: string, fraction?: number) => void;
 
@@ -54,28 +54,36 @@ export async function showFromBridge(song: string, lineup: string, onProgress: P
   };
 }
 
+/** A song's first two channels at 44.1 kHz: a 44.1 kHz WAV as it is (readWav says why), anything else
+ * as the browser decodes it. */
+async function decode(file: File): Promise<{ channels: Float32Array[]; sampleRate: number }> {
+  const bytes = await file.arrayBuffer();
+  const pcm = readWav(bytes);
+  if (pcm?.sampleRate === 44100) return pcm;
+  try {
+    const audio = await new OfflineAudioContext(2, 1, 44100).decodeAudioData(bytes);
+    const channels = Array.from({ length: Math.min(2, audio.numberOfChannels) }, (_, i) => audio.getChannelData(i));
+    return { channels, sampleRate: audio.sampleRate };
+  } catch (err) {
+    if (outOfMemory(String(err))) throw new Error(explain(err));
+    throw new Error(`${file.name} couldn't be opened as a song. This browser reads MP3, M4A and WAV files; `
+      + 'try one of those.');
+  }
+}
+
 /** A song from this device: decoded at 44.1 kHz (Tesla's rate, and the one the analysis was tuned on),
  * then listened to and choreographed in the worker. */
 export async function showFromFile(file: File, lineup: string, onProgress: Progress): Promise<{ show: Show; wav: Blob }> {
   const why = unsupported();
   if (why) throw new Error(why);
   onProgress('Opening the song');
-  const ctx = new OfflineAudioContext(2, 1, 44100);
-  let audio: AudioBuffer;
-  try {
-    audio = await ctx.decodeAudioData(await file.arrayBuffer());
-  } catch (err) {
-    if (outOfMemory(String(err))) throw new Error(explain(err));
-    throw new Error(`${file.name} couldn't be opened as a song. This browser reads MP3, M4A and WAV files; `
-      + 'try one of those.');
-  }
-  const channels = Array.from({ length: Math.min(2, audio.numberOfChannels) }, (_, i) => audio.getChannelData(i));
-  const wav = encodeWav(channels, audio.sampleRate);
+  const { channels, sampleRate } = await decode(file);
+  const wav = encodeWav(channels, sampleRate);
   const title = file.name.replace(/\.[^.]+$/, '');
   // mixed down here, as the worker would, so only one channel is copied over
   const mono = mixdown(channels);
   const start = performance.now();
-  const done = await run({ kind: 'song', channels: [mono], sampleRate: audio.sampleRate, name: fileName(title), lineup },
+  const done = await run({ kind: 'song', channels: [mono], sampleRate, name: fileName(title), lineup },
     onProgress, [mono.buffer]);
   console.info(`Made the show in ${((performance.now() - start) / 1000).toFixed(1)} s, listening on ${done.backend}`);
   return {
