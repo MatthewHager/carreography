@@ -95,7 +95,8 @@ export function feel(an: Analysis, phrases?: Phrase[]): Feel[] {
   if (phrases?.length) {
     for (let i = 1; i < out.length; i++) {
       const b = out[i].t0;
-      const s = phrases.map((ph) => ph.t0).reduce((best, t) => (Math.abs(t - b) < Math.abs(best - b) ? t : best));
+      const starts = phrases.map((ph) => ph.t0);
+      const s = starts.reduce((best, t) => (Math.abs(t - b) < Math.abs(best - b) ? t : best));
       out[i - 1].t1 = out[i].t0 = Math.max(s, out[i - 1].t0);
     }
     out = out.filter((f) => f.t1 > f.t0);

@@ -114,12 +114,16 @@ export function groove(): Float32Array {
       if (e === 2 || e === 6) snare(y, te, 0.6 * lift, n);
       hat(y, te, (e % 2 ? 0.12 : 0.2) * lift, n, chorus && e === 7);
       if (e === 0 || e === 3 || e === 4 || e === 6) {
-        note(y, te, beat * 0.45, roots[k] + (e === 6 ? 12 : 0), { amp: 0.25 * lift, harmonics: 4, decay: 0.3 });
+        const root = roots[k] + (e === 6 ? 12 : 0);
+        note(y, te, beat * 0.45, root, { amp: 0.25 * lift, harmonics: 4, decay: 0.3 });
       }
-      if (chorus) note(y, te, beat * 0.45, lead[(e + bar) % 8], { amp: 0.09, harmonics: 7, odd: true, release: 0.05 });
+      if (chorus) {
+        note(y, te, beat * 0.45, lead[(e + bar) % 8], { amp: 0.09, harmonics: 7, odd: true, release: 0.05 });
+      }
     }
     for (const at of [0, 1.5]) {
-      for (const m of chords[k]) note(y, t + at * beat, beat * 1.4, m, { amp: 0.07 * lift, harmonics: 6, tilt: 1.5, decay: 0.8 });
+      const piano = { amp: 0.07 * lift, harmonics: 6, tilt: 1.5, decay: 0.8 };
+      for (const m of chords[k]) note(y, t + at * beat, beat * 1.4, m, piano);
     }
   }
   const end = bars * 4 * beat;
@@ -157,14 +161,17 @@ export function build(): Float32Array {
   const swell = 32, beat = 0.6, nBeats = 60;
   const end = swell + nBeats * beat;
   const y = new Float32Array(Math.round((end + 3) * SR));
-  const harmony: number[][] = [[50, 57, 62, 65], [46, 53, 58, 62], [43, 55, 58, 62], [45, 52, 57, 61]];   // Dm Bb Gm A
+  // D minor, B flat, G minor, A
+  const harmony: number[][] = [[50, 57, 62, 65], [46, 53, 58, 62], [43, 55, 58, 62], [45, 52, 57, 61]];
   const strings = { harmonics: 8, tilt: 1.1, attack: 1.5, release: 1.2, vibrato: 0.003 };
   const level = (t: number) => 0.03 + 0.97 * (Math.min(t, swell) / swell) ** 2;
   for (let k = 0; k * 8 < swell; k++) {
     for (const m of harmony[k]) note(y, k * 8, 8, m, { ...strings, amp: 0.1 * level(k * 8 + 8) });
   }
   const r = noise(400, 3);                                           // the roll's uneven strokes
-  for (let t = 0.5, i = 0; t < swell; t += 0.075 + 0.03 * r[i++ % r.length]) timpani(y, t, 38, 0.06 * level(t));
+  for (let t = 0.5, i = 0; t < swell; t += 0.075 + 0.03 * r[i++ % r.length]) {
+    timpani(y, t, 38, 0.06 * level(t));
+  }
   for (const m of harmony[0]) note(y, swell, nBeats * beat, m, { ...strings, attack: 0.3, amp: 0.05 });
   for (let b = 0; b < nBeats; b++) {
     const t = swell + b * beat, grow = 0.4 + 0.6 * (b / nBeats) ** 2;
@@ -176,7 +183,8 @@ export function build(): Float32Array {
     }
   }
   timpani(y, end, 38, 0.8);
-  for (const m of [38, 50, 57, 62, 65, 69]) note(y, end, 2.0, m, { amp: 0.15, harmonics: 10, tilt: 0.8, attack: 0.03, decay: 1.2 });
+  const brass = { amp: 0.15, harmonics: 10, tilt: 0.8, attack: 0.03, decay: 1.2 };
+  for (const m of [38, 50, 57, 62, 65, 69]) note(y, end, 2.0, m, brass);
   return normalize(y);
 }
 

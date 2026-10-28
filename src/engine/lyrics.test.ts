@@ -12,9 +12,9 @@ const line = (t: number, text: string, end = t + 6): LyricLine => ({ t, end, tex
 
 describe('moments', () => {
   it('colours the interiors while a colour word is sung', () => {
-    const cues = moments([line(4, 'Paint the town in GOLDEN light')], an);
-    expect(cues).toHaveLength(1);
-    const c = cues[0];
+    const found = moments([line(4, 'Paint the town in GOLDEN light')], an);
+    expect(found).toHaveLength(1);
+    const c = found[0];
     expect(c.do).toBe('color');
     expect(c.color).toEqual([255, 170, 0]);
     expect(c.t0).toBe(4);
@@ -27,15 +27,15 @@ describe('moments', () => {
   });
 
   it('strikes lightning on the loudest attack of a scream line', () => {
-    const cues = moments([line(10, 'and then they all screamed', 14)], an);
-    expect(cues.map((c) => [c.do, c.t0])).toEqual([['lightning', 10.9]]);
+    const found = moments([line(10, 'and then they all screamed', 14)], an);
+    expect(found.map((c) => [c.do, c.t0])).toEqual([['lightning', 10.9]]);
     // nothing played while the line is sung: on its start
     expect(moments([line(50, 'Thunder')], an).map((c) => [c.do, c.t0])).toEqual([['lightning', 50]]);
   });
 
   it('pings a chant across the cars on the beats of the line', () => {
-    const cues = moments([line(20, 'Hey, monsters, monsters, monsters on parade', 30)], an);
-    const pings = cues.filter((c) => c.do === 'ping').map((c) => [c.t0, c.car]);
+    const found = moments([line(20, 'Hey, monsters, monsters, monsters on parade', 30)], an);
+    const pings = found.filter((c) => c.do === 'ping').map((c) => [c.t0, c.car]);
     expect(pings[0]).toEqual([20, 0]);
     expect(pings.length).toBe(Math.min(8, Math.floor(sungFor(line(20, 'Hey, monsters, monsters, monsters on parade', 30)) / 0.5) + 1));
     expect(pings.every(([t, k], i) => t === 20 + 0.5 * i && k === i)).toBe(true);
@@ -46,9 +46,9 @@ describe('moments', () => {
   });
 
   it('gives several moments for one line, in time order', () => {
-    const cues = moments([line(30, 'red red red, a scream', 33), line(2, 'blue')], an);
-    expect(cues.map((c) => [c.do, c.t0])).toEqual([['color', 2], ['color', 30], ['ping', 30], ['lightning', 30.1],
+    const found = moments([line(30, 'red red red, a scream', 33), line(2, 'blue')], an);
+    expect(found.map((c) => [c.do, c.t0])).toEqual([['color', 2], ['color', 30], ['ping', 30], ['lightning', 30.1],
       ['ping', 30.5], ['ping', 31], ['ping', 31.5], ['ping', 32]]);
-    expect(cues.map((c) => c.color).filter(Boolean)).toEqual([[0, 60, 255], [255, 0, 0]]);
+    expect(found.map((c) => c.color).filter(Boolean)).toEqual([[0, 60, 255], [255, 0, 0]]);
   });
 });

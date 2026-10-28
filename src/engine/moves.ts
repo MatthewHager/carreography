@@ -1518,7 +1518,8 @@ function marquee(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const hits = grid(an, ph, 'beats');
   const beat = beatLen(an);
-  const perTurn = Math.max(4, Math.trunc(Math.round((2 * barLen(an)) / Math.max(hits.length > 1 ? median(diff(hits)) : beat, 0.1))));
+  const gap = Math.max(hits.length > 1 ? median(diff(hits)) : beat, 0.1);
+  const perTurn = Math.max(4, Math.round((2 * barLen(an)) / gap));
   let phase = 0;
   hits.forEach((b, k) => {
     const hold = Math.max(0.12, Math.min(0.8, (next(hits, k, beat) - b) * 0.92));

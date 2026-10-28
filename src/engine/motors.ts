@@ -3,7 +3,7 @@
 // Lights flash in 20 ms; the motors move in seconds (mirrors 2 s, windows 4 s, frunk and liftgates
 // 14 s up / 4 s down - the Cybertruck's frunk 10 s up - charge port 2 s), and Tesla counts their commands per show *per closure*
 // (liftgate 6, each window 6, each mirror 20, charge port 3). So they get their own choreography,
-// planned from the form map and the crescendos rather than from the light cues, with its own moves:
+// planned from the form map and the crescendos rather than from the lights, with its own moves:
 //
 //   Lids (frunk + liftgates), one gesture per crescendo, biggest first:
 //     dance        the biggest builds: every lid opens fully, lands on the peak a beat after its
@@ -582,11 +582,10 @@ function stillRuns(mask: ArrayLike<number | boolean>, an: Analysis): [number, nu
 }
 
 /** Still stretches, longest (relative to its threshold) first: [(need, t0, t1, lively)]. */
-function gaps(mask: ArrayLike<number | boolean>, an: Analysis, livelyOnly: boolean): Gap[] {
+function gaps(mask: ArrayLike<number | boolean>, an: Analysis): Gap[] {
   const step = an.step;
   const out: Gap[] = [];
   for (const [a, b, lively] of stillRuns(mask, an)) {
-    if (livelyOnly && !lively) continue;
     const need = (b - a) * step / (lively ? STILL_LIVELY_S : STILL_CALM_S);
     out.push([need, a * step, b * step, lively]);
   }
@@ -604,13 +603,12 @@ function gaps(mask: ArrayLike<number | boolean>, an: Analysis, livelyOnly: boole
 function spendLeftovers(cars: Car[], an: Analysis, line: Line, spent: Spent): void {
   const beat = beatLen(an);
   const step = an.step;
-  const livelyOnly = Math.trunc(np.max(an.tier)) <= 1;      // a song held quiet on purpose (Ave Maria) stays gentle
   // 1. Windows: extra travelling dances in the stillness (one command kept for the final Open).
   const burst = beat * Math.max(2, Math.round(WINDOW_BURST_S / beat));
   for (let k = 0; k < 12; k++) {
     const mask = motion(cars, an);
     let placed = false;
-    for (const [need, g0, g1] of gaps(mask, an, livelyOnly)) {
+    for (const [need, g0, g1] of gaps(mask, an)) {
       if (g1 - g0 < burst + 3 * beat + 2 || need < 0.5) continue;
       const t0 = onBeat(an, (g0 + g1) / 2 - (burst + 2 * beat) / 2);
       cars.forEach((c, idx) => {
@@ -633,7 +631,7 @@ function spendLeftovers(cars: Car[], an: Analysis, line: Line, spent: Spent): vo
   for (let k = 0; k < 3; k++) {
     const mask = motion(cars, an);
     let placed = false;
-    for (const [, g0, g1] of gaps(mask, an, livelyOnly)) {
+    for (const [, g0, g1] of gaps(mask, an)) {
       cars.forEach((c, idx) => {
         const left = C.CLOSURE_LIMITS[C.LIFTGATE] - used(c, C.LIFTGATE);
         if (left < 2) return;

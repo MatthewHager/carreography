@@ -70,7 +70,7 @@ function position(an: Analysis): Int32Array {
   return pos;
 }
 
-/** Lay the beat layer over the choreography (after the moves and drums, before the cues). */
+/** Lay the beat layer over the choreography (after the moves and drums, before the lyric moments). */
 export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): void {
   const ys = M.sides(cars);
   const ct = M.centreTruck(cars);

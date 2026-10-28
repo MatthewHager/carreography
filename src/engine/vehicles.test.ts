@@ -49,10 +49,12 @@ describe('every lineup keeps the rules', () => {
           expect(car.frames.length).toBe(n * C.N_CHANNELS);
           for (const [ch, limit] of Object.entries(C.CLOSURE_LIMITS)) {
             const cmds = commands(car.frames, n, Number(ch));
-            expect(cmds.filter(([, , v]) => COMMANDS.has(v)).length, `${car.name} channel ${ch}`).toBeLessThanOrEqual(limit);
-            const dancing = cmds.filter(([, , v]) => v === C.CLOSURE_DANCE).reduce((s, [a, b]) => s + (b - a) * step, 0);
+            const what = `${car.name} channel ${ch}`;
+            expect(cmds.filter(([, , v]) => COMMANDS.has(v)).length, what).toBeLessThanOrEqual(limit);
+            const dances = cmds.filter(([, , v]) => v === C.CLOSURE_DANCE);
+            const dancing = dances.reduce((s, [a, b]) => s + (b - a) * step, 0);
             // (the charge port's Dance is its rainbow light, not a motor)
-            if (Number(ch) !== C.CHARGE_PORT) expect(dancing, `${car.name} channel ${ch} dances`).toBeLessThanOrEqual(30);
+            if (Number(ch) !== C.CHARGE_PORT) expect(dancing, `${what} dances`).toBeLessThanOrEqual(30);
           }
           let opened = -Infinity;
           for (const [a, , v] of commands(car.frames, n, C.LIFTGATE)) {
@@ -63,7 +65,7 @@ describe('every lineup keeps the rules', () => {
                 .toBeGreaterThanOrEqual(LIFTGATE_OPEN_S[car.kind]);
             }
           }
-          for (let ch = 0; ch < C.L_FALCON; ch++) expect(car.get(n - 1, ch), `${car.name} lamp ${ch} at the end`).toBe(0);
+          for (let ch = 0; ch < C.L_FALCON; ch++) expect(car.get(n - 1, ch), `${car.name} lamp ${ch}`).toBe(0);
           // the doors need a peak with 20 s before it and room after (the build has one): all or nothing
           const falcon = commands(car.frames, n, C.L_FALCON);
           if (!car.falcon || !falcon.length) {
@@ -75,7 +77,7 @@ describe('every lineup keeps the rules', () => {
           for (const w of C.WINDOWS) {
             for (const [f] of commands(car.frames, n, w)) {
               const t = f * step;
-              expect(t + WINDOW_S <= from || t >= to, `${car.name} window ${w} moves at ${t.toFixed(1)} s`).toBe(true);
+              expect(t + WINDOW_S <= from || t >= to, `${car.name} window ${w} at ${t.toFixed(1)} s`).toBe(true);
             }
           }
         }

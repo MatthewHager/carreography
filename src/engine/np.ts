@@ -96,7 +96,8 @@ export function linspace(start: number, stop: number, num: number): Float64Array
 
 /** start, start + step, ... up to (not including) stop. */
 export function arange(start: number, stop: number, step: number): Float64Array {
-  return Float64Array.from({ length: Math.max(0, Math.ceil((stop - start) / step)) }, (_, i) => start + i * step);
+  const n = Math.max(0, Math.ceil((stop - start) / step));
+  return Float64Array.from({ length: n }, (_, i) => start + i * step);
 }
 
 /** Where v goes in the ascending `a`: before any equal values ('left') or after them ('right'). */
