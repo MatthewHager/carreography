@@ -150,7 +150,7 @@ function simulateClosure(
       if (danceStartFrame < 0) danceStartFrame = f;
       const t = ((f - danceStartFrame) * stepTimeMs) / 1000;
       const swing = danceMoves ? DANCE_DEPTH * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / periodS)) : 0;
-      // preview3d: a lowered window dances back up a little (the studio only
+      // A lowered window dances back up a little (the studio only
       // moved closed windows), so Dance always shows two positions.
       position[f] = isWindow ? (base > 0.5 ? base - swing : base + swing) : base - swing;
       dancing[f] = 1;

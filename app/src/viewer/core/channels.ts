@@ -1,8 +1,7 @@
 // The Tesla light show channel map. Every show file uses this same 200-channel
 // layout regardless of vehicle; each car plays the channels it physically has.
 // Source: StartChannel values in Tesla's xLights project
-// (teslamotors/light-show, xlights/tesla_xlights_show_folder.zip). See
-// docs/research/01-tesla-lightshow-format.md for details.
+// (teslamotors/light-show, xlights/tesla_xlights_show_folder.zip).
 
 /**
  * How the car interprets a channel's byte value.

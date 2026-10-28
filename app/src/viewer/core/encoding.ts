@@ -1,7 +1,7 @@
 // Byte values the car understands. xLights stores an effect's brightness
 // percentage as floor(pct * 2.55), and Tesla assigns meanings to specific
 // percentages. All values below were confirmed by decoding Tesla's example
-// shows (see docs/research/01-tesla-lightshow-format.md, section 4).
+// shows (github.com/teslamotors/light-show).
 
 export type LightCommand =
   | 'off'

@@ -2,9 +2,9 @@
 // treats them. The show file is the same for every car; a profile shapes what
 // the preview draws of it.
 //
-// Sources: Tesla's README tables (docs/research/01-tesla-lightshow-format.md
-// §5) unless a channel's `maybe` note says otherwise. Variants after Tesla's
-// last README update (Dec 2024), like the 2025 Model Y, are marked unverified.
+// Sources: Tesla's README tables (github.com/teslamotors/light-show) unless a channel's `maybe` note
+// says otherwise. Variants after Tesla's last README update (Dec 2024), like the 2025 Model Y, are
+// marked unverified.
 
 import { CHANNELS_BY_ID, type ChannelKind } from './channels';
 

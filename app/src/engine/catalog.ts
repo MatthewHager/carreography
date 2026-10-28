@@ -205,7 +205,7 @@ export function markdown(): string {
     '',
     'What each move looks like, the moods and phrase shapes the choreographer may use it for, and what it '
       + 'locks to. Written for the classic Model Y | Cybertruck | Model Y lineup: in any lineup "the truck" is '
-      + 'the centre Cybertruck and "the Ys" are the other cars (see docs/CHOREOGRAPHY.md).',
+      + 'the centre Cybertruck and "the Ys" are the other cars (see docs/HOW_IT_WORKS.md#the-stage).',
     '',
     '| move | what you see | moods | fits | locks to |',
     '|---|---|---|---|---|',
