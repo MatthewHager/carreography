@@ -6,7 +6,7 @@ import { mixdown } from '@/engine/listen/resample';
 import { readTags } from '@/engine/listen/tags';
 import type { Reply, Request } from './show.worker';
 import { explain, outOfMemory, unsupported } from './errors';
-import { fileName, type Show } from './show';
+import type { Show } from './show';
 import { encodeWav, readWav } from './wav';
 
 export type Progress = (step: string, fraction?: number) => void;
@@ -66,7 +66,7 @@ export async function showFromFile(file: File, lineup: string, onProgress: Progr
   const mono = mixdown(channels);
   const vocals = channels.length > 1 ? vocalCurve(channels[0], channels[1], sampleRate) : null;
   const start = performance.now();
-  const done = await run({ channels: [mono], sampleRate, name: fileName(title), lineup, tags, vocals },
+  const done = await run({ channels: [mono], sampleRate, lineup, tags, vocals },
     onProgress, [mono.buffer]);
   // The one place the listening backend shows: for bug reports, and the README's table of browsers.
   console.info(`Made the show in ${((performance.now() - start) / 1000).toFixed(1)} s, listening on ${done.backend}`);

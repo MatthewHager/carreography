@@ -16,7 +16,7 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GlowEntry } from './glow';
 
 /** Which channels each app model's car has, and how it treats them (core/vehicles.ts). */
-const PROFILES: Record<AppModelId, VehicleProfile> = {
+export const PROFILES: Record<AppModelId, VehicleProfile> = {
   s_palladium: MODEL_S_2021,
   model3_high: MODEL_3_2020,
   poppyseed: MODEL_3_2024,

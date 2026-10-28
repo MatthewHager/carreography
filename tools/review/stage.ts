@@ -5,18 +5,11 @@
 import { N_CHANNELS, STEP_MS } from '@/engine/channels';
 import { VEHICLES } from '@/engine/vehicles';
 import { simulate, type Simulation } from '@/viewer/core/simulate';
-import {
-  CYBERTRUCK_2024, MODEL_3_2020, MODEL_3_2024, MODEL_S_2021, MODEL_X_2021, MODEL_Y_2020, MODEL_Y_2025, MODEL_Y_L,
-  MODEL_Y_STANDARD, type VehicleProfile,
-} from '@/viewer/core/vehicles';
+import type { VehicleProfile } from '@/viewer/core/vehicles';
+import type { AppModelId } from '@/viewer/car/appBody';
+import { PROFILES } from '@/viewer/rig';
 import type { Rgb } from './image';
 
-// the same table as viewer/rig.ts's PROFILES (not exported there)
-const PROFILES: Record<string, VehicleProfile> = {
-  s_palladium: MODEL_S_2021, model3_high: MODEL_3_2020, poppyseed: MODEL_3_2024, x_palladium: MODEL_X_2021,
-  y_high: MODEL_Y_2020, bayberry: MODEL_Y_2025, bayberry_e41: MODEL_Y_STANDARD, bayberry_e80: MODEL_Y_L,
-  cybertruck: CYBERTRUCK_2024,
-};
 
 export interface Row {
   label: string;
@@ -98,7 +91,7 @@ function barMean(pixels: Float32Array[]): Float32Array {
 
 /** One car's rows, from its show file's frames. */
 export function carView(name: string, letter: string, frames: Uint8Array, nFrames: number): CarView {
-  const profile = PROFILES[VEHICLES[letter].body];
+  const profile = PROFILES[VEHICLES[letter].body as AppModelId];
   const sim = simulate({ channelCount: N_CHANNELS, frameCount: nFrames, stepTimeMs: STEP_MS, data: frames }, profile);
   const zeroed = new Set(profile.orGroups.filter((g) => !g.inputs.length).flatMap((g) => g.outputs));
   const inProfile = new Set(profile.channels.map((c) => c.id));

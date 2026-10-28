@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { N_CHANNELS, STEP_MS } from '@/engine/channels';
+import { STEP_MS } from '@/engine/channels';
 import { choreograph } from '@/engine/choreo';
 import { place, vocalCurve } from '@/engine/listen/align';
 import { analyze } from '@/engine/listen/audio';
@@ -19,9 +19,8 @@ import { transcribe } from '@/engine/listen/notes';
 import { mixdown, monoAt22050 } from '@/engine/listen/resample';
 import { readTags } from '@/engine/listen/tags';
 import { parseLineup } from '@/engine/vehicles';
-import { fileName } from '@/app/show';
+import { fileName, showFile } from '@/app/show';
 import { readWav } from '@/app/wav';
-import { stringHeader, writeFseq } from '@/viewer/core/fseq';
 import { carView } from './stage';
 import { summarize } from './summary';
 import { drawTimeline, type Review } from './timeline';
@@ -99,18 +98,6 @@ async function listen(y: Float32Array, cacheDir: string, fresh: boolean): Promis
   return { beats, notes };
 }
 
-/** A show file as the page's download writes it (DownloadSheet.tsx). */
-function fseq(frames: Uint8Array, nFrames: number, name: string) {
-  let id = 0xcbf29ce484222325n;
-  for (let i = 0; i < frames.length; i += 64) {
-    id = ((id ^ BigInt(frames[i])) * 0x100000001b3n) & 0xffffffffffffffffn;
-  }
-  return writeFseq({
-    channelCount: N_CHANNELS, frameCount: nFrames, stepTimeMs: STEP_MS, minorVersion: 0, uniqueId: id,
-    variableHeaders: [stringHeader('mf', `${name}.wav`), stringHeader('sp', 'Carreography')], data: frames,
-  });
-}
-
 export async function main(argv: string[]): Promise<number> {
   const { values: o, positionals } = parseArgs({
     args: argv, allowPositionals: true, options: {
@@ -161,7 +148,7 @@ export async function main(argv: string[]): Promise<number> {
 
   mkdirSync(path.join(out, 'show'), { recursive: true });
   for (const c of cars) {
-    writeFileSync(path.join(out, 'show', `${c.name}.fseq`), fseq(c.frames, an.nFrames, fileName(title)));
+    writeFileSync(path.join(out, 'show', `${c.name}.fseq`), showFile(c.frames, an.nFrames, fileName(title)));
   }
   const views = cars.map((c, i) => carView(c.name, lineup[i], c.frames, an.nFrames));
   const review: Review = { title, lineup, an, notes: heard.notes, cars: views };

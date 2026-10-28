@@ -5,6 +5,7 @@ import type { LyricsReport } from '@/engine/listen/align';
 import type { SongTags } from '@/engine/listen/tags';
 import { VEHICLES } from '@/engine/vehicles';
 import type { AppModelId } from '@/viewer/car/appBody';
+import { stringHeader, writeFseq } from '@/viewer/core/fseq';
 
 export interface ShowCar {
   name: string;          // Car2_Cybertruck_Center: the folder its USB drive needs
@@ -32,3 +33,14 @@ export function modelFor(letter: string): AppModelId {
 /** A file name Tesla's USB reader is happy with. */
 export const fileName = (title: string) =>
   title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'lightshow';
+
+/** One car's show file, naming the song it plays to (`name`.wav next to it). Its id is a hash of the
+ * frames: the same show gives the same file. */
+export function showFile(frames: Uint8Array, nFrames: number, name: string): Uint8Array<ArrayBuffer> {
+  let id = 0xcbf29ce484222325n;                       // FNV-1a
+  for (let i = 0; i < frames.length; i += 64) id = ((id ^ BigInt(frames[i])) * 0x100000001b3n) & 0xffffffffffffffffn;
+  return writeFseq({
+    channelCount: CHANNELS, frameCount: nFrames, stepTimeMs: STEP_MS, minorVersion: 0, uniqueId: id,
+    variableHeaders: [stringHeader('mf', `${name}.wav`), stringHeader('sp', 'Carreography')], data: frames,
+  });
+}

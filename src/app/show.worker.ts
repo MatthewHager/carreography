@@ -15,7 +15,6 @@ import type { SongTags } from '@/engine/listen/tags';
 export interface Request {
   channels: Float32Array[];
   sampleRate: number;
-  name: string;
   lineup: string;
   tags: SongTags | null;
   vocals: Float64Array | null;     // align.ts's vocalCurve, from the stereo the page had
