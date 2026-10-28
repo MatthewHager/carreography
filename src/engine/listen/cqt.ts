@@ -105,8 +105,21 @@ function octaveBasis(freqs: number[], sr: number, Q: number,
   return { rows, nfft };
 }
 
-/** Chroma (12 x T, row-major, T = 1 + len(y) // 512) at the given tuning (fractions of a bin). */
+// The form map and the visualizer both read the song's chroma, a third of the analysis's time: it is
+// worked out once per song.
+const kept = new WeakMap<Float32Array, { key: string; chroma: Float32Array }>();
+
+/** Chroma (12 x T, row-major, T = 1 + len(y) // 512) at the given tuning (fractions of a bin). Asked again
+ * for the same samples, it gives the same array. */
 export function chromaCqt(y: Float32Array, tuning: number, bpo = 36, nOct = 7): Float32Array {
+  const key = `${tuning} ${bpo} ${nOct}`, k = kept.get(y);
+  if (k?.key === key) return k.chroma;
+  const chroma = computeChroma(y, tuning, bpo, nOct);
+  kept.set(y, { key, chroma });
+  return chroma;
+}
+
+function computeChroma(y: Float32Array, tuning: number, bpo: number, nOct: number): Float32Array {
   const nBins = nOct * bpo, fmin = C1 * 2 ** (tuning / bpo);
   const freqs = Array.from({ length: nBins }, (_, k) => fmin * 2 ** (k / bpo));
   const r2 = 2 ** (2 / bpo), Q = 1 / ((r2 - 1) / (r2 + 1));
