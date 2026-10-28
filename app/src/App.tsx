@@ -9,7 +9,7 @@ import { DownloadSheet } from '@/app/DownloadSheet';
 import { unsupported } from '@/app/errors';
 import { DEFAULT_PAINT, LineupEditor } from '@/app/LineupEditor';
 import { LyricsNote } from '@/app/LyricsNote';
-import { showFromBridge, showFromFile } from '@/app/pipeline';
+import { showFromFile } from '@/app/pipeline';
 import { Player } from '@/app/player';
 import { PlayerBar } from '@/app/PlayerBar';
 import type { Show } from '@/app/show';
@@ -17,12 +17,10 @@ import { SongDrop } from '@/app/SongDrop';
 import { Stage } from '@/app/Stage';
 import { parseLineup } from '@/engine/vehicles';
 
-const params = new URLSearchParams(location.search);
-
 /** The ?lineup= of the link, or YCY when it names a car we don't know. */
 function startLineup(): string {
   try {
-    return parseLineup(params.get('lineup') ?? 'YCY');
+    return parseLineup(new URLSearchParams(location.search).get('lineup') ?? 'YCY');
   } catch {
     return 'YCY';
   }
@@ -34,7 +32,6 @@ export default function App() {
   const [paints, setPaints] = useState<string[]>([]);
   const [song, setSong] = useState<File | null>(null);
   const [show, setShow] = useState<Show | null>(null);
-  const [wav, setWav] = useState<Blob | undefined>();
   const [busy, setBusy] = useState<{ step: string; fraction?: number } | null>(null);
   const [camera, setCamera] = useState('3/4');
   const [open, setOpen] = useState(true);
@@ -43,47 +40,24 @@ export default function App() {
   const stale = show !== null && show.lineup !== lineup;
   const carPaints = useMemo(() => [...lineup].map((_, i) => paints[i] ?? DEFAULT_PAINT), [lineup, paints]);
 
-  useEffect(() => {
-    if (import.meta.env.DEV) (window as unknown as { __show: Show | null }).__show = show;   // for checks
-    player.load(show?.audio, show ? show.nFrames * 0.02 : 0);
-  }, [player, show]);
+  useEffect(() => player.load(show?.audio, show ? show.nFrames * 0.02 : 0), [player, show]);
 
-  const make = useCallback(async (make: () => Promise<{ show: Show; wav?: Blob }>) => {
+  useEffect(() => {
+    const why = unsupported();
+    if (why) toast.error(why, { duration: Infinity });
+  }, []);
+
+  const build = async () => {
+    if (!song) return;
     setBusy({ step: 'Starting' });
     try {
-      const made = await make();
-      setShow(made.show);
-      setWav(made.wav ?? made.show.audio);
+      setShow(await showFromFile(song, lineup, (step, fraction) => setBusy({ step, fraction })));
       if (window.innerWidth < 640) setOpen(false);     // on a phone, make room for the cars
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
       setBusy(null);
     }
-  }, []);
-
-  const progress = useCallback((step: string, fraction?: number) => setBusy({ step, fraction }), []);
-  const bridge = import.meta.env.DEV ? params.get('bridge') : null;
-
-  useEffect(() => {
-    const why = unsupported();
-    if (why) toast.error(why, { duration: Infinity });
-    const dev = import.meta.env.DEV ? params.get('song') : null;    // a recording in output/, as if dropped in
-    if (dev) {
-      void fetch(`${import.meta.env.BASE_URL}dev/output/${dev}/${dev}.wav`).then(async (r) => {
-        const f = new File([await r.blob()], `${dev}.wav`, { type: 'audio/wav' });
-        setSong(f);
-        void make(() => showFromFile(f, lineup, progress));
-      });
-    }
-    if (bridge) void make(async () => ({ show: await showFromBridge(bridge, lineup, progress) }));
-    // only on load
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const build = () => {
-    if (bridge) void make(async () => ({ show: await showFromBridge(bridge, lineup, progress) }));
-    else if (song) void make(() => showFromFile(song, lineup, progress));
   };
 
   return (
@@ -106,7 +80,7 @@ export default function App() {
           </button>
           {open && (
             <>
-              <SongDrop title={song?.name ?? (bridge ? `${bridge} (Python analysis)` : null)} disabled={!!busy}
+              <SongDrop title={song?.name ?? null} disabled={!!busy}
                 onSong={(f) => {
                   setSong(f);
                   setShow(null);
@@ -127,14 +101,14 @@ export default function App() {
             </div>
           ) : (
             open && (
-              <Button className="w-full" variant={show && !stale ? 'secondary' : 'default'} disabled={!song && !bridge}
-                onClick={build}>
+              <Button className="w-full" variant={show && !stale ? 'secondary' : 'default'} disabled={!song}
+                onClick={() => void build()}>
                 <Sparkles /> {show && !stale ? 'Make it again' : 'Make the show'}
               </Button>
             )
           )}
-          {show?.lyrics && !stale && !busy && open && <LyricsNote lyrics={show.lyrics} />}
-          {show && !stale && !busy && <DownloadSheet show={show} wav={wav} />}
+          {show && !stale && !busy && open && <LyricsNote lyrics={show.lyrics} />}
+          {show && !stale && !busy && <DownloadSheet show={show} />}
         </div>
 
         <div className="pointer-events-auto mx-auto mt-auto w-full max-w-3xl">

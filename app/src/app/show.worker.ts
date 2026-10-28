@@ -1,6 +1,6 @@
 // Off the page's thread: turning a song into a show (listening, then choreography).
 
-import { fromBridge, type Analysis } from '@/engine/analysis';
+import type { Analysis } from '@/engine/analysis';
 import { STEP_MS } from '@/engine/channels';
 import { choreograph } from '@/engine/choreo';
 import { place, type LyricsReport } from '@/engine/listen/align';
@@ -12,25 +12,30 @@ import { transcribe } from '@/engine/listen/notes';
 import { monoAt22050 } from '@/engine/listen/resample';
 import type { SongTags } from '@/engine/listen/tags';
 
-export type Request =
-  | {
-      kind: 'song'; channels: Float32Array[]; sampleRate: number; name: string; lineup: string; tags: SongTags | null;
-      vocals: Float64Array | null;     // align.ts's vocalCurve, from the stereo the page had
-    }
-  | { kind: 'bridge'; json: string; lineup: string };   // a Python analysis (development)
+export interface Request {
+  channels: Float32Array[];
+  sampleRate: number;
+  name: string;
+  lineup: string;
+  tags: SongTags | null;
+  vocals: Float64Array | null;     // align.ts's vocalCurve, from the stereo the page had
+}
 
-export type Reply =
+type Body =
   | { kind: 'progress'; step: string; fraction?: number }
-  | { kind: 'done'; nFrames: number; cars: { name: string; frames: Uint8Array }[]; lyrics?: LyricsReport;
-      backend?: string; keep: boolean }
-  | { kind: 'error'; message: string; keep: boolean };   // keep: don't end this worker (infer.ts's touchedGpu)
+  | { kind: 'done'; nFrames: number; cars: { name: string; frames: Uint8Array }[]; lyrics: LyricsReport; backend?: string }
+  | { kind: 'error'; message: string };
 
-const post = (r: Reply, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(r, transfer);
+/** Every reply also says whether to keep this worker rather than end it (infer.ts's touchedGpu). */
+export type Reply = Body & { keep: boolean };
+
+const post = (r: Body, transfer: Transferable[] = []) =>
+  (self as unknown as Worker).postMessage({ ...r, keep: touchedGpu() } satisfies Reply, transfer);
 const progress = (step: string, fraction?: number) => post({ kind: 'progress', step, fraction });
 
 const LYRICS_GRACE_MS = 15_000;     // how long the show waits for LRCLIB once the listening is done
 
-async function listen(req: Extract<Request, { kind: 'song' }>): Promise<Analysis> {
+async function listen(req: Request): Promise<Analysis> {
   progress('Listening');
   const y = monoAt22050(req.channels, req.sampleRate);
   progress('Finding the beat', 0);
@@ -44,7 +49,7 @@ async function listen(req: Extract<Request, { kind: 'song' }>): Promise<Analysis
 type Found = { status: LookupStatus; candidates: Candidate[] } | 'failed';
 
 /** The lyrics, placed in the recording. Never throws: a song without them plays without lyric effects. */
-async function lyrics(req: Extract<Request, { kind: 'song' }>, found: Promise<Found>, an: Analysis)
+async function lyrics(req: Request, found: Promise<Found>, an: Analysis)
   : Promise<{ lines: Analysis['lyricLines']; report: LyricsReport }> {
   const none = (status: LyricsReport['status']) => ({ lines: null, report: { status, lines: 0, offset: null, by: null } });
   try {
@@ -61,31 +66,22 @@ async function lyrics(req: Extract<Request, { kind: 'song' }>, found: Promise<Fo
 self.onmessage = async (e: MessageEvent<Request>) => {
   try {
     const req = e.data;
-    let an: Analysis, name: string | null, style: string | null = null, driver: string | null = null;
-    let report: LyricsReport | undefined;
-    if (req.kind === 'song') {
-      // asked for at once, so LRCLIB answers while the song is listened to
-      const duration = req.channels[0].length / req.sampleRate;
-      const found: Promise<Found> = req.tags
-        ? lookup(req.tags, duration).catch(() => 'failed' as const)
-        : Promise.resolve({ status: 'none', candidates: [] });
-      an = await listen(req);
-      progress('Reading the lyrics');
-      const placed = await lyrics(req, found, an);
-      an.lyricLines = placed.lines;
-      report = placed.report;
-      name = req.name;
-    } else {
-      const b = fromBridge(JSON.parse(req.json));
-      [an, name, style, driver] = [b.an, b.meta.name, b.meta.style, b.meta.driver];
-    }
+    // asked for at once, so LRCLIB answers while the song is listened to
+    const duration = req.channels[0].length / req.sampleRate;
+    const found: Promise<Found> = req.tags
+      ? lookup(req.tags, duration).catch(() => 'failed' as const)
+      : Promise.resolve({ status: 'none', candidates: [] });
+    const an = await listen(req);
+    progress('Reading the lyrics');
+    const placed = await lyrics(req, found, an);
+    an.lyricLines = placed.lines;
     progress('Choreographing');
-    const cars = choreograph(an, { layout: req.lineup, name, style, driver });
+    const cars = choreograph(an, { layout: req.lineup, name: req.name });
     post({
-      kind: 'done', nFrames: an.nFrames, cars: cars.map((c) => ({ name: c.name, frames: c.frames })), lyrics: report,
-      backend: lastBackend(), keep: touchedGpu(),
+      kind: 'done', nFrames: an.nFrames, cars: cars.map((c) => ({ name: c.name, frames: c.frames })),
+      lyrics: placed.report, backend: lastBackend(),
     }, cars.map((c) => c.frames.buffer));
   } catch (err) {
-    post({ kind: 'error', message: String(err), keep: touchedGpu() });   // "RangeError: ..." tells memory apart
+    post({ kind: 'error', message: String(err) });
   }
 };

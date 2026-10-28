@@ -5,11 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { stringHeader, writeFseq } from '@/viewer/core/fseq';
 import { lineupCars } from '@/engine/vehicles';
-import { CHANNELS, STEP_S, type Show } from './show';
+import { CHANNELS, fileName, STEP_S, type Show } from './show';
 import { zip } from './zip';
-
-/** A file name Tesla's USB reader is happy with. */
-export const fileName = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'lightshow';
 
 function fseqFor(show: Show, frames: Uint8Array, name: string): Uint8Array<ArrayBuffer> {
   let id = 0xcbf29ce484222325n;                       // FNV-1a of the frames: the same show, the same file
@@ -20,9 +17,9 @@ function fseqFor(show: Show, frames: Uint8Array, name: string): Uint8Array<Array
   });
 }
 
-async function download(show: Show, wav: Blob) {
+async function download(show: Show) {
   const name = fileName(show.title);
-  const audio = new Uint8Array(await wav.arrayBuffer());
+  const audio = new Uint8Array(await show.audio.arrayBuffer());
   const files = show.cars.flatMap((car) => [
     { path: `${car.name}/LightShow/${name}.fseq`, data: fseqFor(show, car.frames, name) },
     { path: `${car.name}/LightShow/${name}.wav`, data: audio },
@@ -34,7 +31,7 @@ async function download(show: Show, wav: Blob) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
-export function DownloadSheet({ show, wav }: { show: Show; wav: Blob | undefined }) {
+export function DownloadSheet({ show }: { show: Show }) {
   const cars = lineupCars(show.lineup);
   return (
     <Drawer>
@@ -58,7 +55,7 @@ export function DownloadSheet({ show, wav }: { show: Show; wav: Blob | undefined
               in the Tesla app.</li>
           </ol>
           <DrawerFooter>
-            <Button disabled={!wav} onClick={() => wav && void download(show, wav)}><Download /> Download ZIP</Button>
+            <Button onClick={() => void download(show)}><Download /> Download ZIP</Button>
           </DrawerFooter>
         </div>
       </DrawerContent>

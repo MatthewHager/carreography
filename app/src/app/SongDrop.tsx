@@ -3,15 +3,16 @@
 import { Music } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
+import { SONG_EXTENSIONS, SONG_TYPES } from './pipeline';
 
 export function SongDrop({ title, disabled, onSong }: { title: string | null; disabled?: boolean; onSong: (f: File) => void }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: { 'audio/*': ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg'] },
+    accept: { 'audio/*': SONG_EXTENSIONS },
     multiple: false,
     disabled,
     onDrop: (files) => files[0] && onSong(files[0]),
     onDropRejected: ([r]) => r && toast.error(r.errors[0]?.code === 'too-many-files' ? 'One song at a time, please'
-      : `${r.file.name} isn't a song file. Choose an MP3, M4A, WAV or FLAC.`),
+      : `${r.file.name} isn't a song file. Choose an ${SONG_TYPES}.`),
   });
   return (
     <div {...getRootProps()}
@@ -30,7 +31,7 @@ export function SongDrop({ title, disabled, onSong }: { title: string | null; di
         ) : (
           <>
             <div className="font-medium">Choose a song</div>
-            <div className="text-xs text-muted-foreground">MP3, WAV, FLAC or M4A. It stays on this device.</div>
+            <div className="text-xs text-muted-foreground">{SONG_TYPES}. It stays on this device.</div>
           </>
         )}
       </div>

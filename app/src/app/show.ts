@@ -17,8 +17,8 @@ export interface Show {
   lineup: string;
   nFrames: number;
   cars: ShowCar[];
-  audio?: Blob;          // what plays in the preview
-  lyrics?: LyricsReport & { tags: SongTags };   // what LRCLIB had for the song, looked up by these tags
+  audio: Blob;           // the song as a 44.1 kHz WAV: what plays in the preview and goes on the drives
+  lyrics: LyricsReport & { tags: SongTags };   // what LRCLIB had for the song, looked up by these tags
 }
 
 export const STEP_S = STEP_MS / 1000;
@@ -28,3 +28,7 @@ export const CHANNELS = N_CHANNELS;
 export function modelFor(letter: string): AppModelId {
   return VEHICLES[letter].body as AppModelId;
 }
+
+/** A file name Tesla's USB reader is happy with. */
+export const fileName = (title: string) =>
+  title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'lightshow';
