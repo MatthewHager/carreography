@@ -138,6 +138,9 @@ export const UNISON: Record<string, Move> = {
     LIVELY, FIG, "build"),
 };
 
+/** The builds: each shapes a whole crescendo, and is placed by the crescendo detector. */
+export const BUILDS: ReadonlySet<string> = new Set(Object.keys(UNISON).filter((m) => UNISON[m].grid === 'build'));
+
 const SPLIT: [string, string, Move][] = [
   ["y_keyboard", "ct_comets", mv("the Ys play the notes as a keyboard while comets glide on the bar",
     ["calm", "groove"], FIG, "note", false)],

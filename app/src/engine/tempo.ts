@@ -11,6 +11,12 @@ import { argmax, argsort, clip, mean, mean32, median, median32, round, searchsor
 
 const f32 = Math.fround;
 
+/** The piece's nominal beat, in seconds (never slower than 40 BPM). */
+export const beatLen = (an: Analysis) => 60.0 / Math.max(an.tempo, 40);
+
+/** Four of those beats (computed on its own, so its rounding stays what the shows were made with). */
+export const barLen = (an: Analysis) => (4 * 60.0) / Math.max(an.tempo, 40);
+
 /** [times, strengths] of the played attacks: transcribed note events (chords count more) and the
  * bass onsets. */
 export function onsets(an: Analysis): [number[], number[]] {

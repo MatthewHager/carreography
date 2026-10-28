@@ -27,9 +27,14 @@
 import type { Analysis, Events, Phrase } from './analysis';
 import type { Car, Side } from './car';
 import * as C from './channels';
-import { arange, argmin, clip, cumsum, diff, linspace, mean, median, quantile, round, searchsorted, sum } from './np';
+import {
+  arange, argmin, at, clip, cumsum, diff, linspace, mean, median, pymod, pyRound, quantile, round, roundTo, searchsorted,
+  sum,
+} from './np';
+import { barLen, beatLen } from './tempo';
 import { tierAt } from './arc';
 import { pacedGrid } from './mood';
+import { frameSpan } from './phrases';
 import { Rng } from './rng';
 
 const ON = C.ON, OFF_500 = C.OFF_500, ON_500 = C.ON_500, OFF_1000 = C.OFF_1000;
@@ -40,46 +45,6 @@ type Rows = Float64Array[];
 type Level = number | ArrayLike<number>;
 /** A phrase as far as the time-grid helpers need one (the choreographer also passes stand-ins). */
 type Span = Pick<Phrase, 't0' | 't1'>;
-
-// --- Python/numpy behaviour the moves rely on ---------------------------------------------------
-
-/** a[i] with Python's negative indexing. */
-function at<T>(a: ArrayLike<T>, i: number): T {
-  return a[i < 0 ? a.length + i : i];
-}
-
-/** Python's % (the sign of the divisor), also numpy's float remainder. */
-function pymod(a: number, b: number): number {
-  let m = a % b;
-  if (m !== 0 && (b < 0) !== (m < 0)) m += b;
-  return m;
-}
-
-/** np.round(x, decimals): rint(x * 10**d) / 10**d. */
-function npRoundTo(x: number, d: number): number {
-  const f = 10 ** d;
-  return round(x * f) / f;
-}
-
-/** Python's round(x, ndigits) for a float: the correctly rounded decimal, ties to even. */
-function pyRoundTo(x: number, d: number): number {
-  if (!Number.isFinite(x) || Math.abs(x) >= 1e21) return x;
-  const exact = Math.abs(x).toFixed(100);       // the exact binary value in decimal
-  const dot = exact.indexOf('.');
-  const tail = exact.slice(dot + 1 + d);
-  let s = Math.abs(x).toFixed(d);                // ties round away from zero here
-  if (/^50*$/.test(tail)) {
-    const kept = exact.slice(0, dot + 1 + d).replace('.', '');
-    const last = Number(kept[kept.length - 1]);
-    if (last % 2 === 0) s = exact.slice(0, dot + (d ? 1 + d : 0));   // the even neighbour is below
-  }
-  const v = Number(s);
-  return x < 0 ? -v : v;
-}
-
-function nps(x: number): number {
-  return x > 0 ? 1 : x < 0 ? -1 : 0;
-}
 
 /** n rows of BAR values from fn(frame, led). */
 function rows(n: number, fn: (f: number, k: number) => number, w = BAR): Rows {
@@ -291,12 +256,12 @@ function lrBeat(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const outer = sides(cars);
   const beats = within(an.beats, ph.t0 - 0.05, ph.t1);
-  const downs = new Set(an.downbeats.map((d) => npRoundTo(d, 3)));
+  const downs = new Set(an.downbeats.map((d) => roundTo(d, 3)));
   beats.forEach((b, k) => {
     const car = outer[k % outer.length];
     hit(car, 'L', b, 0.14, true);
     hit(car, 'R', b, 0.14, true);
-    if (downs.has(pyRoundTo(b, 3)) && ct !== null) barFlash(ct, b, 0.3);
+    if (downs.has(pyRound(b, 3)) && ct !== null) barFlash(ct, b, 0.3);
   });
   const [lo, hi] = phraseRange(ph);
   if (ct !== null) {
@@ -345,7 +310,7 @@ function outIn(cars: Car[], an: Analysis, ph: Phrase, reverse = false) {
   const ev = an.events, [lo, hi] = phraseRange(ph);
   const ct = centreTruck(cars);
   const ys = sides(cars);
-  const f0 = Math.trunc(ph.t0 / an.step), f1 = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
+  const [f0, f1] = frameSpan(an, ph);
   const e = an.intensity.slice(f0, f1);
   const L = e.length;
   const rising = L > 10 && mean(e, L - Math.ceil(L / 4), L) > mean(e, 0, Math.floor(L / 4)) * 1.15;
@@ -430,7 +395,7 @@ function land(cars: Car[], an: Analysis, ph: Phrase, ct: Car | null, pop: boolea
 
 /** an.loud_fast over the phrase, stretched to 0..1 (or a flat 0.5 when it barely moves). */
 function loudness(an: Analysis, ph: Phrase): Float64Array {
-  const f0 = Math.trunc(ph.t0 / an.step), f1 = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
+  const [f0, f1] = frameSpan(an, ph);
   const e = Float64Array.from(an.loudFast.slice(f0, f1));
   let lo = Infinity, hi = -Infinity;
   for (const v of e) {
@@ -655,7 +620,7 @@ function yRipple(ys: Car[], an: Analysis, ph: Phrase, inward = true) {
 
 /** Slow mirrored swells on the ramping lamps (signature + DRL), the two Ys in antiphase. */
 function yBreathe(ys: Car[], an: Analysis, ph: Phrase) {
-  const p = Math.max(2.0, (4 * 60.0) / Math.max(an.tempo, 40));
+  const p = Math.max(2.0, barLen(an));
   const [onV, offV] = p < 3.0 ? [ON_500, OFF_500] : [C.ON_1000, OFF_1000];
   ys.forEach((c, k) => {
     let t = ph.t0 + (k % 2 ? p / 2 : 0);
@@ -735,7 +700,7 @@ function ctScan(ct: Car, an: Analysis, ph: Phrase) {
 /** Each beat: the bar fills from both edges to the centre and fades, like a breath in. */
 function ctEdgePulse(ct: Car, an: Analysis, ph: Phrase) {
   for (const b of within(an.beats, ph.t0, ph.t1)) {
-    const dur = Math.min(0.4, Math.max(0.2, (60.0 / Math.max(an.tempo, 40)) * 0.8));
+    const dur = Math.min(0.4, Math.max(0.2, beatLen(an) * 0.8));
     const n = Math.max(2, ct.fr(b + dur) - ct.fr(b));
     barFill(ct, b, dur, linspace(0, 1, n), false, linspace(1, 0.3, n));
   }
@@ -781,7 +746,7 @@ function wave(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
   const downs = within(an.downbeats, ph.t0, ph.t1);
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+  const bar = barLen(an);
   downs.forEach((d, k) => {
     const span = Math.min(bar, ph.t1 - d);
     let stations: ([Car, number[]] | null)[] = [];
@@ -910,7 +875,7 @@ function relay(cars: Car[], an: Analysis, ph: Phrase) {
     }
     // Change direction when the melody turns, else keep walking; bounce at the ends.
     if (i > ph.a && i + 1 < ph.b) {
-      const step = nps(ev.top[i + 1] - ev.top[i]);
+      const step = Math.sign(ev.top[i + 1] - ev.top[i]);
       if (step !== 0) direction = step;
     }
     pos += direction;
@@ -986,7 +951,7 @@ function subGrid(an: Analysis, div = 4): Float64Array {
   let g = cache.get(div);
   if (g === undefined) {
     let b: ArrayLike<number> = an.beats;
-    if (b.length < 2) b = arange(0, an.duration, 60.0 / Math.max(an.tempo, 40));
+    if (b.length < 2) b = arange(0, an.duration, beatLen(an));
     const gaps = diff(b);
     const out = new Float64Array(b.length * div);
     for (let i = 0; i + 1 < b.length; i++) for (let j = 0; j < div; j++) out[i * div + j] = b[i] + (gaps[i] * j) / div;
@@ -1020,7 +985,7 @@ export function snap(an: Analysis, t: number, div = 4): number {
 /** Length of the tracked beat around time `t` (seconds). */
 export function beatAt(an: Analysis, t: number): number {
   const b = an.beats;
-  const nominal = 60.0 / Math.max(an.tempo, 40);
+  const nominal = beatLen(an);
   if (b.length < 2) return nominal;
   const i = Math.min(Math.max(searchsorted(b, t, 'right'), 1), b.length - 1);
   return Math.min(b[i] - b[i - 1], 1.5 * nominal);       // across a fermata: a normal beat
@@ -1042,7 +1007,7 @@ function expandContract(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
   const downs = grid(an, ph, 'downbeats');
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+  const bar = barLen(an);
   downs.forEach((d, k) => {
     const span = Math.min(bar, ph.t1 - d);
     const expanding = k % 2 === 0;
@@ -1109,7 +1074,7 @@ function syncopate(cars: Car[], an: Analysis, ph: Phrase) {
 function rain(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
-  const f0 = Math.trunc(ph.t0 / an.step), f1 = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
+  const [f0, f1] = frameSpan(an, ph);
   const rng = new Rng(Math.trunc(ph.t0 * 100));
   const n = f1 - f0;
   if (ct !== null) {
@@ -1188,7 +1153,7 @@ function barCollide(ct: Car, an: Analysis, ph: Phrase) {
 function yWink(ys: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events, [lo, hi] = phraseRange(ph);
   if (ys.length < 2) return yKeyboard(ys, an, ph);
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+  const bar = barLen(an);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = flashLen(ev, i);
     const who = pymod(Math.trunc((t - ph.t0) / bar), 2);
@@ -1209,8 +1174,6 @@ function yWink(ys: Car[], an: Analysis, ph: Phrase) {
 
 // --- Round four: whole-lineup collaboration on steady beats ---------------------------------------
 
-const byX = (cars: Car[]) => [...cars].sort((p, q) => p.x - q.x);
-
 /** order + order[-2:0:-1]: the ping-pong order over the lineup. */
 function pingPongOrder(order: Car[]): Car[] {
   const seq = [...order];
@@ -1222,7 +1185,7 @@ function pingPongOrder(order: Car[]): Car[] {
  * arriving car's whole front comes on while the car it left ramps off, so it reads as one light
  * travelling, not three blinking. On fast beats it steps every other beat. */
 function march(cars: Car[], an: Analysis, ph: Phrase) {
-  const seq = pingPongOrder(byX(cars));            // ping-pong order over the lineup
+  const seq = pingPongOrder(cars);
   let beats = grid(an, ph, 'beats');
   if (beats.length > 1 && median(diff(beats)) < 0.4) beats = every(beats, 2);
   beats.forEach((b, k) => {
@@ -1238,9 +1201,8 @@ function march(cars: Car[], an: Analysis, ph: Phrase) {
 /** Every bar a quick ripple runs across the lineup - left Y, truck, right Y, 120 ms apart - and
  * the next bar runs back. Fast enough to read as a swipe, slow enough to see every car. */
 function cascade(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
   grid(an, ph, 'downbeats').forEach((d, k) => {
-    const seq = k % 2 === 0 ? order : [...order].reverse();
+    const seq = k % 2 === 0 ? cars : [...cars].reverse();
     seq.forEach((car, j) => {
       const t = d + (beatAt(an, d) / 8) * j;                 // a flam on thirty-second notes
       car.flash([...car.sig(), ...car.drl(), ...car.heads()], t, 0.16);
@@ -1279,10 +1241,9 @@ function tugOfWar(cars: Car[], an: Analysis, ph: Phrase) {
 /** An accelerating ping-pong for a build: the ball crosses the lineup every bar, then every
  * half bar, then every beat, then every half beat, and everything lands together at the end. */
 function bounceBuild(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
   const ct = centreTruck(cars);
   const span = Math.max(ph.t1 - ph.t0, 1.0);
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   const hop = [0, 1, 2, 1];
   let t = ph.t0;
   let k = 0;
@@ -1290,10 +1251,10 @@ function bounceBuild(cars: Car[], an: Analysis, ph: Phrase) {
     const u = (t - ph.t0) / span;
     const step = beat * (u < 0.3 ? 4 : u < 0.6 ? 2 : u < 0.85 ? 1 : 0.5);
     const ts = snap(an, t, 2);                    // the hit lands on the beat grid; the clock runs on
-    const car = order[hop[k % 4] % order.length];
+    const car = cars[hop[k % 4] % cars.length];
     car.flash([...car.sig(), ...car.drl(), ...car.heads()], ts, Math.min(0.14, step * 0.6));
     if (ct !== null) {
-      const nxt = order[hop[(k + 1) % 4] % order.length];
+      const nxt = cars[hop[(k + 1) % 4] % cars.length];
       const goesRight = nxt.x > car.x;
       const m = Math.max(2, ct.fr(ts + step) - ct.fr(ts));
       const centre = goesRight ? linspace(0, BAR - 1, m) : linspace(BAR - 1, 0, m);
@@ -1316,7 +1277,7 @@ function antiphony(cars: Car[], an: Analysis, ph: Phrase) {
   const ev = an.events;
   const ys = sides(cars);
   const ct = centreTruck(cars);
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+  const bar = barLen(an);
   const [lo, hi] = phraseRange(ph);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], d = flashLen(ev, i);
@@ -1366,7 +1327,7 @@ function beam(cars: Car[], an: Analysis, ph: Phrase) {
   const slots = slots6(cars);
   const ct = centreTruck(cars);
   const downs = grid(an, ph, 'downbeats');
-  const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+  const bar = barLen(an);
   const n = slots.length;
   downs.forEach((d, k) => {
     const span = Math.min(bar, ph.t1 - d);
@@ -1485,10 +1446,6 @@ function fadeCross(cars: Car[], an: Analysis, ph: Phrase) {
 // (`grid`, which the mood pacing thins to every 2nd/4th beat in calm passages) and spans whole
 // beats or bars, so nothing floats free of the tempo.
 
-function barLen(an: Analysis): number {
-  return (4 * 60.0) / Math.max(an.tempo, 40);
-}
-
 function next(g: ArrayLike<number>, k: number, fallback: number): number {
   return k + 1 < g.length ? g[k + 1] : g[k] + fallback;
 }
@@ -1544,15 +1501,14 @@ function curtain(cars: Car[], an: Analysis, ph: Phrase) {
  * across the stage and back; the truck's bar swells and ebbs with it. One breath per two bars,
  * started on the downbeats. The calmest collaborative move: intros, quiet verses, held chords. */
 export function breatheWash(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
   const downs = grid(an, ph, 'downbeats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   const bar = barLen(an);
   const ds = every(downs, 2);
   for (let k = 0; k < ds.length; k++) {
     const d = ds[k];
     if (d > ph.t1 - 1.0) break;
-    const seq = k % 2 === 0 ? order : [...order].reverse();
+    const seq = k % 2 === 0 ? cars : [...cars].reverse();
     const after = an.beats.filter((x) => x >= d - 0.01);
     seq.forEach((car, j) => {
       const ts = j < after.length ? after[j] : d + j * beat;
@@ -1576,12 +1532,11 @@ export function breatheWash(cars: Car[], an: Analysis, ph: Phrase) {
  * each hit, so light crawls across every car; the bar chases in blocks of five LEDs. It turns
  * round every two bars. Steps on the beat grid (every other beat when calm). Groove material. */
 function marquee(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
   const line: [Car, number[]][] = [];
-  for (const c of order) for (const lamp of c.lamps()) line.push([c, lamp]);
+  for (const c of cars) for (const lamp of c.lamps()) line.push([c, lamp]);
   const ct = centreTruck(cars);
   const hits = grid(an, ph, 'beats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   const perTurn = Math.max(4, Math.trunc(round((2 * barLen(an)) / Math.max(hits.length > 1 ? median(diff(hits)) : beat, 0.1))));
   let phase = 0;
   hits.forEach((b, k) => {
@@ -1681,13 +1636,12 @@ const SPARKLE: Record<string, [number, number, number]> = {   // mood: subdivisi
  * For shimmering textures, trills, high bells, magical moments, and the quiet after a climax. */
 function sparkle(cars: Car[], an: Analysis, ph: Phrase) {
   const rng = new Rng(pymod(Math.trunc(ph.t0 * 1000), 2 ** 32));
-  const order = byX(cars);
   const lamps: [Car, number[]][] = [];
-  for (const c of order) for (const lamp of c.lamps()) lamps.push([c, lamp]);
+  for (const c of cars) for (const lamp of c.lamps()) lamps.push([c, lamp]);
   const ct = centreTruck(cars);
   const mood = ph.mood ?? 'groove';
   let beats: ArrayLike<number> = within(an.beats, ph.t0, ph.t1);
-  if (beats.length < 2) beats = arange(ph.t0, ph.t1, 60.0 / Math.max(an.tempo, 40));
+  if (beats.length < 2) beats = arange(ph.t0, ph.t1, beatLen(an));
   if (!(mood in SPARKLE)) throw new Error(`sparkle: no mood ${mood}`);
   const [sub, count, hold] = SPARKLE[mood];
   const ticks: number[] = [];
@@ -1746,11 +1700,10 @@ function sunrise(cars: Car[], an: Analysis, ph: Phrase) {
  * between walls. Ys idle on a dim DRL. Groove/drive; nice for ostinatos and walking basslines. */
 function scanner(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
-  const order = byX(cars);
   if (ct === null) return wave(cars, an, ph);
   const hits = grid(an, ph, 'beats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
-  for (const y of [order[0], at(order, -1)]) if (!y.isCt) y.light(y.drl(), ph.t0, ph.t1, C.ON_1000);
+  const beat = beatLen(an);
+  for (const y of [cars[0], at(cars, -1)]) if (!y.isCt) y.light(y.drl(), ph.t0, ph.t1, C.ON_1000);
   hits.forEach((b, k) => {
     const dur = Math.max(0.2, next(hits, k, beat) - b);
     const ltr = k % 2 === 0;
@@ -1761,7 +1714,7 @@ function scanner(cars: Car[], an: Analysis, ph: Phrase) {
       const behind = (q - pos[f]) * (ltr ? -1 : 1);      // >0 behind the eye
       return behind >= 0 ? Math.exp(-behind / 6.0) : Math.exp(behind / 1.5);
     }));
-    const endCar = ltr ? at(order, -1) : order[0];
+    const endCar = ltr ? at(cars, -1) : cars[0];
     if (!endCar.isCt) {
       const side = innerSide(endCar, cars);
       endCar.flash([...endCar.heads(side), ...endCar.accents(side)], b + dur, Math.min(0.25, dur * 0.6));
@@ -1775,7 +1728,7 @@ function scanner(cars: Car[], an: Analysis, ph: Phrase) {
  * fills in from both ends. Half a beat of black before the end, then the whole stage lands on the
  * next downbeat. For crescendos and pre-chorus climbs; never in calm passages. */
 function accelerando(cars: Car[], an: Analysis, ph: Phrase) {
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   const ct = centreTruck(cars);
   let beats: ArrayLike<number> = within(an.beats, ph.t0, ph.t1);
   if (beats.length < 4) beats = arange(ph.t0, ph.t1, beat);
@@ -1858,15 +1811,14 @@ export function teardown(cars: Car[], t0: number, span: number) {
  * the other on the "and" - and the lead swaps every bar, while the truck's bar answers on each
  * downbeat. Reads as a rally between the outer cars. Groove/drive. */
 function pingPong(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
-  const ys = order.filter((c) => !c.isCt);
+  const ys = cars.filter((c) => !c.isCt);
   const ct = centreTruck(cars);
   if (ys.length < 2) return lrBeat(cars, an, ph);
   const beats = grid(an, ph, 'beats');
-  const downs = new Set(an.downbeats.map((d) => npRoundTo(d, 2)));
+  const downs = new Set(an.downbeats.map((d) => roundTo(d, 2)));
   let barK = 0;
   for (const b of beats) {
-    if (downs.has(pyRoundTo(b, 2))) {
+    if (downs.has(pyRound(b, 2))) {
       barK += 1;
       if (ct !== null) barFlash(ct, b, 0.3, 0.9);
     }
@@ -1881,9 +1833,9 @@ function pingPong(cars: Car[], an: Analysis, ph: Phrase) {
  * takes a slow solo pulse, moving left, centre, right, centre on each hit (every bar when calm).
  * Spacious and patient: calm intros and quiet verses with a steady pulse underneath. */
 function metronome(cars: Car[], an: Analysis, ph: Phrase) {
-  const seq = pingPongOrder(byX(cars));
+  const seq = pingPongOrder(cars);
   const hits = grid(an, ph, 'beats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   for (const c of cars) {
     c.light(c.drl(), ph.t0, ph.t1, C.ON_1000);
     c.light(c.drl(), ph.t1, ph.t1 + 1.0, OFF_1000);
@@ -1909,7 +1861,7 @@ function stripes(cars: Car[], an: Analysis, ph: Phrase) {
   const ct = centreTruck(cars);
   const ys = sides(cars);
   const beats = grid(an, ph, 'beats');
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   const blocks = every(beats, 2);
   blocks.forEach((b, k) => {
     const dur = Math.max(0.3, next(blocks, k, 2 * beat) - b);
@@ -1930,11 +1882,10 @@ function stripes(cars: Car[], an: Analysis, ph: Phrase) {
  * pair against the truck, for a beat at a time with a beat's rest between - a shiver of light
  * for trills, tremolo strings and the last bar before a drop. Frenzy only. */
 function flutter(cars: Car[], an: Analysis, ph: Phrase) {
-  const order = byX(cars);
   const ct = centreTruck(cars);
-  const ys = order.filter((c) => !c.isCt);
+  const ys = cars.filter((c) => !c.isCt);
   let beats: ArrayLike<number> = within(an.beats, ph.t0, ph.t1);
-  if (beats.length < 2) beats = arange(ph.t0, ph.t1, 60.0 / Math.max(an.tempo, 40));
+  if (beats.length < 2) beats = arange(ph.t0, ph.t1, beatLen(an));
   for (let k = 0; k < beats.length; k++) {
     if (k % 2) continue;
     const b = beats[k];
@@ -1960,7 +1911,7 @@ export const UNISON: Record<string, Move> = {
   call_response: callResponse,
   antiphony,
   pulse,
-  block: (cars, an, ph) => block(cars, an, ph, 60.0 / Math.max(an.tempo, 40)),
+  block: (cars, an, ph) => block(cars, an, ph, beatLen(an)),
   rain,
   motif,
   shimmer,
@@ -2014,7 +1965,7 @@ export const SIDE: Record<string, (ys: Car[], an: Analysis, ph: Phrase) => void>
     yBassFogs(ys, an, ph);
     yKeyboard(ys, an, ph);
   },
-  y_chords: (ys, an, ph) => yChords(ys, an, ph, 60.0 / Math.max(an.tempo, 40)),
+  y_chords: (ys, an, ph) => yChords(ys, an, ph, beatLen(an)),
   y_wink: yWink,
 };
 

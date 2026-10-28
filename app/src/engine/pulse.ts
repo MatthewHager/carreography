@@ -23,11 +23,13 @@
 // organ, a free cadenza, Ave Maria - the layer backs off (downbeats only, or nothing at all).
 
 import type { Analysis, Phrase } from './analysis';
+import { BUILDS } from './catalog';
 import * as C from './channels';
 import type { Car } from './car';
 import * as M from './moves';
 import { moodAt } from './mood';
 import { clip, diff, max, mean32, median, round, searchsorted } from './np';
+import { beatLen } from './tempo';
 
 const HEADS = [C.L_OUTER_MAIN, C.R_OUTER_MAIN, C.L_INNER_MAIN, C.R_INNER_MAIN];
 const INNER = [C.L_INNER_MAIN, C.R_INNER_MAIN];
@@ -37,7 +39,6 @@ const PATTERN: Record<string, Record<number, string>> = {
   frenzy: { 0: 'big', 1: 'small', 2: 'mid', 3: 'small' },
 };
 const OWNERS = new Set(['cadence', 'motif']);
-const BUILDS = new Set(['out_in', 'fill_stage', 'bounce_build', 'implode', 'accelerando']);
 const LEAD_S = 0.02;            // the beat's light lands a frame early: the eye forgives early, not late
 
 /** A phrase, or a stretch between phrases (see segments). */
@@ -147,7 +148,7 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): void {
     for (let i = 0; i < beats.length; i++) {
       if (!(beats[i] >= ph.t0 - 0.01 && beats[i] < ph.t1)) continue;
       const b = beats[i];
-      const nxt = i + 1 < beats.length ? beats[i + 1] : b + 60.0 / Math.max(an.tempo, 40);
+      const nxt = i + 1 < beats.length ? beats[i + 1] : b + beatLen(an);
       const gap = nxt - b;
       const hold = clip(gap * 0.3, 0.1, 0.14);
       const kind = pattern[pos[i]];

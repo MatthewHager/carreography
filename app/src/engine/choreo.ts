@@ -22,7 +22,7 @@ import * as motors from './motors';
 import * as M from './moves';
 import { clip, corrcoef, interp, linspace, mean, median, round, runs, searchsorted, slope } from './np';
 import * as PULSE from './pulse';
-import { segment } from './phrases';
+import { frameSpan, segment } from './phrases';
 import * as TEMPO from './tempo';
 
 const PURPLE = [110, 0, 200];
@@ -150,7 +150,7 @@ function formationsFor(ph: Phrase, an: Analysis): Formation[] {
   const base = formationsBase(ph, an);
   const mood = ph.mood;
   if (mood === undefined || mood === null || ph.gesture === 'motif' || ph.gesture === 'cadence') return base;
-  if (base.length && BUILDS.includes(base[0][1])) return base;          // a crescendo candidate stays first
+  if (base.length && CAT.BUILDS.has(base[0][1])) return base;          // a crescendo candidate stays first
   const beatOk = an.beatScore >= 2.0;
   const extra = CAT.candidates(ph.gesture, mood).filter((c) => !base.some((b) => same(b, c))
     && (beatOk || !anyIn(c, BEAT_MOVES)));
@@ -162,11 +162,9 @@ function formationsFor(ph: Phrase, an: Analysis): Formation[] {
   return out.length ? out : base;
 }
 
-const BUILDS = ['out_in', 'fill_stage', 'bounce_build', 'implode', 'accelerando'];
-
 /** Does the phrase's loudness rise (the last quarter 35 % louder than the first)? */
 function louderAtEnd(an: Analysis, ph: Phrase): boolean {
-  const f0 = Math.trunc(ph.t0 / an.step), f1 = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
+  const [f0, f1] = frameSpan(an, ph);
   const e = an.intensity.slice(f0, f1);
   const n = e.length;
   // e[-len(e) // 4:] is the last ceil(n / 4) frames, e[:len(e) // 4] the first floor(n / 4)
@@ -296,15 +294,15 @@ function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
       const lands = ev.dur[ph.b - 1] >= 0.8
         || (ph.b < ev.t.length && ev.kind[ph.b] >= 2 && ev.t[ph.b] - ph.t1 < 0.6);
       const musical = climb >= 12 && lands && ph.t1 - ph.t0 >= 3;
-      const buildTimes = phrases.slice(0, history.length).filter((_, i) => BUILDS.includes(history[i][1])).map((q) => q.t0);
+      const buildTimes = phrases.slice(0, history.length).filter((_, i) => CAT.BUILDS.has(history[i][1])).map((q) => q.t0);
       const lastBuild = buildTimes.length ? Math.max(...buildTimes) : -99;
       const cuePeak = (an.cuePeaks ?? []).some(([t]) => ph.t0 < t && t <= ph.t1 + 0.5);
       const spacing = musical ? 12 : 20;
       const calm = ph.mood === 'calm';
-      const nSoFar = countIf(history, (h) => BUILDS.includes(h[1]));
+      const nSoFar = countIf(history, (h) => CAT.BUILDS.has(h[1]));
       const room = nSoFar < 1 + an.duration / 50.0;       // about one build per 50 s of song at most
       if ((!calm && room && (louder || musical) && ph.t0 - lastBuild >= spacing) || (cuePeak && ph.t1 - ph.t0 >= 3)) {
-        const nBuilds = countIf(history, (h) => BUILDS.includes(h[1]));
+        const nBuilds = countIf(history, (h) => CAT.BUILDS.has(h[1]));
         const kinds = ['out_in', 'accelerando', 'fill_stage', 'implode', ...(an.beatScore >= 2.0 ? ['bounce_build'] : [])];
         if (an.beatScore < 2.0 || an.driver === 'organ') kinds.splice(kinds.indexOf('accelerando'), 1);   // a club strobe-roll; organ climbs get fills
         choice = ['unison', cuePeak ? 'out_in' : kinds[nBuilds % kinds.length]];
@@ -318,7 +316,7 @@ function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
       if (earlier.length) {
         const firstSec = secs[sec.repeatOf];
         choice = escalate(earlier[k % earlier.length], Math.max(0, sec.ceiling - firstSec.ceiling), an.beatScore >= 2.0);
-        if (BUILDS.includes(choice[1])) choice = null;          // builds are placed by the crescendo detector, never replayed
+        if (CAT.BUILDS.has(choice[1])) choice = null;          // builds are placed by the crescendo detector, never replayed
         if (choice !== null && sec.ceiling >= 3 && allIn(choice, QUIET)) {   // a climax never replays a quiet move
           choice = escalate(choice, 1, an.beatScore >= 2.0);
           if (allIn(choice, QUIET)) {
@@ -376,9 +374,9 @@ function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
           return 0;
         });
         // a crescendo build is a big gesture: at most one every 20 s
-        const bt = history.map((h, i) => [h, phrases[i].t0] as const).filter(([h]) => BUILDS.includes(h[1])).map(([, t]) => t);
+        const bt = history.map((h, i) => [h, phrases[i].t0] as const).filter(([h]) => CAT.BUILDS.has(h[1])).map(([, t]) => t);
         const lastBuild = bt.length ? Math.max(...bt) : -99;
-        const spaced = ordered.filter(([, c]) => !(BUILDS.includes(c[1]) && ph.t0 - lastBuild < 20));
+        const spaced = ordered.filter(([, c]) => !(CAT.BUILDS.has(c[1]) && ph.t0 - lastBuild < 20));
         ordered = spaced.length ? spaced : ordered;
         choice = ordered[0][1];
         // Collaboration quota: in lively sections, at least 60% of phrases must be moves where the
@@ -471,10 +469,10 @@ function playPhrases(cars: Car[], an: Analysis, phrases: Phrase[]) {
     // Release or drop after a build: when the music falls back, the stage tears down over two bars
     // from the first downbeat and the phrase's own move starts after; when it stays up, a shockwave
     // marks the landing.
-    if (prevPh !== null && BUILDS.includes(prevPh.move ?? '')) {
+    if (prevPh !== null && CAT.BUILDS.has(prevPh.move ?? '')) {
       const downs = an.downbeats.filter((d) => d >= ph.t0 - 0.05 && d < ph.t1);
       const d0 = downs.length ? downs[0] : ph.t0;
-      const bar = (4 * 60.0) / Math.max(an.tempo, 40);
+      const bar = TEMPO.barLen(an);
       if (ph.energy! < prevPh.energy! - 0.12 || (ph.mood === 'calm' && prevPh.mood !== 'calm')) {
         const span = Math.min(2 * bar, 0.6 * (ph.t1 - d0));
         if (span >= 1.0) {
@@ -562,8 +560,7 @@ function applyCues(cars: Car[], an: Analysis, cues: Cues) {
       M.lightning(cars, t0);
     } else if (action === 'ping') {
       // one word of a chant: one car's whole front, pinging across the lineup word by word
-      const order = [...cars].sort((p, q) => p.x - q.x);
-      const car = order[c.car! % order.length];
+      const car = cars[c.car! % cars.length];
       car.flash([...car.sig(), ...car.drl(), ...car.heads()], t0, 0.22);
       if (car.isCt) M.barFlash(car, t0, 0.3, 1.0);
     }

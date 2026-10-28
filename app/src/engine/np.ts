@@ -12,6 +12,31 @@ export function round(x: number): number {
   return Math.round(x);
 }
 
+/** numpy's round(x, decimals): rint(x * 10**d) / 10**d. */
+export function roundTo(x: number, d: number): number {
+  const f = 10 ** d;
+  return round(x * f) / f;
+}
+
+/** Python's round(x, ndigits): the exact binary value rounded to d decimals, ties to even. A tie is
+ * exact only when x * 2^(d + 1) is an odd integer; then numpy's rounding gives the same answer. */
+export function pyRound(x: number, d: number): number {
+  const tie = Number.isInteger(x * 2 ** (d + 1)) && !Number.isInteger(x * 2 ** d);
+  return tie ? roundTo(x, d) : Number(x.toFixed(d));
+}
+
+/** a[i], counting from the end for a negative i (Python's indexing). */
+export function at<T>(a: ArrayLike<T>, i: number): T {
+  return a[i < 0 ? a.length + i : i];
+}
+
+/** Python's % (the sign of the divisor), also numpy's float remainder. */
+export function pymod(a: number, b: number): number {
+  let m = a % b;
+  if (m !== 0 && (b < 0) !== (m < 0)) m += b;
+  return m;
+}
+
 /** numpy's pairwise summation of a[start .. start+n) (used by sum and mean on float arrays). */
 function pairwise(a: Arr, start: number, n: number): number {
   if (n < 8) {

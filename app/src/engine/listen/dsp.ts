@@ -3,7 +3,7 @@
 // arrays. librosa keeps its spectrograms and onset envelopes in float32, and the thresholds that pick
 // onsets and beats see float32 values, so those are rounded with Math.fround where numpy would.
 
-import { median, median32, mean32, sum32 } from '../np';
+import { median, median32, mean32, round, sum32 } from '../np';
 import { realFft } from './fft';
 
 export const SR = 22050;
@@ -340,18 +340,13 @@ function globalTempo(env: Float32Array): number {
 
 // ---------- beats ----------
 
-const roundHalfEven = (x: number) => {
-  const f = Math.floor(x);
-  return x - f === 0.5 ? (f % 2 === 0 ? f : f + 1) : Math.round(x);
-};
-
 /** librosa.beat.beat_track(onset_envelope=env, bpm=...) with tightness 100 and trimming: the beat frames
  * of the dynamic-programming tracker (Ellis 2007). `bpm` is one tempo or one per frame. */
 export function beatTrack(env: Float32Array, bpm: number | Float64Array, tightness = 100): number[] {
   const N = env.length;
   if (!env.some((v) => v !== 0)) return [];
   const frameRate = SR / HOP;
-  const fpb = (i: number) => roundHalfEven((frameRate * 60.0) / (typeof bpm === 'number' ? bpm : bpm[i]));
+  const fpb = (i: number) => round((frameRate * 60.0) / (typeof bpm === 'number' ? bpm : bpm[i]));
 
   // onsets over their (float32, ddof 1) standard deviation
   const m = mean32(env), dev = new Float32Array(N);
@@ -392,7 +387,7 @@ export function beatTrack(env: Float32Array, bpm: number | Float64Array, tightne
   for (let i = 0; i < N; i++) {
     const f = fpb(i), logF = Math.log(f);
     let best = -Infinity, at = -1;
-    for (let loc = i - roundHalfEven(f / 2); loc > i - 2 * f - 1; loc--) {
+    for (let loc = i - round(f / 2); loc > i - 2 * f - 1; loc--) {
       if (loc < 0) break;
       const score = cum[loc] - tightness * (Math.log(i - loc) - logF) ** 2;
       if (score > best) {

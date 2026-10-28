@@ -145,7 +145,6 @@ function melodyPath(an: Analysis, t0: number, t1: number, n: number): Float64Arr
 /** All the lights for a legato song (the motors are scheduled separately, as for any song). */
 export function choreograph(cars: Car[], an: Analysis): void {
   const ct = M.centreTruck(cars);
-  const order = [...cars].sort((p, q) => p.x - q.x);
   const [start, end] = musicSpan(an);
   let L = loudness(an);
   const n = L.length;
@@ -191,9 +190,9 @@ export function choreograph(cars: Car[], an: Analysis): void {
 
   // 2. the swoop: the melody gliding across the stage
   const path = melodyPath(an, start, end, n);
-  const stage = path.map((v) => v * 2 * order.length);    // two slots per car (its left and right), crowd-left to right
-  for (let slot = 0; slot < 2 * order.length; slot++) {
-    const car = order[Math.floor(slot / 2)];
+  const stage = path.map((v) => v * 2 * cars.length);    // two slots per car (its left and right), crowd-left to right
+  for (let slot = 0; slot < 2 * cars.length; slot++) {
+    const car = cars[Math.floor(slot / 2)];
     const side = slot % 2 === 0 ? 'L' : 'R';
     if (car === ct) continue;
     const here = Array.from(stage, (v) => !Number.isNaN(v) && Math.floor(v) === slot);
@@ -207,7 +206,7 @@ export function choreograph(cars: Car[], an: Analysis): void {
     const frameT = new Float64Array(m);
     for (let i = 0; i < m; i++) frameT[i] = f0 * ct.step + i * ct.step;
     const s = interp(frameT, tt, stage.map((v) => (Number.isNaN(v) ? -10 : v)));
-    const k = 2 * order.indexOf(ct);                        // the truck's two slots: k and k + 1
+    const k = 2 * cars.indexOf(ct);                        // the truck's two slots: k and k + 1
     const nLed = C.FRONT_BAR.length;
     const spot: Float64Array[] = [];
     for (let i = 0; i < m; i++) {

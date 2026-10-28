@@ -3,6 +3,7 @@
 // tools/track_beats.py runs: torchaudio's log-mel spectrogram, 1500-frame chunks with 6-frame borders
 // (keep_first), and the "minimal" postprocessor. Given the same samples it finds the same beats.
 
+import { hann } from './dsp';
 import { realFft } from './fft';
 import { runPieces, type Backend, type Piece } from './infer';
 import { SR } from './resample';
@@ -73,7 +74,7 @@ function melBands(): { start: number; w: Float32Array }[] {
  * scaled by 1 / sqrt(n_fft) (normalized="frame_length"). T frames x 128 mels, row-major. */
 function logMel(x: Float32Array): { data: Float32Array; T: number } {
   const n = x.length, pad = N_FFT / 2, T = 1 + Math.floor(n / HOP);
-  const win = Float64Array.from({ length: N_FFT }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N_FFT));
+  const win = hann(N_FFT);
   // torch.stft's reflect padding (the edge sample isn't repeated)
   const at = (i: number) => x[i < 0 ? -i : i >= n ? 2 * (n - 1) - i : i];
   const fft = realFft(N_FFT), bands = melBands(), norm = 1 / Math.sqrt(N_FFT);

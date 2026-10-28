@@ -17,8 +17,10 @@
 
 import type { Analysis, Events, Phrase } from './analysis';
 import { ceilingAt } from './arc';
+import { frameSpan } from './phrases';
 import { argsort, clip, convolveSame, diff, max, mean, median } from './np';
 import { clarity } from './pulse';
+import { beatLen } from './tempo';
 
 const BEATS_PER_HIT: Record<string, number> = { calm: 4, groove: 2, drive: 1, frenzy: 0.5 };
 const MIN_GAP_S: Record<string, number> = { calm: 1.5, groove: 0.7, drive: 0.0, frenzy: 0.0 };   // never faster than this
@@ -75,10 +77,9 @@ function energyCurve(an: Analysis): Float64Array {
 export function assign(an: Analysis, phrases: Phrase[]): Phrase[] {
   const e = energyCurve(an);
   an.energy = e;
-  const beat = 60.0 / Math.max(an.tempo, 40);
+  const beat = beatLen(an);
   for (const ph of phrases) {
-    const a = Math.trunc(ph.t0 / an.step);
-    const b = Math.max(Math.trunc(ph.t0 / an.step) + 1, Math.trunc(ph.t1 / an.step));
+    const [a, b] = frameSpan(an, ph);
     ph.energy = b > a && a < e.length ? mean(e, a, Math.min(b, e.length)) : NaN;
     ph.mood = moodFor(ph.energy);
     // a steady, clearly struck beat keeps a phrase out of "calm" (Thriller's quiet groove intro),
