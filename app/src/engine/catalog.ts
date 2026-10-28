@@ -141,7 +141,7 @@ export const UNISON: Record<string, Move> = {
 /** The builds: each shapes a whole crescendo, and is placed by the crescendo detector. */
 export const BUILDS: ReadonlySet<string> = new Set(Object.keys(UNISON).filter((m) => UNISON[m].grid === 'build'));
 
-const SPLIT: [string, string, Move][] = [
+export const SPLIT: [string, string, Move][] = [
   ["y_keyboard", "ct_comets", mv("the Ys play the notes as a keyboard while comets glide on the bar",
     ["calm", "groove"], FIG, "note", false)],
   ["y_ripple_in", "ct_comets", mv("ripples run inward on the Ys toward comets on the truck",
@@ -196,9 +196,19 @@ export function candidates(gesture: string, mood: string): Formation[] {
   return out;
 }
 
-/** The catalogue as a readable table (the Python also writes it to MOVES.md; that part isn't ported). */
+/** MOVES.md at the repository root: the catalogue as a table to read (catalog.test.ts keeps it current). */
 export function markdown(): string {
-  const rows = ['| move | what you see | moods | fits | locks to |', '|---|---|---|---|---|'];
+  const rows = [
+    '<!-- Written from the move catalogue (catalog.ts); UPDATE_MOVES=1 npx vitest run catalog rewrites it. -->',
+    '# Move catalogue',
+    '',
+    'What each move looks like, the moods and phrase shapes the choreographer may use it for, and what it '
+      + 'locks to. Written for the classic Model Y | Cybertruck | Model Y lineup: in any lineup "the truck" is '
+      + 'the centre Cybertruck and "the Ys" are the other cars (see docs/CHOREOGRAPHY.md).',
+    '',
+    '| move | what you see | moods | fits | locks to |',
+    '|---|---|---|---|---|',
+  ];
   for (const [name, i] of Object.entries(UNISON)) {
     rows.push(`| ${name} | ${i.what} | ${i.moods.join(', ')} | ${i.gestures.join(', ')} | ${i.grid} |`);
   }
