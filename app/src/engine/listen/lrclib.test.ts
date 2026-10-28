@@ -108,5 +108,6 @@ describe('lookup', () => {
     expect((await lookup(tags, 200, opts({ search: [] }))).status).toBe('none');
     expect((await lookup(tags, 200, opts({ get: record(1, 200, null, true) }))).status).toBe('instrumental');
     expect((await lookup(tags, 200, opts({ get: record(1, 200, null) }))).status).toBe('unsynced');
+    expect((await lookup(tags, 200, opts({ search: [record(2, 260, LRC)] }))).status).toBe('none');   // another version
   });
 });

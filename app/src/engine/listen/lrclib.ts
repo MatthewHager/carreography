@@ -116,8 +116,8 @@ export async function lookup(tags: SongTags, duration: number, opts: FetchOption
         opts)) ?? []));
     }
   }
-  if (!records.length) return { status: 'none', candidates: [] };
   const near = records.filter((r) => Math.abs((r.duration ?? duration) - duration) <= MAX_LENGTH_GAP_S);
+  if (!near.length) return { status: 'none', candidates: [] };       // nothing, or only other versions
   if (near.length && near.every((r) => r.instrumental)) return { status: 'instrumental', candidates: [] };
   const seen = new Set<string>();
   const candidates: Candidate[] = [];
