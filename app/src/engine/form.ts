@@ -126,7 +126,7 @@ export function analyzeForm(y: Float32Array, intensity: ArrayLike<number>, step:
         s.tempo = tempo;
         s.beats = beats.map((f) => framesToTime(f) + s.t0);
       } catch {
-        // as Python: a section the tracker can't read keeps no tempo
+        // a section the tracker can't read keeps no tempo
       }
     }
   }

@@ -2,7 +2,7 @@
 // over 7 octaves from C1 (Hann filters, L1-normalised, sparsified at 1 %), computed octave by octave on a
 // signal halved in rate after each octave, as librosa does, then folded onto the 12 pitch classes and
 // max-normalised per frame. librosa decimates with soxr's HQ resampler; this uses a short Kaiser-windowed
-// half-band FIR, which moves the chroma by about 1e-4 (spikes/features).
+// half-band FIR, which moves the chroma by about 1e-4.
 
 import { hann, HOP, SR, TINY32 } from './dsp';
 import { ComplexFft, realFft } from './fft';

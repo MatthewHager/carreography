@@ -17,14 +17,6 @@ type Chs = number | readonly number[];
 const list = (chs: Chs): readonly number[] => (typeof chs === 'number' ? [chs] : chs);
 
 export class Car {
-  readonly kind: 'modely' | 'cybertruck';
-  readonly name: string;
-  readonly x: number;
-  readonly nFrames: number;
-  readonly step: number;
-  readonly juniper: boolean;
-  /** A Model X: falcon doors (motors.ts). */
-  readonly falcon: boolean;
   readonly frames: Uint8Array;
   readonly closureCounts = new Map<number, number>();
   /** Spans [t0, t1] in which the windows must not move (a Model X's doors are moving). */
@@ -33,15 +25,18 @@ export class Car {
    * 0.35 s or more glows up and fades out instead of snapping. */
   soft: [number, number, number] | null = null;
 
-  constructor(kind: 'modely' | 'cybertruck', name: string, x: number, nFrames: number, step: number, juniper = false,
-    falcon = false) {
-    this.kind = kind;
-    this.name = name;
-    this.x = x;
-    this.nFrames = nFrames;
-    this.step = step;
-    this.juniper = juniper;
-    this.falcon = falcon;
+  constructor(
+    readonly kind: 'modely' | 'cybertruck',
+    readonly name: string,
+    /** Place in the line, 0 on the crowd's left. A lineup's cars are always in this order. */
+    readonly x: number,
+    readonly nFrames: number,
+    readonly step: number,
+    /** A 2025+ Model Y: what a Model Y shows on its signature strips and fogs goes to its light bar (lamps.ts). */
+    readonly juniper: boolean,
+    /** A Model X: falcon doors (motors.ts). */
+    readonly falcon: boolean,
+  ) {
     this.frames = new Uint8Array(nFrames * C.N_CHANNELS);
   }
 

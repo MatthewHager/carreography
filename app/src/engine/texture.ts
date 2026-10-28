@@ -1,5 +1,5 @@
 // Read the music the way a player would: notes become events (a key press or a chord), and
-// each stretch gets a texture: a single-note run, chords, a trill, a held pedal, an arrival.
+// each stretch gets a texture: a single-note run, chords, a trill, an arrival.
 //
 // Event fields (one entry per onset group):
 //   t, dur, low, high (midi), top (melodic pitch), amp,
@@ -98,15 +98,16 @@ export function groupEvents(notes: readonly (readonly number[])[]): Events {
   return { t, dur, low, high, top, amp, kind, trill, arrival, density, phrase: [] };
 }
 
-/** Texture taxonomy: label every event with the kind of passage it belongs to.
+/** Texture taxonomy: label every event with the kind of passage it belongs to. A phrase starts where the
+ * texture turns to chords, an arrival or a trill, or away from chords or a trill (phrases.ts).
  *
- *  run_up / run_down  fast single notes moving mostly one way      -> line sweeps across the stage
- *  zigzag             fast single notes leaping back and forth     -> left/right strobing
- *  trill              rapid alternation of two neighbouring notes  -> shimmer
- *  chords             mostly 3+ voice events                       -> blocks of light
- *  arrival            strong chord landing after a run or a gap    -> everything, then release
- *  climax             loud tier with dense notes                   -> keyboard plus bass and chases
- *  melody             everything else                              -> keyboard
+ *  run_up / run_down  fast single notes moving mostly one way
+ *  zigzag             fast single notes leaping back and forth
+ *  trill              rapid alternation of two neighbouring notes
+ *  chords             mostly 3+ voice events
+ *  arrival            strong chord landing after a run or a gap
+ *  climax             loud tier with dense notes
+ *  melody             everything else
  *  `tierAt(t)` gives the intensity tier so climax can be told from an ordinary run. */
 export function labelPhrases(ev: Events, tierAt: (t: number) => number): Events {
   const n = ev.t.length;

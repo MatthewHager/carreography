@@ -1,15 +1,14 @@
-// Music analysis on the show's frame grid.
-//
-// Produces the musical events the choreography reacts to:
+// Music analysis on the show's frame grid: what the choreography reacts to.
 //   bass      low-frequency hits (kick, timpani, low brass, organ pedal)
 //   highs     bright transients (cymbals, xylophone, string attacks)
 //   hits      the strongest accents in the whole piece
-//   beats / downbeats, tempo-following
+//   beats / downbeats, tempo-following (the neural tracker's, where its grid is steady)
 //   intensity per frame 0..1: loudness weighted so the show builds across the piece
+//   tier      per frame 0..3: intensity in four steps
 //   build     per frame: inside a crescendo (energy rising steadily), with its 0..1 progress
-//
-// The browser's port of lightshow/audio.py. It has no source separation, so there is no stems branch:
-// beats, kicks and hats come from the full mix, as Python does for a song without stems.
+//   events    the transcribed notes grouped into key presses and chords (texture.ts)
+//   sections  the form map (form.ts)
+// Everything comes from the full mix: there is no source separation.
 
 import type { Analysis } from '../analysis';
 import { analyzeForm } from '../form';
@@ -23,8 +22,6 @@ import {
   SR,
 } from './dsp';
 
-export { HOP, SR };
-
 const f32 = Math.fround;
 
 interface NeuralBeats {
@@ -34,7 +31,6 @@ interface NeuralBeats {
 
 interface AnalyzeOptions {
   stepMs: number;
-  maxTier?: number;
   /** basic-pitch notes: rows of (start s, end s, midi pitch, amplitude 0..1), sorted by start */
   notes: number[][];
   /** the neural beat tracker's grid (beat-this), if it ran */
@@ -74,7 +70,7 @@ function bandOnsets(melDb: Float32Array, T: number, r0: number, r1: number, delt
   return frames.map((f, i) => [framesToTime(f), clip(f32(f32(s[i] - lo32) / span), 0, 1)]);
 }
 
-/** Python's _stabilize: runs shorter than `minLen` take the value before them. */
+/** Runs shorter than `minLen` take the value before them, so a level never flickers. */
 function stabilize(level: ArrayLike<number>, minLen: number): number[] {
   const out = Array.from(level);
   let i = 0;
@@ -95,7 +91,7 @@ function gather32(env: Float32Array, frames: ArrayLike<number>, start = 0, by = 
 
 /** The analysis of `y` (mono, 22050 Hz samples) on a grid of `stepMs` frames. */
 export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
-  const sr = SR, maxTier = opts.maxTier ?? 3;
+  const sr = SR;
   const duration = y.length / sr;
   const step = opts.stepMs / 1000.0;
   const nFrames = Math.ceil(duration / step);
@@ -173,8 +169,7 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   const compression = clip((16 - dynRange) / 10, 0, 1);
   const wide = [0.30, 0.55, 0.80], flat = [0.10, 0.30, 0.60];
   const cuts = quantiles(intensity, wide.map((w, i) => w + (flat[i] - w) * compression));
-  const tier = stabilize(intensity.map((v) => searchsorted(cuts, v, 'right')), Math.trunc(3.0 / step))
-    .map((v) => Math.min(v, maxTier));
+  const tier = stabilize(intensity.map((v) => searchsorted(cuts, v, 'right')), Math.trunc(3.0 / step));
 
   // --- Builds: energy rising for 4 s or more ---
   const slow = smooth(loud, 3.0);
@@ -198,8 +193,6 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
 
   // --- Form map: sections, repeats, arc ceilings, per-section tempo ---
   const sections = analyzeForm(y, intensity, step, duration, spec);
-  // a calm-only show (e.g. Ave Maria) caps the arc too
-  for (const sec of sections) sec.ceiling = Math.min(sec.ceiling, maxTier);
   let secBeats: number[][] = [];
   const toFrames = (ts: number[]) => ts.map((t) => Math.min(Math.trunc((t * sr) / HOP), fullEnv.length - 1));
   for (const sec of sections) {
@@ -252,6 +245,6 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   return {
     duration, nFrames, step, tempo, beats, downbeats, bass, highs, hits, intensity, build, tier,
     loudFast, events, pitchLo, pitchHi, beatScore, sections,
-    pulseEnv: Array.from(fullEnv), pulseHop: HOP / SR, lyricWords: null,
+    pulseEnv: Array.from(fullEnv), pulseHop: HOP / SR,
   };
 }

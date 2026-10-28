@@ -1,5 +1,5 @@
 // Every lineup letter makes a show within Tesla's rules: the closure command limits, and on a Model X
-// the falcon doors' gesture with the windows still while the doors move. Uses one of the Python
+// the falcon doors' gesture with the windows still while the doors move. Uses one of the frozen
 // analyses in cache/bridge (see bridge.test.ts); without them it's skipped.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';

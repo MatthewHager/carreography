@@ -1,35 +1,18 @@
 // The move library: whole-stage choreography for one phrase at a time, seen from the front.
 //
 // Stage, left to right as the crowd sees it: left Model Y (two sides), Cybertruck (two headlight
-// sides plus a continuous 60-LED bar), right Model Y (two sides) — six slots and a bar.
+// sides plus a continuous 60-LED bar), right Model Y (two sides) - six slots and a bar. In another
+// lineup "the truck" is the centre Cybertruck and "the Ys" are the other cars (centreTruck, sides).
 //
-//   keyboard    lowest note on the left, highest on the right, one flash per note (the phrase's own
-//               pitch range is stretched across the stage, so every phrase uses every car)
-//   lr_notes    zigzag figuration: notes above the phrase's middle hit the right Y, below hit the
-//               left Y, the truck's bar tracks the pitch
-//   lr_beat     left Y / right Y alternate on the beat; notes only tick on the truck bar
-//   rotation    left, centre, right, left... one car per note
-//   mirror      low notes light both Ys together, high notes light the truck (symmetry)
-//   out_in      a crescendo: the lit region grows from the outer corners toward the truck, which
-//               pops at the end
-//   in_out      the reverse: from the truck outward
-//   meter       loudness: the truck bar fills from the centre with the volume, the Ys join as it rises;
-//               notes tick as comets
-//   pulse       slow notes: each held for its length with a soft release
-//   block       chords: every slot the chord spans, held
-//   all_on      a beat of black, then everything, released with a ramp
-//   shimmer     trills
-//   motif       the Toccata's mordent-and-run: quick notes on the truck, the run sweeps the stage,
-//               the landing note holds on the car it lands on while every interior glow
-//
-// A line-by-line port of lightshow/moves.py: the same analysis gives the same frames.
+// What each move looks like is in catalog.ts (and MOVES.md); the tables at the end (UNISON, SIDE,
+// CENTRE) are how the choreographer finds a move by its name.
 
 import type { Analysis, Events, Phrase } from './analysis';
 import type { Car, Side } from './car';
 import * as C from './channels';
 import {
-  arange, argmin, at, clip, cumsum, diff, linspace, mean, median, pymod, pyRound, quantile, round, roundTo, searchsorted,
-  sum,
+  arange, argmin, at, clip, cumsum, diff, linspace, mean, median, pymod, pyRound, quantile, round, roundTo,
+  searchsorted, sum,
 } from './np';
 import { barLen, beatLen } from './tempo';
 import { tierAt } from './arc';
@@ -57,12 +40,12 @@ function rows(n: number, fn: (f: number, k: number) => number, w = BAR): Rows {
   return out;
 }
 
-/** The same row n times (np.repeat(row[None, :], n, 0)). */
+/** The same row n times. */
 function repeatRow(row: Float64Array, n: number): Rows {
   return Array.from({ length: Math.max(0, n) }, () => row);
 }
 
-/** Each frame's value across the whole bar (np.repeat(env[:, None], BAR, 1)). */
+/** Each frame's value across the whole bar. */
 function repeatCol(env: ArrayLike<number>, w = BAR): Rows {
   return Array.from({ length: env.length }, (_, f) => new Float64Array(w).fill(env[f]));
 }
@@ -936,7 +919,7 @@ function grid(an: Analysis, ph: Span, kind: 'downbeats' | 'beats' = 'downbeats')
       if (g.length === 0) g = [ph.t0];
     }
   }
-  const pace = an.pace as number | null | undefined;   // calm: every 4th beat, groove: every 2nd (mood.py)
+  const pace = an.pace as number | null | undefined;   // calm: every 4th beat, groove: every 2nd (mood.ts)
   if (pace && kind === 'beats' && g.length > 1 && pace > median(diff(g)) * 1.25) g = Array.from(pacedGrid(g, pace));
   return g;
 }
@@ -964,7 +947,7 @@ function subGrid(an: Analysis, div = 4): Float64Array {
 }
 
 /** `t` moved to the nearest sixteenth (1/div beat) of the performer-following beat map
- * (tempo.py), and from there onto a note that was actually played, if one starts within an
+ * (tempo.ts), and from there onto a note that was actually played, if one starts within an
  * eighth of that subdivision (at most 40 ms) - continuous quantization: the grid bends with the
  * tempo, and the light lands on the real attack rather than on the theoretical one. */
 export function snap(an: Analysis, t: number, div = 4): number {
@@ -1174,7 +1157,7 @@ function yWink(ys: Car[], an: Analysis, ph: Phrase) {
 
 // --- Round four: whole-lineup collaboration on steady beats ---------------------------------------
 
-/** order + order[-2:0:-1]: the ping-pong order over the lineup. */
+/** The lineup there and back, without repeating the ends: left, centre, right, centre. */
 function pingPongOrder(order: Car[]): Car[] {
   const seq = [...order];
   for (let i = order.length - 2; i >= 1; i--) seq.push(order[i]);
@@ -1574,7 +1557,7 @@ function crossing(cars: Car[], an: Analysis, ph: Phrase) {
     const times = qSteps(an, d, span, n);
     for (let s = 0; s < n; s++) {
       const t = times[s];
-      // a Python set {s, n-1-s}: two different slots, lit in either order
+      // slot s and its mirror image
       for (const j of new Set([s, n - 1 - s])) {
         const [car, side] = slots[j];
         car.light([...car.accents(side), ...car.heads(side)], t, t + per * 1.15);

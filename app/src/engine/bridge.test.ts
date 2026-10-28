@@ -1,7 +1,14 @@
-// The port's ground truth: every song exported by tools/export_bridge.py is choreographed here and
-// compared frame by frame with what the Python choreographer made from the same analysis. The
-// exports describe copyrighted recordings, so they live in cache/ (not in the repository); without
-// them this test is skipped.
+// The safety net for every change to the choreographer: the shows the Python version made (tag
+// python-final) must come out of this code byte for byte.
+//
+// cache/bridge/ at the repository root holds them, one folder per show (a song, or a song@lineup):
+// analysis.json, what the Python listening side heard in the song, with the song's name, lineup, style
+// and driver; and each car's frames as the Python choreographer wrote them (<car folder>.bin).
+// tools/export_bridge.py wrote them at tag python-final and they never change. They describe
+// copyrighted recordings, so they stay on the machine that made them, out of the repository; without
+// them this test (and vehicles.test.ts's show) is skipped.
+//
+// A change that moves a single byte fails here, naming the first frame and channel that differ.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

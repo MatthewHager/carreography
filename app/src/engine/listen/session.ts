@@ -1,5 +1,5 @@
 // ONNX Runtime for the listening models. The WebGPU build of ORT: it runs on the GPU when there is one
-// and on WASM otherwise (the default JSEP build gave wrong beat logits on WebGPU in the spike). Its
+// and on WASM otherwise (the default JSEP build gave wrong beat logits on WebGPU). Its
 // .wasm is a Vite asset, so a build under any base finds it; ORT's own threads need cross-origin
 // isolation, which GitHub Pages can't give, so it always runs one thread per session.
 

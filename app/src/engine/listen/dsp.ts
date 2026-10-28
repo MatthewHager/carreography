@@ -1,7 +1,7 @@
-// The librosa 0.11 subset the analysis uses (sr 22050, hop 512, n_fft 2048), ported from the spike that
-// checked it against librosa (spikes/features/lib/port.js). Matrices are row-major (rows x T) typed
-// arrays. librosa keeps its spectrograms and onset envelopes in float32, and the thresholds that pick
-// onsets and beats see float32 values, so those are rounded with Math.fround where numpy would.
+// The librosa 0.11 subset the analysis uses (sr 22050, hop 512, n_fft 2048), checked against librosa
+// when it was written. Matrices are row-major (rows x T) typed arrays. librosa keeps its spectrograms
+// and onset envelopes in float32, and the thresholds that pick onsets and beats see float32 values, so
+// those are rounded with Math.fround where numpy would.
 
 import { median, median32, mean32, round, sum32 } from '../np';
 import { realFft } from './fft';
@@ -69,13 +69,13 @@ function melBasis(nMels: number, fmax: number, sr = SR, nFft = N_FFT): SparseRow
 
 export interface Spectrum {
   T: number;
-  mel96: Float32Array | null;    // (96 x T) power, fmax 8000 (audio.py's melspectrogram)
+  mel96: Float32Array | null;    // (96 x T) power, fmax 8000 (the onsets and beats in audio.ts)
   mel128: Float32Array;          // (128 x T) power, fmax sr/2 (librosa's default, for mfcc and beat_track(y))
   rms: Float32Array | null;      // feature.rms
   tuning: number;                // estimate_tuning(bins_per_octave=36), as chroma_cqt estimates it
 }
 
-/** Everything audio.py and form.py read off the n_fft 2048 / hop 512 STFT (centered, zero padded), in one
+/** Everything audio.ts and form.ts read off the n_fft 2048 / hop 512 STFT (centered, zero padded), in one
  * pass. `full: false` gives only mel128 (beat tracking a section). */
 export function spectrum(y: Float32Array, full = true): Spectrum {
   const nFft = N_FFT, hop = HOP, half = nFft / 2, nb = half + 1;

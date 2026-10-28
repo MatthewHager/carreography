@@ -52,14 +52,14 @@ interface Options {
 export function choreograph(an: Analysis, opts: Options = {}): Car[] {
   const { layout = 'YCY', name = null, style = null, driver = null } = opts;
   const cars = makeLineup(layout, an.nFrames, an.step);
-  const words = an.lyricWords;
-  // LRCLIB's lines (a song dropped into the browser) when there are no Whisper words (the Python analyses)
-  const sung = !(words && words.length) && an.lyricLines?.length ? an.lyricLines : null;
-  const phrases = segment(an.events, words && words.length ? LY.lines(words).map((l) => l[0])
-    : sung ? sung.map((l) => l.t) : null);
+  // a sung line starts a phrase: LRCLIB's lines, or the word times in the frozen Python analyses (lyrics.ts)
+  const words = an.lyricWords?.length ? an.lyricWords : null;
+  const sung = !words && an.lyricLines?.length ? an.lyricLines : null;
+  const cutsAt = words ? LY.lines(words).map((l) => l[0]) : sung ? sung.map((l) => l.t) : null;
+  const phrases = segment(an.events, cutsAt);
   an.phrases = phrases;
   const cues: Cues = name ? CUE.resolve(name, an) : [];
-  if (words && words.length && name) cues.push(...LY.lyricCues(name, words));
+  if (words && name) cues.push(...LY.lyricCues(name, words));
   else if (sung) cues.push(...LY.lineCues(sung, an));
   an.cuePeaks = cues.filter(([a]) => a === 'peak').map(([, c]) => [c.t0, c.build!, c.hold ?? null, c.final ?? false]);
   for (const [a, c] of cues) {                     // ceilings are needed before the plan is chosen
@@ -167,7 +167,7 @@ function louderAtEnd(an: Analysis, ph: Phrase): boolean {
   const [f0, f1] = frameSpan(an, ph);
   const e = an.intensity.slice(f0, f1);
   const n = e.length;
-  // e[-len(e) // 4:] is the last ceil(n / 4) frames, e[:len(e) // 4] the first floor(n / 4)
+  // the last quarter is ceil(n / 4) frames, the first floor(n / 4)
   return n > 25 && mean(e, n - Math.ceil(n / 4)) > mean(e, 0, Math.floor(n / 4)) * 1.35;
 }
 
@@ -227,7 +227,7 @@ function formationsBase(ph: Phrase, an: Analysis): Formation[] {
   return cands;
 }
 
-/** A stable sort by a numeric key (Python's sorted(key=...)). */
+/** A stable sort by a numeric key. */
 function sortBy<T>(xs: T[], k: (x: T) => number): T[] {
   return xs.map((x, i) => [k(x), i, x] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((t) => t[2]);
 }
@@ -284,7 +284,8 @@ function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
     const letter = sec ? sec.letter : 'A';
     if (!sectionLean.has(letter)) sectionLean.set(letter, sectionLean.size % 2 ? 'split' : 'unison');
     let choice = buildFor(an, ph, phrases, plan);
-    if (choice === null && sec && sec.repeatOf >= 0 && sectionPlans.has(letter) && !SELF_PACED.includes(ph.gesture)) {
+    const replay = sec !== null && sec.repeatOf >= 0 && sectionPlans.has(letter) && !SELF_PACED.includes(ph.gesture);
+    if (choice === null && replay) {
       const k = countIf(phrases.slice(0, phIndex), (q) => sectionAt(secs, q.t0) === sec);
       choice = callback(an, ph, sec, sectionPlans.get(letter)!, k, plan);
     }
@@ -326,15 +327,18 @@ function buildFor(an: Analysis, ph: Phrase, phrases: Phrase[], plan: Formation[]
   const louder = louderAtEnd(an, ph) && ph.t1 - ph.t0 >= 4;
   const tops = ev.top.slice(ph.a, ph.b);
   const climb = slope(tops) * tops.length;
-  const lands = ev.dur[ph.b - 1] >= 0.8 || (ph.b < ev.t.length && ev.kind[ph.b] >= 2 && ev.t[ph.b] - ph.t1 < 0.6);
+  const lands = ev.dur[ph.b - 1] >= 0.8
+    || (ph.b < ev.t.length && ev.kind[ph.b] >= 2 && ev.t[ph.b] - ph.t1 < 0.6);
   const musical = climb >= 12 && lands && ph.t1 - ph.t0 >= 3;
   const cuePeak = (an.cuePeaks ?? []).some(([t]) => ph.t0 < t && t <= ph.t1 + 0.5);
   const nBuilds = countIf(plan, (f) => CAT.BUILDS.has(f[1]));
   const room = nBuilds < 1 + an.duration / 50.0;       // about one build per 50 s of song at most
   const spaced = ph.t0 - lastBuild(plan, phrases) >= (musical ? 12 : 20);
-  if (!((ph.mood !== 'calm' && room && (louder || musical) && spaced) || (cuePeak && ph.t1 - ph.t0 >= 3))) return null;
+  const crescendo = ph.mood !== 'calm' && room && (louder || musical) && spaced;
+  if (!crescendo && !(cuePeak && ph.t1 - ph.t0 >= 3)) return null;
   const kinds = ['out_in', 'accelerando', 'fill_stage', 'implode', ...(an.beatScore >= 2.0 ? ['bounce_build'] : [])];
-  if (an.beatScore < 2.0 || an.driver === 'organ') kinds.splice(kinds.indexOf('accelerando'), 1);   // a club strobe-roll; organ climbs get fills
+  // accelerando is a club strobe-roll: organ climbs get fills
+  if (an.beatScore < 2.0 || an.driver === 'organ') kinds.splice(kinds.indexOf('accelerando'), 1);
   return ['unison', cuePeak ? 'out_in' : kinds[nBuilds % kinds.length]];
 }
 
@@ -344,11 +348,14 @@ function callback(an: Analysis, ph: Phrase, sec: Section, earlier: Formation[], 
   : Formation | null {
   const secs = an.sections;
   const beatOk = an.beatScore >= 2.0;
-  let choice = escalate(earlier[k % earlier.length], Math.max(0, sec.ceiling - secs[sec.repeatOf].ceiling), beatOk);
-  if (CAT.BUILDS.has(choice[1])) return null;          // builds are placed by the crescendo detector, never replayed
+  const steps = Math.max(0, sec.ceiling - secs[sec.repeatOf].ceiling);
+  let choice = escalate(earlier[k % earlier.length], steps, beatOk);
+  if (CAT.BUILDS.has(choice[1])) return null;          // builds are placed by the crescendo detector only
   if (sec.ceiling >= 3 && allIn(choice, QUIET)) {      // a climax never replays a quiet move
     choice = escalate(choice, 1, beatOk);
-    if (allIn(choice, QUIET)) choice = ['unison', same(plan[plan.length - 1], ['unison', 'lr_notes']) ? 'rotation' : 'lr_notes'];
+    if (allIn(choice, QUIET)) {
+      choice = ['unison', same(plan[plan.length - 1], ['unison', 'lr_notes']) ? 'rotation' : 'lr_notes'];
+    }
   }
   // A callback must still suit this moment's mood; and from the third hearing of a section on, it is
   // varied - a sibling move on the same grid that fits the mood - so the audience recognises the
@@ -404,7 +411,8 @@ function fresh(an: Analysis, ph: Phrase, phrases: Phrase[], plan: Formation[], l
   // something between them - they carry the show.
   if (ceilingAt(an, ph.t0) >= 2) {
     const recentLively = plan.filter((_, i) => ceilingAt(an, phrases[i].t0) >= 2).slice(-9);
-    const share = countIf(recentLively, (h) => h[0] === 'unison' && COLLAB.has(h[1])) / Math.max(1, recentLively.length);
+    const collab = countIf(recentLively, (h) => h[0] === 'unison' && COLLAB.has(h[1]));
+    const share = collab / Math.max(1, recentLively.length);
     if (share < 0.6 && !(choice[0] === 'unison' && COLLAB.has(choice[1]))) {
       const alt = ordered.map(([, c]) => c).filter((c) => c[0] === 'unison' && COLLAB.has(c[1]) && !isRecent(c));
       if (alt.length) choice = alt[0];
@@ -602,9 +610,9 @@ function applyColorCues(cars: Car[], cues: Cues) {
   }
 }
 
-/** Band songs: the kit is the rhythm. Kicks (low onsets of the drums stem) hit every car's headlights,
- * snares (strong high onsets) hit both Ys' accents mirrored, hats (weak high onsets) tick the markers -
- * all gated by the section's ceiling so quiet sections stay quiet. */
+/** Band songs: the kit is the rhythm. Kicks (strong low onsets) thump the fogs, snares (strong high
+ * onsets) flash the side cars' accents, hats (weak high onsets) tick every car's markers - all gated by
+ * the section's ceiling and the mood, so quiet sections stay quiet. */
 function drums(cars: Car[], an: Analysis) {
   const ys = M.sides(cars);
   for (const [t, strength] of an.bass) {
@@ -689,6 +697,8 @@ function tidy(car: Car) {
   }
 }
 
+/** The cabins glow with the intensity tier, purple to orange, flash on the beats and the accents when
+ * the music is lively, and warm through each crescendo. */
 function interior(cars: Car[], an: Analysis) {
   const base: Record<number, [number[], number]> = { 0: [PURPLE, 0.3], 1: [PURPLE, 0.6], 2: [ORANGE, 0.6], 3: [ORANGE, 1.0] };
   const tiers = an.tier;
@@ -731,6 +741,8 @@ function finalBeat(an: Analysis, end: number): number | null {
   return strong.length ? strong[strong.length - 1] : null;
 }
 
+/** The ending: everything on at the last strong hit, then a 2 s fade to dark (the truck's bars fade
+ * with it). */
 function finale(cars: Car[], an: Analysis) {
   const end = an.duration;
   const late = an.hits.filter((h) => h < end - 1.5);

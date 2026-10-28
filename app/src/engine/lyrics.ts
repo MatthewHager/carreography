@@ -1,7 +1,12 @@
-// Lyric-driven cues. For the sung songs the words are the choreographer's script: a line of lyric is
-// a phrase, and certain words call specific pictures - "eyes glowing red" turns every interior red,
-// "scream" is lightning, "pumpkin" goes orange, a chant of "Halloween, Halloween..." pings across
-// the cars.
+// Lyric-driven moments: a sung line starts a phrase, and certain words call specific pictures - a
+// colour word tints every interior, "scream" is lightning, a chant pings across the cars.
+//
+// Two sources of timing, two sets of rules:
+//   lines  (lineCues, below) a song dropped into the app: LRCLIB's lines, timed by line only, and
+//          general rules that work for any song
+//   words  (lyricCues) Whisper's word times and per-song rules (LYRIC_RULES). Only the analyses the
+//          Python version exported (cache/bridge, tag python-final) carry words; the app never does.
+//          They are kept so that bridge.test.ts's shows stay byte-identical.
 
 import type { Analysis, LyricLine } from './analysis';
 import type { Resolved } from './cues';
@@ -125,9 +130,7 @@ export function lyricCues(name: string, ws: Word[] | null): [string, Resolved][]
 }
 
 // ---- Any song: lyric moments from timed lines ----------------------------------------------------
-// The per-song rules above need Whisper's word times, which only the Python analyses have. A song
-// dropped into the browser gets LRCLIB's lines, timed by line only, and the general moments below: the
-// show reacts to what a line says, from the line's start to its end.
+// The show reacts to what a line says, from the line's start to its end.
 
 const BLUE = [0, 60, 255];
 const GOLD = [255, 170, 0];

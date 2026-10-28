@@ -51,7 +51,7 @@ const addSpent = (spent: Spent, c: Car, m: number, k: number) => spent.get(c)!.s
 
 const used = (c: Car, ch: number) => c.closureCounts.get(ch) ?? 0;
 
-/** True if any frame in [f0, f1) of the channel is non-zero (frames[f0:f1, ch].any()). */
+/** Whether any frame in [f0, f1) of the channel carries a command. */
 function anyIn(car: Car, ch: number, f0: number, f1: number): boolean {
   const end = Math.min(f1, car.nFrames);
   for (let f = Math.max(f0, 0); f < end; f++) if (car.get(f, ch)) return true;
@@ -269,7 +269,7 @@ function lids(cars: Car[], an: Analysis): void {
   const accepted: number[] = [];                                // shared: the cars move as one lineup
   const busyBy = new Map<Car, [number, number][]>(cars.map((c) => [c, []]));
 
-  /** Per-car (open_at, stop_at|None, close_at) for one crescendo. Every figure is a
+  /** Per car [open at, stop at or null, close at] for one crescendo. Every figure is a
    * cross-car one rather than three lids rising together:
    *   relay      one lid lifts part way and Stops; as it drops the next lifts; the last rises
    *              all the way onto the peak (crowd-left to right, then right to left next time)
@@ -319,7 +319,7 @@ function lids(cars: Car[], an: Analysis): void {
     return plan;
   };
 
-  /** Per-car (open_at, None, close_at, (dance_from, dance_to)): every lid opens fully and
+  /** Per car [open at, null, close at, [dance from, dance to]]: every lid opens fully and
    * lands on the peak one beat after its neighbour (left to right, then right to left the
    * next time), dances through the loud stretch, then closes in the same order. */
   const dancePlan = (k: number, peak: number, holdUntil: number): LidPlan => {
@@ -426,7 +426,7 @@ function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
         pulse = sc;
         continue;
       }
-      // max(cands, key=(ceiling, regularity * length)): the first of equal keys wins
+      // the highest ceiling, then the most regular beat over the longest time; the first of equals wins
       const ka = sc.ceiling, kb = pulse.ceiling;
       if (ka > kb || (ka === kb && regularity(sc) * (sc.t1 - sc.t0) > regularity(pulse) * (pulse.t1 - pulse.t0))) {
         pulse = sc;
@@ -596,7 +596,7 @@ function gaps(mask: ArrayLike<number | boolean>, an: Analysis, livelyOnly: boole
     const need = (b - a) * step / (lively ? STILL_LIVELY_S : STILL_CALM_S);
     out.push([need, a * step, b * step, lively]);
   }
-  // sorted(out, reverse=True): tuples compared element by element
+  // biggest need first; equal needs by the later start, then the later end
   return out.sort((p, q) => {
     for (let i = 0; i < 4; i++) {
       const x = Number(p[i]), y = Number(q[i]);
@@ -703,7 +703,7 @@ function finishWindows(cars: Car[], an: Analysis): void {
  *   alternate             every other mirror, then the rest as they unfold
  *   car_alternate         the Ys fold, the truck folds as they unfold
  *   together              all six at once
- * With free_only, a mirror that is already moving nearby sits this one out. */
+ * With freeOnly, a mirror that is already moving nearby sits this one out. */
 function mirrorGesture(
   an: Analysis, line: Line, spent: Spent, t: number, pat: string, freeOnly = false,
 ): [number, number] {
@@ -810,7 +810,7 @@ function fillStill(cars: Car[], an: Analysis, line: Line, spent: Spent, scale = 
 
 
 /** (dance_from, dance_to) for the charge port's rainbow: the most exciting stretch of up to
- * PORT_DANCE_MAX_S (loud sections count double), starting on a beat; None for a song that never
+ * PORT_DANCE_MAX_S (loud sections count double), starting on a beat; null for a song that never
  * gets lively (Ave Maria). */
 function portWindow(an: Analysis): [number, number] | null {
   const exc = new Float64Array(an.tier.length);
