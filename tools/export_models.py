@@ -13,7 +13,7 @@
     uv run tools/export_models.py OUT_DIR
 
 - beat-this (CPJKU, MIT): the "final0" checkpoint, exported without its log-mel front end (the app
-  computes that itself, app/src/engine/listen/beats.ts), with fp16 weights cast back to fp32 at load,
+  computes that itself, src/engine/listen/beats.ts), with fp16 weights cast back to fp32 at load,
   which halves the download and keeps the arithmetic fp32. Checked against PyTorch before it's written.
 - basic-pitch (Spotify, Apache-2.0): its own nmp.onnx from its v0.3.0 release, checked by its hash.
 
@@ -23,7 +23,7 @@ never enter the git history. To publish new ones:
 
     gh release upload models OUT_DIR/*.onnx --clobber
 
-To use them while developing, make OUT_DIR app/public/models.
+To use them while developing, make OUT_DIR public/models.
 """
 
 import hashlib

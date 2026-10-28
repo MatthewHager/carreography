@@ -7,7 +7,7 @@ written for it.
 
 ## Develop
 
-The app is in `app/`: Vite, React and TypeScript, with shadcn/ui and three.js. You need Node.js 24.
+The repository is the app: Vite, React and TypeScript, with shadcn/ui and three.js. You need Node.js 24.
 
 ```bash
 cd app
@@ -23,8 +23,8 @@ The listening models and Tesla's car models aren't in the repository. Download t
 once (with the [GitHub CLI](https://cli.github.com/)), as the site build does:
 
 ```bash
-gh release download models --dir app/public/models --pattern "*.onnx"
-gh release download car-models --dir app/public/models/tesla-app
+gh release download models --dir public/models --pattern "*.onnx"
+gh release download car-models --dir public/models/tesla-app
 ```
 
 **Never commit recordings, Tesla's files or anything in `cache/`.** Keep songs for trying shows in
@@ -34,18 +34,18 @@ gh release download car-models --dir app/public/models/tesla-app
 
 | Folder | What |
 |---|---|
-| `app/src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. A port of the Python generator, module for module: `choreo.ts` (the pipeline and the move chooser), `moves.ts` (every move), `catalog.ts` (the move catalogue), `car.ts` (one car's frames and lamp groups), `vehicles.ts` (the lineup letters), `pulse.ts` (the beat layer), `motors.ts` (the closures), `lamps.ts` (the 2025+ Model Y), `legato.ts`, `cues.ts`, `lyrics.ts`, and the reading of the music (`texture.ts`, `form.ts`, `phrases.ts`, `mood.ts`, `tempo.ts`, `arc.ts`). |
-| `app/src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend), song tags, LRCLIB and lyric alignment. |
-| `app/src/viewer/` | The 3D preview (three.js), adapted from Tesla Lightshow Studio (AGPL-3.0): `core/` reads, writes and simulates show files, `car/appBody.ts` draws Tesla's app models. |
-| `app/src/app/` | The page: the 3D stage, the panels, the worker that makes a show (`show.worker.ts`), the WAV and the ZIP. |
-| `app/src/components/ui/` | shadcn/ui components, as the shadcn CLI writes them. Don't edit them; restyle through the theme in `app/src/index.css`. |
+| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. A port of the Python generator, module for module: `choreo.ts` (the pipeline and the move chooser), `moves.ts` (every move), `catalog.ts` (the move catalogue), `car.ts` (one car's frames and lamp groups), `vehicles.ts` (the lineup letters), `pulse.ts` (the beat layer), `motors.ts` (the closures), `lamps.ts` (the 2025+ Model Y), `legato.ts`, `cues.ts`, `lyrics.ts`, and the reading of the music (`texture.ts`, `form.ts`, `phrases.ts`, `mood.ts`, `tempo.ts`, `arc.ts`). |
+| `src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend), song tags, LRCLIB and lyric alignment. |
+| `src/viewer/` | The 3D preview (three.js), adapted from Tesla Lightshow Studio (AGPL-3.0): `core/` reads, writes and simulates show files, `car/appBody.ts` draws Tesla's app models. |
+| `src/app/` | The page: the 3D stage, the panels, the worker that makes a show (`show.worker.ts`), the WAV and the ZIP. |
+| `src/components/ui/` | shadcn/ui components, as the shadcn CLI writes them. Don't edit them; restyle through the theme in `src/index.css`. |
 | `tools/` | The two scripts that make the releases (below). |
 | `MOVES.md` | The move catalogue, generated from `catalog.ts`. |
 
 ## The bridge test
 
 The engine is a faithful port of the Python choreographer (tag `python-final`), and
-`app/src/engine/bridge.test.ts` proves it: it choreographs 24 shows (12 songs, some in several lineups)
+`src/engine/bridge.test.ts` proves it: it choreographs 24 shows (12 songs, some in several lineups)
 from the Python version's own analyses and compares every car's frames with the Python version's, byte
 for byte. `vehicles.test.ts` uses the same analyses to check every car letter against Tesla's motor
 limits.
@@ -61,7 +61,7 @@ cache, run it before and after; if you don't, say so in the pull request.
 
 ## Adding a move
 
-1. **Write it** in `app/src/engine/moves.ts` as a function `(cars, an, ph) => void`.
+1. **Write it** in `src/engine/moves.ts` as a function `(cars, an, ph) => void`.
    - `cars` is the lineup, crowd-left to right (`Car` objects); `an` is the analysis; `ph` is the phrase
      (`ph.t0`, `ph.t1`, and `ph.a` to `ph.b`, its notes in `an.events`).
    - Light lamps with the `Car` methods: `car.flash(car.heads('L'), t, 0.12)`,
@@ -98,14 +98,14 @@ What makes a move good:
 Tesla's channel map is the same for every car, but which lamps exist, which channels share an output, and
 what the motors do differ.
 
-1. **`app/src/engine/vehicles.ts`**: a letter, with the choreographer's body type, the folder name, a
+1. **`src/engine/vehicles.ts`**: a letter, with the choreographer's body type, the folder name, a
    label, and the app model the preview draws. Add the letter to the test in `vehicles.test.ts`.
-2. **`app/src/engine/car.ts`**: the lamp groups, if the car's lamps differ. Every move uses them.
-3. **`app/src/engine/lamps.ts`**: if the hardware differs from the channel names (like the 2025+ Model Y,
+2. **`src/engine/car.ts`**: the lamp groups, if the car's lamps differ. Every move uses them.
+3. **`src/engine/lamps.ts`**: if the hardware differs from the channel names (like the 2025+ Model Y,
    whose bar is driven by channels 4 and 6), translate the frames at the end.
-4. **`app/src/engine/motors.ts`**: travel times, and anything the car lacks or adds.
-5. **The preview**: a profile in `app/src/viewer/core/vehicles.ts`, and the car's Tesla app model in
-   `app/src/viewer/car/appBody.ts` (its rules map lamp meshes to channels and animation clips to closures)
+4. **`src/engine/motors.ts`**: travel times, and anything the car lacks or adds.
+5. **The preview**: a profile in `src/viewer/core/vehicles.ts`, and the car's Tesla app model in
+   `src/viewer/car/appBody.ts` (its rules map lamp meshes to channels and animation clips to closures)
    and in `tools/export_car_models.py`. Only Tesla's official models: no hand-built or approximated cars.
 
 ## The releases and the site
@@ -122,7 +122,7 @@ publish:
 Then `gh release upload <release> OUT_DIR/* --clobber`.
 
 `.github/workflows/pages.yml` builds the site on every push to `main`: it runs the tests, downloads both
-releases into `app/public/models/`, builds, and deploys `app/dist` to GitHub Pages at
+releases into `public/models/`, builds, and deploys `dist` to GitHub Pages at
 matthewhager.github.io/carreography/ (Vite's `base` is `/carreography/`). GitHub serves Pages from a
 free account's repository only once it's public.
 

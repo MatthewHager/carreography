@@ -5,8 +5,6 @@
       "name": "app",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
-        "--prefix",
-        "app",
         "run",
         "dev",
         "--",

@@ -36,7 +36,7 @@ Carreography is not affiliated with Tesla.
 
 ## The 3D preview
 
-`app/src/viewer/` is adapted from Tesla Lightshow Studio (AGPL-3.0-only), so the whole project is
+`src/viewer/` is adapted from Tesla Lightshow Studio (AGPL-3.0-only), so the whole project is
 AGPL-3.0. From the studio: `core/` (the FSEQ reader, the channel map, the byte encodings, the vehicle
 profiles and the simulation) and the scene code of its `CarScene.ts`, reworked into `rig.ts` and
 `viewer.ts` for a lineup, and the parking lot (`car/lot.ts`). Changes: lowered windows can dance, the
@@ -47,7 +47,7 @@ lights, and the wet-ground mirror is optional. The cars themselves are Tesla's m
 
 The shows were tuned on the twelve songs of a Halloween 2026 show for two Model Ys and a Cybertruck. They
 are not in the repository; several are commercial recordings. A file named as below gets that song's own
-cue sheet (`app/src/engine/cues.ts`).
+cue sheet (`src/engine/cues.ts`).
 
 | File name | Piece | Recording | Source |
 |---|---|---|---|

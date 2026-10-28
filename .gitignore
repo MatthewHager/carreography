@@ -1,9 +1,9 @@
 # The app's dependencies and build (GitHub Actions builds the site)
-app/node_modules
-app/dist
+node_modules
+dist
 
 # The analysis models and Tesla's car models: downloaded from the repository's releases, never committed
-app/public/models
+public/models
 
 # The frozen comparison with the Python version (bridge.test.ts): it describes copyrighted
 # recordings, so it stays on your machine

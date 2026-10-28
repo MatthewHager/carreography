@@ -1,24 +1,24 @@
 # Notes for coding agents
 
 Carreography turns a song into synchronized Tesla light shows (FSEQ files) for a lineup of 1–5 cars, in
-the browser. The app is in `app/` (Vite, React, TypeScript, shadcn/ui, three.js, ONNX Runtime Web) and is
+the browser. The repository is the app (Vite, React, TypeScript, shadcn/ui, three.js, ONNX Runtime Web),
 hosted on GitHub Pages. Humans: see [CONTRIBUTING.md](CONTRIBUTING.md). This file is the short version.
 
 ## Commands
 
 ```bash
-cd app && npm install                           # once
-cd app && npm run dev                           # http://localhost:5173/carreography/ (5173 is the owner's: use your own port)
-cd app && npx vitest run                        # the tests, including the bridge test when cache/bridge exists
-cd app && npx tsc -b && npx oxlint src          # type check and lint
-cd app && npm run build                         # the site, in app/dist/
-gh release download models --dir app/public/models --pattern "*.onnx"      # the listening models
-gh release download car-models --dir app/public/models/tesla-app           # Tesla's car models
+npm install                           # once
+npm run dev                           # http://localhost:5173/carreography/ (5173 is the owner's: use your own port)
+npx vitest run                        # the tests, including the bridge test when cache/bridge exists
+npx tsc -b && npx oxlint src          # type check and lint
+npm run build                         # the site, in dist/
+gh release download models --dir public/models --pattern "*.onnx"      # the listening models
+gh release download car-models --dir public/models/tesla-app           # Tesla's car models
 ```
 
 ## Where things are
 
-- `app/src/engine/`: the choreographer, a port of the Python generator at the tag `python-final`, module
+- `src/engine/`: the choreographer, a port of the Python generator at the tag `python-final`, module
   for module.
   - `vehicles.ts`: the lineup letters (`S`, `M`, `m`, `X`, `Y`, `y`, `B`, `L`, `C`), folder names and
     places.
@@ -32,15 +32,15 @@ gh release download car-models --dir app/public/models/tesla-app           # Tes
     `lyrics.ts` (moments), `lamps.ts` (2025+ Model Y output), `channels.ts` (Tesla's channel map and
     limits), `rng.ts` (numpy's generator, bit for bit).
   - `texture.ts`, `form.ts`, `phrases.ts`, `mood.ts`, `tempo.ts`, `arc.ts`: reading the music.
-- `app/src/engine/listen/`: decoding helpers, resampling, the librosa subset (`dsp.ts`, `cqt.ts`),
+- `src/engine/listen/`: decoding helpers, resampling, the librosa subset (`dsp.ts`, `cqt.ts`),
   `audio.ts` (the analysis), beat-this and basic-pitch (`beats.ts`, `notes.ts`) on the backend
   `infer.ts` picks, `tags.ts`, `lrclib.ts`, `align.ts`.
-- `app/src/app/`: the page (`App.tsx` is in `app/src/`), the show worker (`show.worker.ts`), `pipeline.ts`,
+- `src/app/`: the page (`App.tsx` is in `src/`), the show worker (`show.worker.ts`), `pipeline.ts`,
   the WAV and the ZIP.
-- `app/src/viewer/`: the 3D preview, AGPL code adapted from Tesla Lightshow Studio. The cars are Tesla's
+- `src/viewer/`: the 3D preview, AGPL code adapted from Tesla Lightshow Studio. The cars are Tesla's
   own models from the Tesla app only (`car/appBody.ts`, served from the `car-models` release). Don't add
   hand-built or approximated car models.
-- `app/src/components/ui/`: shadcn/ui as the CLI writes it. Don't edit; theme in `app/src/index.css`.
+- `src/components/ui/`: shadcn/ui as the CLI writes it. Don't edit; theme in `src/index.css`.
 - `tools/export_models.py`, `tools/export_car_models.py`: make the two releases (`uv run`).
 
 ## Invariants (don't break these)
@@ -61,8 +61,8 @@ gh release download car-models --dir app/public/models/tesla-app           # Tes
 - **Times come from the music** (`an.events`, `an.beats`, `an.downbeats`), never a fixed tempo. Lights
   lead the sound by one 20 ms frame (`LIGHT_LEAD_S` in `car.ts`).
 - **Official Tesla models only** in the preview, from the release; never committed.
-- **Never commit:** recordings (`songs/`, or any audio), Tesla's files (`app/public/models/`), anything in
-  `cache/`, `app/dist/`. `.gitignore` covers them; don't force-add.
+- **Never commit:** recordings (`songs/`, or any audio), Tesla's files (`public/models/`), anything in
+  `cache/`, `dist/`. `.gitignore` covers them; don't force-add.
 
 ## Adding things
 

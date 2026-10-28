@@ -1,7 +1,7 @@
 # How it works
 
 How a song becomes a light show for a lineup of one to five Teslas, all in the browser. The code is in
-`app/src/`. The choreographer (`engine/`) is a line-by-line TypeScript port of the Python generator this
+`src/`. The choreographer (`engine/`) is a line-by-line TypeScript port of the Python generator this
 project started as (kept at the tag `python-final`), and it still makes byte-identical shows from the same
 analysis (see [CONTRIBUTING.md](../CONTRIBUTING.md#the-bridge-test)).
 

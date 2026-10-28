@@ -4,7 +4,7 @@
 #     "tesla-model-extractor @ git+https://github.com/koenhendriks/tesla-model-extractor@v0.4.2",
 # ]
 # ///
-"""Tesla's own car models from the Tesla app, for the 3D preview (app/src/viewer/car/appBody.ts).
+"""Tesla's own car models from the Tesla app, for the 3D preview (src/viewer/car/appBody.ts).
 
     uv run tools/export_car_models.py ~/Downloads/Tesla_4.61.6-4647.apkm OUT_DIR
 
@@ -20,7 +20,7 @@ repository's "car-models" release (.github/workflows/pages.yml). To publish new 
 
     gh release upload car-models OUT_DIR/* --clobber
 
-To use them while developing, make OUT_DIR app/public/models/tesla-app.
+To use them while developing, make OUT_DIR public/models/tesla-app.
 """
 
 import os
