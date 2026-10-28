@@ -19,16 +19,17 @@
 //     frenzy    every beat plus the off-beats
 //
 // Builds and cadences own the whole stage while they play: the pulse drops out under a build (the
-// pull-back) and comes back full-size on the landing. Where the music has no clear pulse - rubato
-// organ, a free cadenza, Ave Maria - the layer backs off (downbeats only, or nothing at all).
+// pull-back) and comes back full-size on the landing. Where the pulse is unclear the layer backs off
+// (downbeats only, or nothing at all), and where the music flows (feel.ts) it isn't there at all.
 
 import type { Analysis, Phrase } from './analysis';
 import { BUILDS } from './catalog';
 import * as C from './channels';
 import type { Car } from './car';
+import { clarity, flowsAt } from './feel';
 import * as M from './moves';
 import { moodAt } from './mood';
-import { clip, diff, max, mean32, median, round, searchsorted } from './np';
+import { clip, diff, median, searchsorted } from './np';
 import { beatLen } from './tempo';
 
 const HEADS = [C.L_OUTER_MAIN, C.R_OUTER_MAIN, C.L_INNER_MAIN, C.R_INNER_MAIN];
@@ -47,33 +48,6 @@ interface Segment {
   t1: number;
   move?: string;
   mood?: string;
-}
-
-/**
- * How clearly the music beats here: pulse-envelope strength on the beats over its mean
- * (1 = no beat to speak of; a steady band groove is 3 and up). Measured over the phrase plus
- * `reach` seconds either side, so a two-beat phrase isn't judged on two samples.
- */
-export function clarity(an: Analysis, t0: number, t1: number, reach = 4.0): number {
-  t0 = Math.max(0.0, t0 - reach);
-  t1 = t1 + reach;
-  const env = an.pulseEnv;
-  const b: number[] = [];
-  for (const x of an.beats) if (x >= t0 && x < t1) b.push(x);
-  if (env === undefined || env === null || b.length < 3) return 1.0;
-  const hop = an.pulseHop ?? 512 / 22050;
-  const i0 = Math.trunc(t0 / hop);
-  const i1 = Math.max(Math.trunc(t0 / hop) + 1, Math.trunc(t1 / hop));
-  const w = Math.max(1, Math.trunc(round(0.03 / hop)));
-  const peaks: number[] = [];
-  for (const x of b) {
-    const i = clip(round(x / hop), 0, env.length - 1);
-    let m = -Infinity;
-    for (let k = Math.max(0, i - w); k < Math.min(env.length, i + w + 1); k++) if (env[k] > m) m = env[k];
-    peaks.push(m);
-  }
-  const on = mean32(peaks, 0, peaks.length);
-  return on / (mean32(env, Math.min(i0, env.length), Math.min(i1, env.length)) + 1e-9);
 }
 
 /** Beat index within its bar (0 = downbeat) for every tracked beat. */
@@ -103,14 +77,12 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): void {
   const beats = an.beats;
   if (beats.length < 4) return;
   const pos = position(an);
-  const capped = Math.trunc(max(an.tier)) <= 1;          // a song held quiet on purpose (Ave Maria)
-  const organ = (an.driver ?? '') === 'organ';
   for (const ph of segments(an, phrases)) {
     const move = ph.move ?? '';
     const parts = move.split(' → ');
     const name = parts[parts.length - 1].split('+')[0].trim();
     const mood = ph.mood ?? 'drive';
-    if (capped || OWNERS.has(name)) continue;      // a song held quiet, or a cadence that owns the stage
+    if (OWNERS.has(name) || flowsAt(an, ph.t0)) continue;      // a cadence that owns the stage, or no beat
     if (BUILDS.has(name)) {
       buildPulse(cars, ph, beats);
       continue;
@@ -119,7 +91,7 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): void {
     if (mood === 'calm') {
       // a quiet passage over a strong beat (a march under a soft verse): a small half-time
       // step on the inner beams - both Ys on 1, the truck on 3 - so the pulse never vanishes
-      if (clear >= 3.0 && !organ) {
+      if (clear >= 3.0) {
         for (let i = 0; i < beats.length; i++) {
           if (!(beats[i] >= ph.t0 && beats[i] < ph.t1 && (pos[i] === 0 || pos[i] === 2))) continue;
           const t = beats[i] - LEAD_S;
@@ -131,8 +103,6 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): void {
     let pattern: Record<number, string>;
     if (clear < 1.6) {                  // no clear beat here: downbeats only, and only when lively
       pattern = (mood === 'drive' || mood === 'frenzy') && clear >= 1.25 ? { 0: 'big' } : {};
-    } else if (organ) {                 // the organ: half-time, unless the music itself pounds every beat
-      pattern = mood === 'frenzy' || (mood === 'drive' && clear >= 3.0) ? PATTERN.drive : PATTERN.groove;
     } else if (mood === 'groove' && clear >= 3.0) {
       pattern = PATTERN.drive;          // a strong beat under a groove: every beat, light backbeats
     } else {
@@ -234,10 +204,9 @@ function segments(an: Analysis, phrases: Phrase[], minGap = 0.6): Segment[] {
     last = Math.max(last, ph.t1);
   }
   if (an.duration - last >= minGap) gaps.push([last, an.duration]);
-  const organ = (an.driver ?? '') === 'organ';
   for (const [a, b] of gaps) {
     let mood = moodAt(an, (a + b) / 2);
-    if (mood === 'calm' && !organ && clarity(an, a, b) >= 4.0) mood = 'groove';
+    if (mood === 'calm' && clarity(an, a, b) >= 4.0) mood = 'groove';
     out.push({ t0: a, t1: b, move: '(between phrases)', mood });
   }
   return out.sort((p, q) => p.t0 - q.t0);

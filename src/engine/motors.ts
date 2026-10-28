@@ -37,8 +37,8 @@ const PORT_DANCE_MAX_S = 112.0;         // the port's rainbow, closed before its
 const STILL_LIVELY_S = 12.0, STILL_CALM_S = 30.0;   // longest stretch with no motor moving (stretched to the mirrors' budget)
 const MIRROR_PULSE_CYCLES = 4;          // the steady mirror pulse, leaving commands for the rest of the song
 
-/** (peak_time, build_length, hold_until, score, forced) */
-type Crescendo = [number, number, number, number, boolean];
+/** (peak_time, build_length, hold_until, score) */
+type Crescendo = [number, number, number, number];
 /** The mirrors in a row, crowd-left to crowd-right: [car, mirror channel]. */
 type Line = [Car, number][];
 /** Commands spent so far per (car, mirror). */
@@ -77,7 +77,8 @@ function liftgateWindows(car: Car, an: Analysis): [number, number][] {
   return spans;
 }
 
-/** (peak_time, build_length, hold_until, score, forced) for the biggest crescendos, in time order.
+/** (peak_time, build_length, hold_until, score) for the biggest crescendos, the final climax first and
+ * then the rest by size.
  *
  * A crescendo peak is where a sustained rise in loudness tops out: the end of each detected
  * build, plus every arrival chord. Its build length is how long the loudness had been rising
@@ -88,7 +89,6 @@ function crescendos(an: Analysis, lead: number): Crescendo[] {
   const spacing = 24.0;
   const step = an.step, inten = an.intensity;
   const cands: [number, number | null, number][] = [];
-  const forced = an.cuePeaks ?? [];
   // The choreographer's own crescendo phrases are the best source: they end on the peak.
   for (const ph of an.phrases ?? []) {
     if (ph.move !== undefined && BUILDS.has(ph.move)) {
@@ -142,17 +142,11 @@ function crescendos(an: Analysis, lead: number): Crescendo[] {
   let final: [number, number, number, number] | null = null;
   for (const p of late) if (final === null || p[0] > final[0]) final = p;
   const ranked: Crescendo[] = [];
-  for (const [t, blen, hold, isFinal] of forced) {   // cue-sheet peaks come first, whatever the meter says
-    const holdUntil = isFinal ? an.duration : (hold ? t + hold : Math.min(t + 8.0, an.duration));
-    ranked.push([t, np.clip(blen, 1.0, lead), holdUntil, isFinal ? 10.0 : 9.0, true]);
-  }
-  if (final && ranked.every((q) => Math.abs(final![0] - q[0]) >= 6)) {
-    ranked.push([final[0], final[1], an.duration, final[3] + 1.0, false]);
-  }
+  if (final) ranked.push([final[0], final[1], an.duration, final[3] + 1.0]);
   const byScore = merged.slice().sort((p, q) => q[3] * (0.5 + q[1] / lead) - p[3] * (0.5 + p[1] / lead));
   for (const p of byScore) {
     if (ranked.every((q) => Math.abs(p[0] - q[0]) >= spacing)) {
-      ranked.push([p[0], p[1], p[2], p[3], false]);
+      ranked.push([p[0], p[1], p[2], p[3]]);
     }
   }
   return ranked;

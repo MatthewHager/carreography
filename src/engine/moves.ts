@@ -16,6 +16,7 @@ import {
 } from './np';
 import { barLen, beatLen } from './tempo';
 import { tierAt } from './arc';
+import { kitAt } from './feel';
 import { pacedGrid } from './mood';
 import { frameSpan } from './phrases';
 import { Rng } from './rng';
@@ -176,8 +177,8 @@ function flashLen(ev: Events, i: number): number {
   return ev.density[i] >= 9.0 ? 0.08 : clip(ev.dur[i], 0.1, 0.2);
 }
 
-/** Pitch bounds used to spread this phrase across the stage. */
-function phraseRange(ph: Pick<Phrase, 'lo' | 'hi'>): [number, number] {
+/** The pitch range a phrase spreads across the stage: its own, at least an octave wide. */
+export function phraseRange(ph: Pick<Phrase, 'lo' | 'hi'>): [number, number] {
   if (ph.hi - ph.lo >= 12) return [ph.lo, ph.hi];
   const mid = (ph.lo + ph.hi) / 2;
   return [mid - 6, mid + 6];
@@ -208,11 +209,10 @@ function lrNotes(cars: Car[], an: Analysis, ph: Phrase) {
   const outer = sides(cars);
   const med = median(ev.top.slice(ph.a, ph.b));
   const [lo, hi] = phraseRange(ph);
-  // In band songs a note only strobes a Y when it sits on a beat subdivision (eighths); the rest
-  // ride on the truck's bar, so the sides read as rhythm, not as blinking.
-  const band = an.driver === 'band' || an.driver === 'vocal_band';
+  // Over a rhythm section a note only strobes a Y when it sits on a beat subdivision (eighths); the
+  // rest ride on the truck's bar, so the sides read as rhythm, not as blinking.
   let sub: Float64Array | null = null;
-  if (band && an.beats.length > 2) {
+  if (kitAt(an, ph.t0) && an.beats.length > 2) {
     const b = an.beats;
     const mids: number[] = [];
     for (let k = 0; k + 1 < b.length; k++) mids.push((b[k] + b[k + 1]) / 2);

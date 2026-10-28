@@ -1,11 +1,13 @@
-// The same song and lineup always give the same show, byte for byte, whatever was made before it.
+// The same song and lineup always give the same show, byte for byte, whatever was made before it; and the
+// show hears from the music alone where to flow and where a rhythm section plays.
 
 import { describe, expect, it } from 'vitest';
 import { choreograph } from './choreo';
+import { feel } from './feel';
 import { FIXTURES, fixture } from './fixtures';
 
 const show = (song: (typeof FIXTURES)[number], lineup: string) =>
-  choreograph(fixture(song), { layout: lineup }).map((c) => c.frames);
+  choreograph(fixture(song), lineup).map((c) => c.frames);
 
 describe('the same input gives the same show', () => {
   for (const song of FIXTURES) {
@@ -15,4 +17,29 @@ describe('the same input gives the same show', () => {
       expect(show(song, 'YCY')).toEqual(first);
     });
   }
+});
+
+describe('the music says where to flow and where the drums play', () => {
+  it('a chorale with no beat flows from start to end', () => {
+    expect(feel(fixture('chorale')).every((f) => f.flow && !f.kit)).toBe(true);
+  });
+
+  it('a drum-kit groove has the beat and the kit all the way', () => {
+    expect(feel(fixture('groove')).every((f) => !f.flow && f.kit)).toBe(true);
+  });
+
+  it('an orchestral build flows over its roll, then marches on the beat without a kit', () => {
+    const an = fixture('build'), sections = feel(an);
+    expect(sections.some((f) => f.kit)).toBe(false);
+    expect(sections.find((f) => f.t0 <= 10 && 10 < f.t1)?.flow).toBe(true);        // the roll
+    expect(sections.find((f) => f.t0 <= 50 && 50 < f.t1)?.flow).toBe(false);       // the march
+  });
+
+  it('every phrase of a flowing song is legato, and none of a groove', () => {
+    const chorale = fixture('chorale'), groove = fixture('groove');
+    choreograph(chorale, 'YCY');
+    choreograph(groove, 'YCY');
+    expect(chorale.phrases!.every((ph) => ph.move === 'legato')).toBe(true);
+    expect(groove.phrases!.some((ph) => ph.move === 'legato')).toBe(false);
+  });
 });

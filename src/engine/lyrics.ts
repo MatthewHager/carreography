@@ -3,7 +3,16 @@
 // lightning, a word sung twice in a line pings across the cars.
 
 import type { Analysis, LyricLine } from './analysis';
-import type { Resolved } from './cues';
+
+/** A picture a line calls for: interior colours from t0 to t1, a lightning strike at t0, or a ping of
+ * one car's front at t0 (the k-th word of a chant lands on car k, round the lineup). */
+export interface Moment {
+  do: 'color' | 'lightning' | 'ping';
+  t0: number;
+  t1: number;
+  color?: readonly number[];
+  car?: number;
+}
 
 const ORANGE = [255, 90, 0];
 const RED = [255, 0, 0];
@@ -49,31 +58,30 @@ export function sungFor(line: LyricLine): number {
   return Math.min(line.end - line.t, 0.6 + 0.33 * tokens(line.text).length);
 }
 
-/** The general lyric moments of timed lines -> [action, params], as lyricCues gives them. */
-export function lineCues(lines: LyricLine[], an: Analysis): [string, Resolved][] {
-  const out: [string, Resolved][] = [];
-  const cue = (t0: number, t1: number, extra: Partial<Resolved> = {}): Resolved => ({ at: '', do: '', t0, t1, ...extra });
+/** The moments the timed lines call for, in time order. */
+export function moments(lines: LyricLine[], an: Analysis): Moment[] {
+  const out: Moment[] = [];
   const ev = an.events;
   for (const line of lines) {
     const ws = tokens(line.text);
     const t0 = line.t, t1 = line.t + sungFor(line);
     const colour = RULES.find((r) => r.do === 'color' && r.hits(ws));
-    if (colour) out.push(['color', cue(t0, Math.min(line.end + 0.5, t1 + 1.0), { color: colour.color })]);
+    if (colour) out.push({ do: 'color', t0, t1: Math.min(line.end + 0.5, t1 + 1.0), color: colour.color });
     if (RULES.some((r) => r.do === 'lightning' && r.hits(ws))) {
       // on the loudest attack while the line is sung (its start, if nothing is played)
       let at = t0, amp = -1;
       for (let i = 0; i < ev.t.length; i++) {
         if (ev.t[i] >= t0 && ev.t[i] < t1 && ev.amp[i] > amp) [at, amp] = [ev.t[i], ev.amp[i]];
       }
-      out.push(['lightning', cue(at, at)]);
+      out.push({ do: 'lightning', t0: at, t1: at });
     }
     // a word sung twice or more in one line is a chant: it pings across the cars on the line's beats
     const counts = new Map<string, number>();
     for (const w of ws) if (w.length >= 3 && !NOT_A_CHANT.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
     if ([...counts.values()].some((n) => n >= 2)) {
       const beats = an.beats.filter((b) => b >= t0 - 0.05 && b < t1).slice(0, MAX_PINGS);
-      (beats.length ? beats : [t0]).forEach((b, k) => out.push(['ping', cue(b, b, { car: k })]));
+      (beats.length ? beats : [t0]).forEach((b, k) => out.push({ do: 'ping', t0: b, t1: b, car: k }));
     }
   }
-  return out.sort((x, y) => x[1].t0 - y[1].t0);
+  return out.sort((x, y) => x.t0 - y.t0);
 }

@@ -42,7 +42,7 @@ describe('every lineup keeps the rules', () => {
     for (const lineup of LINEUPS) {
       it(`${song} ${lineup}`, () => {
         const an = fixture(song);
-        const cars = choreograph(an, { layout: lineup });
+        const cars = choreograph(an, lineup);
         expect(cars.map((c) => c.name)).toEqual(lineupCars(lineup).map(([name]) => name));
         for (const car of cars) {
           const n = car.nFrames, step = an.step;

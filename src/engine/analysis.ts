@@ -80,8 +80,6 @@ export interface Analysis {
   lyricLines?: LyricLine[] | null;                   // LRCLIB's lines, lined up with this recording
   // set while choreographing
   phrases?: Phrase[];
-  cuePeaks?: [number, number, number | null, boolean][];   // the cue sheet's peaks: time, build, hold, final
-  driver?: string;
   pace?: number | null;  // the current phrase's seconds between hits, for the beat moves (mood.ts)
   energy?: Float64Array; // per frame 0..1 (mood.energyCurve)
 }
