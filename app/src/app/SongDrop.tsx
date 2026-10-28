@@ -2,6 +2,7 @@
 
 import { Music } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
+import { toast } from 'sonner';
 
 export function SongDrop({ title, disabled, onSong }: { title: string | null; disabled?: boolean; onSong: (f: File) => void }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -9,6 +10,8 @@ export function SongDrop({ title, disabled, onSong }: { title: string | null; di
     multiple: false,
     disabled,
     onDrop: (files) => files[0] && onSong(files[0]),
+    onDropRejected: ([r]) => r && toast.error(r.errors[0]?.code === 'too-many-files' ? 'One song at a time, please'
+      : `${r.file.name} isn't a song file. Choose an MP3, M4A, WAV or FLAC.`),
   });
   return (
     <div {...getRootProps()}

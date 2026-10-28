@@ -1,6 +1,6 @@
 // The 3D view: the lineup on Tesla's own models, playing the show in time with the player.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CarRig } from '@/viewer/rig';
 import { simulate } from '@/viewer/core/simulate';
 import { Viewer } from '@/viewer/viewer';
@@ -27,17 +27,28 @@ export function Stage({ lineup, paints, show, player, camera, onMissing }: Props
   showRef.current = show;
   const paintsRef = useRef(paints);
   paintsRef.current = paints;
+  const [noGl, setNoGl] = useState(false);
 
   useEffect(() => {
     const el = box.current!;
-    const v = new Viewer(el);
+    let v: Viewer;
+    try {
+      v = new Viewer(el);
+    } catch (err) {
+      console.warn('No 3D view:', err);
+      setNoGl(true);
+      return;
+    }
     v.setBloom(true);
     v.onTick = () => {
       const t = player.now();
       for (const r of rigs.current) r.setFrame(Math.floor(t / STEP_S), t);
     };
+    // once the show plays, a device that can't keep up loses the bloom rather than the frame rate
+    const unsubscribe = player.subscribe(() => player.playing && v.armPerfCheck());
     viewer.current = v;
     return () => {
+      unsubscribe();
       v.dispose();
       el.replaceChildren();
       viewer.current = null;
@@ -82,6 +93,14 @@ export function Stage({ lineup, paints, show, player, camera, onMissing }: Props
     viewer.current?.flyTo(camera);
   }, [camera]);
 
+  if (noGl) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
+        <p className="max-w-xs">This browser can't show the 3D preview: WebGL is turned off or unavailable. The light
+          show files still work.</p>
+      </div>
+    );
+  }
   return <div ref={box} className="absolute inset-0 touch-none [&>canvas]:block [&>canvas]:size-full" />;
 }
 

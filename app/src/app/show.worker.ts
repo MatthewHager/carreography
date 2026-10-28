@@ -3,22 +3,27 @@
 import { fromBridge, type Analysis } from '@/engine/analysis';
 import { STEP_MS } from '@/engine/channels';
 import { choreograph } from '@/engine/choreo';
-import { place, vocalCurve, type LyricsReport } from '@/engine/listen/align';
+import { place, type LyricsReport } from '@/engine/listen/align';
 import { analyze } from '@/engine/listen/audio';
 import { trackBeats } from '@/engine/listen/beats';
 import { lookup, type Candidate, type LookupStatus } from '@/engine/listen/lrclib';
+import { lastBackend, touchedGpu } from '@/engine/listen/infer';
 import { transcribe } from '@/engine/listen/notes';
 import { monoAt22050 } from '@/engine/listen/resample';
 import type { SongTags } from '@/engine/listen/tags';
 
 export type Request =
-  | { kind: 'song'; channels: Float32Array[]; sampleRate: number; name: string; lineup: string; tags: SongTags | null }
+  | {
+      kind: 'song'; channels: Float32Array[]; sampleRate: number; name: string; lineup: string; tags: SongTags | null;
+      vocals: Float64Array | null;     // align.ts's vocalCurve, from the stereo the page had
+    }
   | { kind: 'bridge'; json: string; lineup: string };   // a Python analysis (development)
 
 export type Reply =
   | { kind: 'progress'; step: string; fraction?: number }
-  | { kind: 'done'; nFrames: number; cars: { name: string; frames: Uint8Array }[]; lyrics?: LyricsReport }
-  | { kind: 'error'; message: string };
+  | { kind: 'done'; nFrames: number; cars: { name: string; frames: Uint8Array }[]; lyrics?: LyricsReport;
+      backend?: string; keep: boolean }
+  | { kind: 'error'; message: string; keep: boolean };   // keep: don't end this worker (infer.ts's touchedGpu)
 
 const post = (r: Reply, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(r, transfer);
 const progress = (step: string, fraction?: number) => post({ kind: 'progress', step, fraction });
@@ -47,8 +52,7 @@ async function lyrics(req: Extract<Request, { kind: 'song' }>, found: Promise<Fo
     const f = await Promise.race([found, late]);
     if (f === 'failed') return none('failed');
     if (f.status !== 'found') return none(f.status);
-    const [l, r] = req.channels;
-    return place(f.candidates, r ? vocalCurve(l, r, req.sampleRate) : null, an.duration);
+    return place(f.candidates, req.vocals, an.duration);
   } catch {
     return none('failed');
   }
@@ -79,8 +83,9 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     const cars = choreograph(an, { layout: req.lineup, name, style, driver });
     post({
       kind: 'done', nFrames: an.nFrames, cars: cars.map((c) => ({ name: c.name, frames: c.frames })), lyrics: report,
+      backend: lastBackend(), keep: touchedGpu(),
     }, cars.map((c) => c.frames.buffer));
   } catch (err) {
-    post({ kind: 'error', message: (err as Error).message ?? String(err) });
+    post({ kind: 'error', message: String(err), keep: touchedGpu() });   // "RangeError: ..." tells memory apart
   }
 };
