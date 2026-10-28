@@ -9,11 +9,11 @@ github.com/koenhendriks/tesla-model-extractor) turns an app bundle you have (.ap
 
     pipx install git+https://github.com/koenhendriks/tesla-model-extractor
 
-This runs it for the cars the shows support - the 2025+ Model Y (bayberry), the 2020-24 Model Y
-(y_high) and the Cybertruck - and puts them where the viewer looks:
-preview3d/public/models/tesla-app/ and preview3d/dist/models/tesla-app/. They're the only car models the
-viewer draws (until they're there it says how to get them). The models are Tesla's: they stay out of
-the repository (.gitignore).
+This runs it for every light-show car with an app model (MODELS: Model S 2021+, both Model 3s, Model X
+2021+, the four Model Ys and the Cybertruck) and puts each one, with the app's paint table
+(paints.json), where the viewer looks: preview3d/public/models/tesla-app/<id>/ and
+preview3d/dist/models/tesla-app/<id>/. They're the only car models the viewer draws (until they're
+there it says how to get them). The models are Tesla's: they stay out of the repository (.gitignore).
 
 Plain Python with no dependencies; the first run takes a few minutes (the extractor unpacks the app).
 """
@@ -27,7 +27,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = [ROOT / "preview3d" / "public" / "models" / "tesla-app", ROOT / "preview3d" / "dist" / "models" / "tesla-app"]
-MODELS = {"bayberry": "Bayberry.glb", "y_high": "Y_High.glb", "cybertruck": "Cybertruck.glb"}
+MODELS = {
+    "s_palladium": "S_Palladium.glb",       # Model S 2021+
+    "model3_high": "3_High.glb",            # Model 3 2017-23
+    "poppyseed": "Poppyseed.glb",           # Model 3 2024+
+    "x_palladium": "X_Palladium.glb",       # Model X 2021+
+    "y_high": "Y_High.glb",                 # Model Y 2020-24
+    "bayberry": "Bayberry.glb",             # Model Y 2025+ Premium / Performance
+    "bayberry_e41": "BayberryE41.glb",      # Model Y 2025+ Standard
+    "bayberry_e80": "BayberryE80.glb",      # Model Y L
+    "cybertruck": "Cybertruck.glb",
+}
+EXTRAS = ["paints.json"]                    # the app's paint table (the same for every car)
 
 
 def extractor():
@@ -74,6 +85,9 @@ def main(bundle):
                 if target.parent.exists():
                     (target / model).mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(src, target / model / glb)
+                    for extra in EXTRAS:
+                        if (src.parent / extra).exists():
+                            shutil.copyfile(src.parent / extra, target / model / extra)
             print(f"  {model}: {src.stat().st_size / 1e6:.0f} MB")
     print("done: reload the 3D preview")
 

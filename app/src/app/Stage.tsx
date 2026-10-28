@@ -5,14 +5,14 @@ import { CarRig } from '@/viewer/rig';
 import { simulate } from '@/viewer/core/simulate';
 import { Viewer } from '@/viewer/viewer';
 import type { AppModelId } from '@/viewer/car/appBody';
-import { loadModel } from './models';
+import { loadModel, paintsFor } from './models';
 import type { Player } from './player';
-import { bodyFor, CHANNELS, STEP_S, type Show } from './show';
-
-const PAINT = { modely: '#e9eaec', cybertruck: '#b9bcc0' };
+import { CHANNELS, modelFor, STEP_S, type Show } from './show';
 
 interface Props {
   lineup: string;
+  /** The app's paint name per car (paints.json); a car keeps its model's own paint without one. */
+  paints: string[];
   show: Show | null;
   player: Player;
   camera: string;
@@ -20,15 +20,18 @@ interface Props {
   onMissing: (ids: AppModelId[]) => void;
 }
 
-export function Stage({ lineup, show, player, camera, onMissing }: Props) {
+export function Stage({ lineup, paints, show, player, camera, onMissing }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const viewer = useRef<Viewer | null>(null);
   const rigs = useRef<CarRig[]>([]);
   const showRef = useRef(show);
   showRef.current = show;
+  const paintsRef = useRef(paints);
+  paintsRef.current = paints;
 
   useEffect(() => {
-    const v = new Viewer(box.current!);
+    const el = box.current!;
+    const v = new Viewer(el);
     v.setBloom(true);
     v.onTick = () => {
       const t = player.now();
@@ -37,7 +40,7 @@ export function Stage({ lineup, show, player, camera, onMissing }: Props) {
     viewer.current = v;
     return () => {
       v.dispose();
-      box.current?.replaceChildren();
+      el.replaceChildren();
       viewer.current = null;
     };
   }, [player]);
@@ -45,7 +48,7 @@ export function Stage({ lineup, show, player, camera, onMissing }: Props) {
   useEffect(() => {
     let live = true;
     const letters = [...lineup];
-    const ids = [...new Set(letters.map((l) => bodyFor(l).model))];
+    const ids = [...new Set(letters.map(modelFor))];
     void Promise.all(ids.map(loadModel)).then((gltfs) => {
       if (!live || !viewer.current) return;
       const missing = ids.filter((_, i) => !gltfs[i]);
@@ -58,13 +61,11 @@ export function Stage({ lineup, show, player, camera, onMissing }: Props) {
       const byId = new Map(ids.map((id, i) => [id, gltfs[i]!]));
       const resized = letters.length !== viewer.current.carCount;
       const first = !viewer.current.hasCars;
-      rigs.current = letters.map((l, i) => {
-        const b = bodyFor(l);
-        return new CarRig(b.kind, `Car${i + 1}`, b.yBody, PAINT[b.kind], { id: b.model, gltf: byId.get(b.model)! });
-      });
+      rigs.current = letters.map((l, i) => new CarRig(`Car${i + 1}`, { id: modelFor(l), gltf: byId.get(modelFor(l))! }));
       viewer.current.setCars(rigs.current);
       if (resized) viewer.current.flyTo(camera, first);
       applyShow(rigs.current, showRef.current);
+      applyPaints(rigs.current, letters, paintsRef.current);
     });
     return () => {
       live = false;
@@ -74,6 +75,10 @@ export function Stage({ lineup, show, player, camera, onMissing }: Props) {
   }, [lineup, onMissing]);
 
   useEffect(() => applyShow(rigs.current, show), [show]);
+
+  useEffect(() => {
+    if (rigs.current.length === lineup.length) applyPaints(rigs.current, [...lineup], paints);
+  }, [lineup, paints]);
 
   useEffect(() => {
     viewer.current?.flyTo(camera);
@@ -89,5 +94,11 @@ function applyShow(rigs: CarRig[], show: Show | null) {
       channelCount: CHANNELS, frameCount: show!.nFrames, stepTimeMs: STEP_S * 1000, minorVersion: 0,
       uniqueId: 0n, variableHeaders: [], data: car.frames,
     }, rig.profile) : undefined);
+  });
+}
+
+function applyPaints(rigs: CarRig[], letters: string[], paints: string[]) {
+  rigs.forEach((rig, i) => {
+    void paintsFor(modelFor(letters[i]!)).then((table) => rig.setPaint(table.find((p) => p.name === paints[i]) ?? null));
   });
 }

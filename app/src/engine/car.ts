@@ -23,19 +23,25 @@ export class Car {
   readonly nFrames: number;
   readonly step: number;
   readonly juniper: boolean;
+  /** A Model X: falcon doors (motors.ts). */
+  readonly falcon: boolean;
   readonly frames: Uint8Array;
   readonly closureCounts = new Map<number, number>();
+  /** Spans [t0, t1] in which the windows must not move (a Model X's doors are moving). */
+  readonly windowsStill: [number, number][] = [];
   /** Calm passages set this to [ramp-on value, ramp-off value, off seconds]: every full-on light of
    * 0.35 s or more glows up and fades out instead of snapping. */
   soft: [number, number, number] | null = null;
 
-  constructor(kind: 'modely' | 'cybertruck', name: string, x: number, nFrames: number, step: number, juniper = false) {
+  constructor(kind: 'modely' | 'cybertruck', name: string, x: number, nFrames: number, step: number, juniper = false,
+    falcon = false) {
     this.kind = kind;
     this.name = name;
     this.x = x;
     this.nFrames = nFrames;
     this.step = step;
     this.juniper = juniper;
+    this.falcon = falcon;
     this.frames = new Uint8Array(nFrames * C.N_CHANNELS);
   }
 
@@ -216,5 +222,5 @@ export class Car {
 
 /** One Car per letter, crowd-left to right (vehicles.ts). */
 export function makeLineup(layout: string, nFrames: number, step: number): Car[] {
-  return lineupCars(layout).map(([name, v], i) => new Car(v.kind, name, i, nFrames, step, v.juniper));
+  return lineupCars(layout).map(([name, v], i) => new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon));
 }

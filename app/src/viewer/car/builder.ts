@@ -4,11 +4,6 @@
 
 import type * as THREE from 'three';
 
-export interface Materials {
-  /** The lineup's paint for this kind of car (its colour is copied onto the model's paint). */
-  paint: THREE.MeshPhysicalMaterial;
-}
-
 /** A glow sprite the builder places by hand (the charge port LED). */
 export interface GlowHandle {
   color: THREE.Color;
@@ -17,7 +12,6 @@ export interface GlowHandle {
 
 export interface Builder {
   car: THREE.Group;
-  m: Materials;
   cabinLight: THREE.PointLight;
   light(
     parent: THREE.Object3D,
@@ -46,6 +40,7 @@ export interface BuiltBody {
   halfLength: number;
   height: number;
   halfWidth: number;
-  paint?: string;
   cabinGain?: number;
+  /** This car's copies of the model's paint materials (none on the Cybertruck: stainless). */
+  paints?: THREE.MeshStandardMaterial[];
 }

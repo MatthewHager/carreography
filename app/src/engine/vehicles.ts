@@ -1,11 +1,22 @@
 // The lineup: which cars, in which order, as the crowd sees them (crowd's left to right).
 //
-// A lineup is a string of 1 to 5 letters, one per car:
-//   Y   Model Y, 2025 and later (a light bar across the nose)
+// A lineup is a string of 1 to 5 letters, one per car (capitals for the current car, lower case for
+// the one before it):
+//   S   Model S, 2021 and later
+//   M   Model 3, 2024 and later
+//   m   Model 3, 2017-2023
+//   X   Model X, 2021 and later (falcon doors)
+//   Y   Model Y, 2025 and later, Premium / Performance (a light bar across the nose)
 //   y   Model Y, 2020-2024
+//   B   Model Y, 2025 and later, Standard (no light bar)
+//   L   Model Y L (the six-seater, with the light bar)
 //   C   Cybertruck
 // e.g. "YCY" is Model Y | Cybertruck | Model Y. Every car gets its own show file, named after its
 // place in the line (Car2_Cybertruck_Center).
+//
+// Every car but the Cybertruck is choreographed in the Model Y's lamp vocabulary: Tesla's Model S, 3
+// and X take the same channels (its README, "Light Channel Locations"), and the cars with a front
+// light bar translate them at the end (lamps.ts).
 
 export const MAX_CARS = 5;
 
@@ -14,13 +25,21 @@ export interface Vehicle {
   kind: 'modely' | 'cybertruck'; // the choreographer's body type
   model: string;                 // used in folder names
   label: string;                 // for people
-  juniper: boolean;              // 2025+ Model Y lamp map (lamps.ts)
-  body: string;                  // the 3D viewer's body
+  juniper: boolean;              // the 2025+ Model Y's front light bar lamp map (lamps.ts)
+  body: string;                  // the 3D viewer's model from the Tesla app (viewer/car/appBody.ts)
+  falcon?: boolean;              // Model X falcon doors (motors.ts)
 }
 
+/** In menu order. */
 export const VEHICLES: Record<string, Vehicle> = {
-  Y: { letter: 'Y', kind: 'modely', model: 'ModelY', label: 'Model Y (2025+)', juniper: true, body: 'modely2025' },
-  y: { letter: 'y', kind: 'modely', model: 'ModelY', label: 'Model Y (2020-2024)', juniper: false, body: 'modely2020' },
+  S: { letter: 'S', kind: 'modely', model: 'ModelS', label: 'Model S (2021+)', juniper: false, body: 's_palladium' },
+  M: { letter: 'M', kind: 'modely', model: 'Model3', label: 'Model 3 (2024+)', juniper: false, body: 'poppyseed' },
+  m: { letter: 'm', kind: 'modely', model: 'Model3', label: 'Model 3 (2017-2023)', juniper: false, body: 'model3_high' },
+  X: { letter: 'X', kind: 'modely', model: 'ModelX', label: 'Model X (2021+)', juniper: false, body: 'x_palladium', falcon: true },
+  Y: { letter: 'Y', kind: 'modely', model: 'ModelY', label: 'Model Y (2025+)', juniper: true, body: 'bayberry' },
+  B: { letter: 'B', kind: 'modely', model: 'ModelY', label: 'Model Y Standard (2025+)', juniper: false, body: 'bayberry_e41' },
+  L: { letter: 'L', kind: 'modely', model: 'ModelYL', label: 'Model Y L', juniper: true, body: 'bayberry_e80' },
+  y: { letter: 'y', kind: 'modely', model: 'ModelY', label: 'Model Y (2020-2024)', juniper: false, body: 'y_high' },
   C: { letter: 'C', kind: 'cybertruck', model: 'Cybertruck', label: 'Cybertruck', juniper: false, body: 'cybertruck' },
 };
 

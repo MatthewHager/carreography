@@ -14,12 +14,20 @@ import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { Builder, BuiltBody } from './builder';
 import { COLORS } from './kit';
 
-export type AppModelId = 'bayberry' | 'y_high' | 'cybertruck';
+export type AppModelId =
+  | 's_palladium' | 'model3_high' | 'poppyseed' | 'x_palladium'
+  | 'y_high' | 'bayberry' | 'bayberry_e41' | 'bayberry_e80' | 'cybertruck';
 
 /** The file each model comes out of the Tesla app as (tesla-model-extractor). */
 export const FILES: Record<AppModelId, string> = {
-  bayberry: 'Bayberry.glb',
+  s_palladium: 'S_Palladium.glb',
+  model3_high: '3_High.glb',
+  poppyseed: 'Poppyseed.glb',
+  x_palladium: 'X_Palladium.glb',
   y_high: 'Y_High.glb',
+  bayberry: 'Bayberry.glb',
+  bayberry_e41: 'BayberryE41.glb',
+  bayberry_e80: 'BayberryE80.glb',
   cybertruck: 'Cybertruck.glb',
 };
 
@@ -46,6 +54,11 @@ interface LampRule {
   gain?: number;
   /** Move the lit lamp this far out along its surface (m): for lamps the app sets inside a housing. */
   proud?: number;
+  /**
+   * Only the node's meshes with this material: where the app draws a lamp as its light source plus
+   * glow cards across the whole lens (the Model Y Standard's headlights), the light source.
+   */
+  material?: RegExp;
 }
 interface BarRule {
   node: string;
@@ -66,8 +79,8 @@ interface ModelRules {
    * metres; |z| from the centre line) are cut out of these meshes and folded back about their base.
    */
   foldMirrors?: { nodes: RegExp; x: [number, number]; y: [number, number]; absZ: number; deg: number };
-  /** The headlight beams start at this lamp node. */
-  beamFrom: string;
+  /** The headlight beams start at these lamp nodes. */
+  beamFrom: string[];
 }
 
 const W = COLORS.white;
@@ -79,6 +92,25 @@ const fixed = (...ids: string[]): Classify => () => ids;
 /** Per side: the outer half of the lamp (by area) is `outer`, the inner half `inner`. */
 const innerOuter = (outer: string, inner: string): Classify => (c, r) =>
   [`${sideOf(c)}${Math.abs(c.z) > r.midAbs[sideOf(c)] ? outer : inner}`];
+const mainBeams = innerOuter('OuterMainBeam', 'InnerMainBeam');
+/** Tesla's Model 3/Y "signature + channels 4-6": one light per side on these cars. */
+const drl3Y = (c: THREE.Vector3) => ['Signature', 'Channel4', 'Channel5', 'Channel6'].map((b) => `${sideOf(c)}${b}`);
+/** The lamp in the front bumper (aux park), which Tesla lights with the side marker. */
+const auxPark = (c: THREE.Vector3) => [`${sideOf(c)}AuxPark`, `${sideOf(c)}SideMarker`];
+/** A turn signal mesh with the front lamp ahead of `x` and the fender repeater behind it. */
+const turnSplit = (x: number): Classify => (c) => [`${sideOf(c)}${c.x > x ? 'FrontTurn' : 'SideRepeater'}`];
+
+/**
+ * The Model X headlight, one mesh in the app: above a line rising toward the outside, channels 6, 5
+ * and 4 from inner to outer; below it the inner and outer main beams; the bumper lamp below that.
+ */
+const xHeadlight: Classify = (c) => {
+  if (c.y < 0.6) return auxPark(c);
+  const a = Math.abs(c.z);
+  const t = THREE.MathUtils.clamp((a - 0.5) / 0.4, 0, 1);
+  if (c.y > 0.772 + 0.08 * t) return [`${sideOf(c)}Channel${t > 0.66 ? 4 : t > 0.33 ? 5 : 6}`];
+  return [`${sideOf(c)}${a > 0.7 ? 'OuterMainBeam' : 'InnerMainBeam'}`];
+};
 
 const WINDOWS = {
   leftFrontWindow: 'LFWindowAnimation',
@@ -86,6 +118,7 @@ const WINDOWS = {
   leftRearWindow: 'LRWindowAnimation',
   rightRearWindow: 'RRWindowAnimation',
 };
+const MIRRORS = { leftMirror: 'LFDoorMirrorAnimation', rightMirror: 'RFDoorMirrorAnimation' };
 
 const RULES: Record<AppModelId, ModelRules> = {
   // 2025+ Model Y. On-car tests (docs/HOW_IT_WORKS.md): the front bar is three sections (each end on
@@ -110,7 +143,7 @@ const RULES: Record<AppModelId, ModelRules> = {
     portLed: 'Charge_Port_Cover',
     // The mirror cap is its own mesh; the housing and glass are part of the door's meshes.
     foldMirrors: { nodes: /^(Skullcap_[LR]F_Paint|Front_(Left|Right)_Door)/, x: [0.56, 0.88], y: [0.98, 1.25], absZ: 0.945, deg: 62 },
-    beamFrom: 'Headlights_On',
+    beamFrom: ['Headlights_On'],
   },
   // 2020-24 Model Y: one DRL/signature lamp per side (channels 4-6 OR'd into it).
   y_high: {
@@ -136,7 +169,7 @@ const RULES: Record<AppModelId, ModelRules> = {
       ...WINDOWS,
     },
     portLed: 'Charge_Cap',
-    beamFrom: 'Headlights',
+    beamFrom: ['Headlights'],
   },
   // Cybertruck (Tesla's README, "Cybertruck Light Remapping"): the liftgate channel is the frunk,
   // Tail is the reverse lights, Reverse is the bed lights, side repeaters are the rear side markers.
@@ -160,7 +193,150 @@ const RULES: Record<AppModelId, ModelRules> = {
     closures: { liftgate: 'HoodAnimation', leftMirror: 'LFDoorMirrorAnimation', rightMirror: 'RFDoorMirrorAnimation', ...WINDOWS },
     portLed: 'Chargeport_Light2',
     portDoor: 'Charge_Cap_Spatial',
-    beamFrom: 'Headlights2',
+    beamFrom: ['Headlights2'],
+  },
+  // Model S 2021+ (Tesla's README, "Model S"): the ring around the headlight is the signature on
+  // reflector headlights and channels 4-6 on projector ones, so it lights for all four; the bumper lamp
+  // is the fog (its outer square) and the aux park strip, which the Model S lights with the side marker.
+  s_palladium: {
+    lamps: [
+      { node: 'Headlights_Front', ids: (c, r) => (c.y < 0.5 ? auxPark(c) : mainBeams(c, r)), color: W, lens: COLORS.lensFront },
+      { node: 'DRL', ids: drl3Y, color: W, lens: COLORS.lensFront },
+      { node: 'Foglights_Front', ids: each('FrontFog'), color: W, lens: COLORS.lensFront },
+      { node: 'Left_Turn_Signal', ids: turnSplit(1.6), color: A, lens: COLORS.lensAmber },
+      { node: 'Right_Turn_Signal', ids: turnSplit(1.6), color: A, lens: COLORS.lensAmber },
+      // The tail lamps run from the body onto the liftgate; North American cars signal from the red lamps.
+      { node: 'Headlights_Rear', ids: each('Tail'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'headlights_Trunk', ids: each('Tail'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brake_Lights_Left', ids: fixed('brakeLights', 'leftRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brake_Lights_Right', ids: fixed('brakeLights', 'rightRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brakelight_Trunk', ids: fixed('brakeLights'), color: R, lens: COLORS.lensRear },
+      { node: 'Reverse_Light', ids: fixed('reverseLights'), color: W, lens: COLORS.lensFront },
+      // The rear fog is only on cars outside North America: the app's global variant.
+      { node: 'Foglights_Global', ids: fixed('rearFog'), color: R, lens: COLORS.lensRear },
+    ],
+    bars: [],
+    closures: { liftgate: 'TrunkAnimation', chargePort: 'ChargeportAnimation', ...MIRRORS, ...WINDOWS },
+    portLed: 'Charge_Cap',
+    beamFrom: ['Headlights_Front'],
+  },
+  // Model X 2021+ (README, "Model X"): the strip under the headlight is the signature; inside the
+  // headlight channels 6, 5 and 4 run along the top (inner to outer) above the inner and outer main
+  // beams. The bumper lamp is the fog (outer square), the aux park strip with the side marker, and
+  // the front turn signal. Doors: the falcon doors' and front doors' own clips.
+  x_palladium: {
+    lamps: [
+      { node: 'Headlights_Front', ids: xHeadlight, color: W, lens: COLORS.lensFront },
+      { node: 'DRL', ids: each('Signature'), color: W, lens: COLORS.lensFront },
+      { node: 'Fog_Lights', ids: each('FrontFog'), color: W, lens: COLORS.lensFront },
+      { node: 'Left_Turn_Signal_Front', ids: turnSplit(1.6), color: A, lens: COLORS.lensAmber },
+      { node: 'Right_Turn_Signal_Front', ids: turnSplit(1.6), color: A, lens: COLORS.lensAmber },
+      { node: 'Left_Turn_Signal_Rear', ids: fixed('leftRearTurn'), color: A, lens: COLORS.lensAmber },
+      { node: 'Right_Turn_Signal_Rear', ids: fixed('rightRearTurn'), color: A, lens: COLORS.lensAmber },
+      { node: 'Headlights_Rear', ids: each('Tail'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Headlights_Trunk', ids: each('Tail'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brake_Lights', ids: fixed('brakeLights'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brake_Lights_Spoiler', ids: fixed('brakeLights'), color: R, lens: COLORS.lensRear },
+      { node: 'Reverse_Light', ids: fixed('reverseLights'), color: W, lens: COLORS.lensFront },
+    ],
+    bars: [],
+    closures: {
+      liftgate: 'TrunkAnimation',
+      chargePort: 'ChargeportAnimation',
+      leftFalconDoor: 'LRDoorAnimationComplete',
+      rightFalconDoor: 'RRDoorAnimationComplete',
+      leftFrontDoor: 'LFDoorAnimation',
+      rightFrontDoor: 'RFDoorAnimation',
+      ...MIRRORS,
+      ...WINDOWS,
+    },
+    portLed: 'Charge_Cap',
+    beamFrom: ['Headlights_Front'],
+  },
+  // Model 3 2017-23: the Model 3/Y layout (README), as on the 2020-24 Model Y. The lower part of the
+  // headlight mesh is the aux park strip in the bumper; its rear part is the tail lamps.
+  model3_high: {
+    lamps: [
+      { node: 'Headlights', ids: (c, r) => (c.x < -1.5 ? undefined : c.y < 0.55 ? auxPark(c) : mainBeams(c, r)), color: W, lens: COLORS.lensFront },
+      { node: 'Headlights', ids: (c) => (c.x < -1.5 ? [`${sideOf(c)}Tail`] : undefined), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'DRL', ids: drl3Y, color: W, lens: COLORS.lensFront },
+      { node: 'Fog_Lights_Front', ids: each('FrontFog'), color: W, lens: COLORS.lensFront },
+      { node: 'Left_Turn_Signal', ids: (c) => (c.x > 1.5 ? ['leftFrontTurn', 'leftSideMarker'] : ['leftSideRepeater']), color: A, lens: COLORS.lensAmber },
+      { node: 'Right_Turn_Signal', ids: (c) => (c.x > 1.5 ? ['rightFrontTurn', 'rightSideMarker'] : ['rightSideRepeater']), color: A, lens: COLORS.lensAmber },
+      { node: 'Brake_Lights_Left', ids: fixed('brakeLights', 'leftRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brake_Lights_Right', ids: fixed('brakeLights', 'rightRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brake_Lights_Center', ids: fixed('brakeLights'), color: R, lens: COLORS.lensRear },
+      { node: 'Reverse_Lights', ids: fixed('reverseLights'), color: W, lens: COLORS.lensFront },
+    ],
+    bars: [],
+    closures: { liftgate: 'TrunkAnimation', chargePort: 'ChargeportAnimation', ...MIRRORS, ...WINDOWS },
+    portLed: 'Chargeport_1',
+    beamFrom: ['Headlights'],
+  },
+  // Model 3 2024+: the Model 3/Y channels on the slim headlight (the DRL strip under it). The app has
+  // no front fog or aux park lamp for it; those channels stay dark.
+  poppyseed: {
+    lamps: [
+      { node: 'Headlights', ids: mainBeams, color: W, lens: COLORS.lensFront },
+      { node: 'DRL', ids: drl3Y, color: W, lens: COLORS.lensFront },
+      { node: 'Left_Turn_Signal_Front', ids: turnSplit(1.5), color: A, lens: COLORS.lensAmber },
+      { node: 'Right_Turn_Signal_Front', ids: turnSplit(1.5), color: A, lens: COLORS.lensAmber },
+      { node: 'Brake_Lights_Left', ids: fixed('leftTail', 'brakeLights'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brake_Lights_Right', ids: fixed('rightTail', 'brakeLights'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Left_Turn_Signal_Rear', ids: fixed('leftRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Right_Turn_Signal_Rear', ids: fixed('rightRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brake_Lights_Center', ids: fixed('brakeLights'), color: R, lens: COLORS.lensRear },
+      { node: 'Reverse_Light', ids: fixed('reverseLights'), color: W, lens: COLORS.lensFront },
+    ],
+    bars: [],
+    closures: { liftgate: 'TrunkAnimation', chargePort: 'ChargeportAnimation', ...MIRRORS, ...WINDOWS },
+    portLed: 'Chargeport1',
+    beamFrom: ['Headlights'],
+  },
+  // Model Y 2025+ Standard: no light bar; the Model 3/Y channels in one-piece headlights. The app
+  // draws each headlight lamp as its light source plus glow cards over the whole lens: the sources
+  // light here, the DRL strip for the signature and channels 4-6, the projector for the main beams.
+  bayberry_e41: {
+    lamps: [
+      { node: 'DRL_Left', material: /^Light_uv0$/, ids: drl3Y, color: W, lens: COLORS.lensFront },
+      { node: 'DRL_Right', material: /^Light_uv0$/, ids: drl3Y, color: W, lens: COLORS.lensFront },
+      { node: 'HighBeam_Left', material: /^Light_uv0$/, ids: mainBeams, color: W, lens: COLORS.lensFront },
+      { node: 'HighBeam_Right', material: /^Light_uv0$/, ids: mainBeams, color: W, lens: COLORS.lensFront },
+      { node: 'Left_Turn_Signal', material: /^Light$/, ids: turnSplit(1.5), color: A, lens: COLORS.lensAmber, gain: 2 },
+      { node: 'Right_Turn_Signal_On', material: /^Light$/, ids: turnSplit(1.5), color: A, lens: COLORS.lensAmber, gain: 2 },
+      { node: 'Brake_Light', ids: each('Tail'), color: R, lens: COLORS.lensRear, gain: 3 },
+      // North American cars brake and signal from the red lamps above the tails.
+      { node: 'Left_Turn_Signal_US', ids: fixed('brakeLights', 'leftRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Right_Turn_Signal_US', ids: fixed('brakeLights', 'rightRearTurn'), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Brake_Lights_CHMSL_On', ids: fixed('brakeLights'), color: R, lens: COLORS.lensRear },
+      { node: 'Reverse_US', ids: fixed('reverseLights'), color: W, lens: COLORS.lensFront },
+      { node: 'Rear_Fog', ids: fixed('rearFog'), color: R, lens: COLORS.lensRear },
+    ],
+    bars: [],
+    closures: { liftgate: 'TrunkAnimation', chargePort: 'ChargeportAnimation', ...WINDOWS },
+    portLed: 'Chargeport',
+    foldMirrors: { nodes: /^Front_(Left|Right)_Door/, x: [0.56, 0.88], y: [0.98, 1.25], absZ: 0.945, deg: 62 },
+    beamFrom: ['HighBeam_Left', 'HighBeam_Right'],
+  },
+  // Model Y L: the 2025+ Model Y's front bar and rear lamps (the same lamp map). The app has only
+  // the fender repeaters of its turn signals and no reverse lamp: those channels stay dark.
+  bayberry_e80: {
+    lamps: [
+      { node: 'Headlights_On', ids: mainBeams, color: W, lens: COLORS.lensFront },
+      { node: 'DRL', ids: (c, r) => [Math.abs(c.z) < 0.5 * Math.max(-r.minZ, r.maxZ) ? 'barCentre' : c.z < 0 ? 'barLeftEnd' : 'barRightEnd'], color: W, lens: COLORS.lensFront },
+      { node: 'Left_Turn_Signal_On', ids: turnSplit(1.9), color: A, lens: COLORS.lensAmber },
+      { node: 'Right_Turn_Signal_On', ids: turnSplit(1.9), color: A, lens: COLORS.lensAmber },
+      { node: 'Back_Left_Turn_Signal_On', ids: fixed('leftRearTurn'), color: A, lens: COLORS.lensAmber },
+      { node: 'Back_Right_Turn_Signal_On', ids: fixed('rightRearTurn'), color: A, lens: COLORS.lensAmber },
+      { node: 'Brake_Lights_On', ids: (c) => (c.y > 1.15 ? ['brakeLights'] : [`${sideOf(c)}Tail`]), color: R, lens: COLORS.lensRear, gain: 3 },
+      { node: 'Parking_Lights_On', ids: fixed('brakeLights'), color: R, lens: COLORS.lensRear, gain: 8, proud: 0.015 },
+      { node: 'Fog_Light_On', ids: fixed('rearFog'), color: R, lens: COLORS.lensRear },
+    ],
+    bars: [],
+    closures: { liftgate: 'TrunkAnimation', chargePort: 'ChargeportAnimation', ...WINDOWS },
+    portLed: 'Charge_Port_Cover',
+    foldMirrors: { nodes: /^Front_(Left|Right)_Door/, x: [0.56, 0.88], y: [0.98, 1.25], absZ: 0.945, deg: 62 },
+    beamFrom: ['Headlights_On'],
   },
 };
 
@@ -175,15 +351,20 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
   wrap.rotation.y = -Math.PI / 2;
   wrap.add(root);
   b.car.add(wrap);
+  // The car's paint: the materials the extractor marks with the app's paint (not the Cybertruck's
+  // stainless), this car's own copies so each car of a model can wear its own.
+  const paints = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+  const own = (m: THREE.Material) => {
+    if (!(m instanceof THREE.MeshStandardMaterial) || (m.userData as { paint?: string }).paint === undefined) return m;
+    if (!paints.has(m)) paints.set(m, m.clone());
+    return paints.get(m)!;
+  };
   root.traverse((o) => {
     if ((o.userData as { visible?: boolean }).visible === false || APP_ONLY.test(o.name)) o.visible = false;
     if (o instanceof THREE.Mesh) {
       o.frustumCulled = false;
-      for (const m of [o.material].flat()) {
-        nightLot(m as THREE.Material);
-        // The lineup's paint (the app's fallback paint is whatever its last car was).
-        if (m.name === 'Paint' && m instanceof THREE.MeshStandardMaterial) m.color.copy(b.m.paint.color);
-      }
+      for (const m of [o.material].flat()) nightLot(m as THREE.Material);
+      o.material = Array.isArray(o.material) ? o.material.map(own) : own(o.material);
     }
   });
   b.car.updateMatrixWorld(true);
@@ -203,6 +384,7 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
   // parented where the source was (so lamps on the liftgate or frunk lid move with it).
   for (const rule of rules.lamps) {
     for (const src of named(rule.node)) {
+      if (rule.material && !rule.material.test((src.material as THREE.Material).name)) continue;
       const tris = carTriangles(src, toCar);
       const range = zRange(tris);
       const buckets = new Map<string, number[]>();
@@ -271,7 +453,7 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
   root.traverse((o) => {
     if (o instanceof THREE.Mesh && o.visible) body.union(new THREE.Box3().setFromObject(o).applyMatrix4(toCar));
   });
-  const head = named(rules.beamFrom).map((m) => new THREE.Box3().setFromObject(m).applyMatrix4(toCar));
+  const head = rules.beamFrom.flatMap(named).map((m) => new THREE.Box3().setFromObject(m).applyMatrix4(toCar));
   if (head.length) {
     const h = head.reduce((a, c) => a.union(c));
     headBeams(b, { x: h.max.x + 0.15, y: (h.min.y + h.max.y) / 2, z: h.max.z * 0.8 });
@@ -309,6 +491,7 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
     height: body.max.y,
     halfWidth: Math.max(-body.min.z, body.max.z),
     cabinGain: 1.5,
+    paints: [...paints.values()],
   };
 }
 
