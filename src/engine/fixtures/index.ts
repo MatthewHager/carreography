@@ -1,12 +1,27 @@
-// The test songs' analyses (songs.ts, fixtures.test.ts), for the tests: a fresh copy each time, since
-// choreographing writes into its analysis.
+// The test songs (songs.ts), for the tests. What the two listening models heard in each is kept as a
+// fixture (fixtures.test.ts), so the tests need no models: the song is made again and the rest of the
+// listening (analyze()) runs here. A fresh copy each time, since choreographing writes into its analysis.
 
 import type { Analysis } from '../analysis';
+import { STEP_MS } from '../channels';
+import { analyze } from '../listen/audio';
+import { SONGS } from './songs';
 
-const files = import.meta.glob<Analysis>('./*.json', { eager: true, import: 'default' });
+export interface Heard {
+  beats: { beats: number[]; downbeats: number[] };
+  notes: number[][];
+}
+
+const files = import.meta.glob<Heard>('./*.json', { eager: true, import: 'default' });
 
 export const FIXTURES = ['groove', 'chorale', 'build'] as const;
 
+const analysed = new Map<string, Analysis>();
+
 export function fixture(name: (typeof FIXTURES)[number]): Analysis {
-  return structuredClone(files[`./${name}.json`]);
+  if (!analysed.has(name)) {
+    const { beats, notes } = files[`./${name}.json`]!;
+    analysed.set(name, analyze(SONGS[name](), { stepMs: STEP_MS, notes, neuralBeats: beats }));
+  }
+  return structuredClone(analysed.get(name)!);
 }

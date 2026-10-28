@@ -10,5 +10,6 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   worker: { format: 'es' },
-  test: { include: ['src/**/*.test.ts'] },
+  // the first test to use a test song analyses it (src/engine/fixtures), a few seconds each
+  test: { include: ['src/**/*.test.ts'], testTimeout: 30_000 },
 })
