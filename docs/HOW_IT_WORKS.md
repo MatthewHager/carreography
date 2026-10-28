@@ -1,233 +1,317 @@
-# How the shows are made
+# How it works
 
-The technical tour: how a recording becomes a light show for a lineup of 1 to 5 cars, and the tools
-for checking one. For running the project, see the [README](../README.md); for the strategy behind
-the choreography (roles, formations, the rules every show keeps), [CHOREOGRAPHY.md](CHOREOGRAPHY.md).
+How a song becomes a light show for a lineup of one to five Teslas, all in the browser. The code is in
+`app/src/`. The choreographer (`engine/`) is a line-by-line TypeScript port of the Python generator this
+project started as (kept at the tag `python-final`), and it still makes byte-identical shows from the same
+analysis (see [CONTRIBUTING.md](../CONTRIBUTING.md#the-bridge-test)).
 
-## The pipeline (`lightshow/`)
+## What it does
 
-1. `transcribe.py` — polyphonic note transcription with basic-pitch (MIDI-like: start, end, pitch, amplitude; ~19 notes/s in the Toccata).
-2. `texture.py` — notes become events (a key press or a chord: octave doublings collapsed), then every
-   event is labelled with the texture of its passage: melody, run up/down, zigzag figuration, trill, chords,
-   arrival (big chord after a run), climax.
-3. `audio.py` — beats (tempo-following), loudness, intensity tiers 0–3 that build across the piece,
-   crescendo (build) detection, strong accents, how beat-locked the music is.
-4. `form.py` — the form map, read before any phrase is choreographed: sections from beat-synchronous
-   chroma + timbre, repeated material lettered (A, B, A'…), a per-section intensity *ceiling* that
-   shapes the arc (the loudest third may go all-out, nothing before the climax section gets the top
-   tier, every repeat of a letter is allowed one step more), and per-section tempo.
-   `stems.py` — for band recordings (`--stems`), Demucs separates vocals / drums / bass / other first:
-   the melody is transcribed from vocals + other, the bass line from the bass stem, beats and hits
-   from the drums. `cues.py` — a cue sheet per song: the signature moments (the Toccata's opening
-   mordent on the truck alone, the cadenza chord; the "This is Halloween!" shouts; the final
-   chorus...) located in the recording by detectors and applied as overrides.
-5. `phrases.py` + `moves.py` + `choreo.py` — the choreographer. The piece is split into phrases
-   (between rests, after held notes, at arrivals, at texture changes, max 8 s). Each phrase gets one
-   *formation*: **unison** (one move on every car) or **split** (the side cars in one move, the
-   centre Cybertruck in another; see CHOREOGRAPHY.md for how the roles map onto any lineup). The chooser matches moves to the phrase's gesture and intensity, keeps
-   variety (least-used first, each section leaning unison or split, never the same twice running).
-   A repeated section replays the formations it had the first time, escalated one step when the arc
-   allows more (callbacks). A quarter-second of black precedes every big move, and the truck's bar
-   flashes a handoff when the formation kind changes. Every move is synchronized to the transcribed notes.
+| # | Requirement |
+|---|---|
+| R1 | **Files and a 3D preview for every car.** A song plus 1–5 cars gives a Tesla-valid file per car, for every light-show car that has a Tesla app model. |
+| R2 | **In time with the music**, including tempo drift and rubato. |
+| R3 | **Sees the whole song**: sections, builds, the climax, repeats. |
+| R4 | **No unintended seams.** A new section may look new; nothing else should jump. |
+| R5 | **Varied.** It may repeat on purpose when the music repeats; otherwise it avoids looking repetitive. |
+| R6 | **Matches intensity.** A move is used only where the music has what the move needs. Quiet music gets quiet lights. |
+| R7 | **Motors where they matter most**, timed to arrive on the music, within Tesla's limits. |
+| R8 | **The cars work as a group**: roles, for any lineup. |
+| R9 | **Lyrics can shape choices.** |
+| R10 | **The same input gives the same show.** |
+| R11 | **Easy to add moves and vehicles.** |
 
-   **Mood and pacing** (`mood.py`). Every phrase gets an energy (loudness, the form map's ceiling,
-   note density) and a mood that sets how hard the lights hit:
-   *calm* once a bar with soft ramped glows, *groove* every other beat, *drive* every beat,
-   *frenzy* half-beats, kept for climaxes and trills. In calm passages, note-following moves are
-   thinned to their strongest note per bar and ring until the next (runs and motifs keep every note);
-   beat moves slow to every 2nd/4th beat; drums and percussion layers step back. Builds can't start in
-   calm passages. After a build the stage either *tears down* layer by layer when the music drops, or
-   lands a *shockwave* when it stays up.
+The idea behind all of it: **the lineup is one instrument.** A row of cars blinking along with the music is
+easy to make and dull to watch. Here a melody runs across the cars, a chord fills the stage, the beat
+thumps through every headlight at once, a build sweeps in from both ends and lands on the middle, and the
+cars pass phrases between them. Four principles follow:
 
-   **The move catalogue** (`catalog.py`, rendered to [MOVES.md](../MOVES.md) on every build) describes
-   each of the 45 unison and 12 split moves: what the audience sees, the moods and phrase shapes it
-   suits, and what it locks to (notes, beats, bars, or a whole build). The chooser takes the gesture's
-   candidates plus every catalogued move that fits the phrase's gesture and mood, and drops anything
-   outside its mood range. A repeated section replays its formations (callbacks), but only if they
-   still suit the mood; from the third hearing on they're varied with a sibling move on the same grid.
-   No move may take more than ~7 % of a song. The community-show moves (curtain, colour-wash breathing,
-   marquee, crossing sweeps, shockwave, sparkle, sunrise, scanner, ping-pong, metronome, stripes,
-   flutter, accelerando, teardown) come from the xLights sequences in `vendor/` (Tesla's 5-car
-   "The Arrival", "Cyber Symphony", the community Toccata); see the timing rules in the catalogue.
+1. **Every light follows the music, not a clock.** Each move locks to the notes played, the beat the
+   performer actually keeps, the bar, or a crescendo, so a chase speeds up when the music does.
+2. **Contrast makes it readable.** Hits are short and hard with darkness between them, big moves get a
+   breath of black first, calm music gets slow glows, and the song's arc is saved for its climax.
+3. **The crowd's view is the only view.** Everything is written in the crowd's left and right, facing the
+   cars' fronts.
+4. **Variety, then callbacks.** No move is overused, and a section that comes back gets the formation it
+   had the first time, a step bigger.
 
-   **The beat layer** (`pulse.py`). Concert lighting keeps a show readable by giving the beat to
-   the fixtures with the most visual mass and the effects to the rest. Here the headlights of every
-   car carry the beat wherever the music is lively and its pulse is clear; every move keeps
-   the signatures, DRLs, fogs, turns, markers and the truck's bar. Hits are short and hard (about
-   120 ms) with darkness between, and land a frame (20 ms) ahead of the music (the eye forgives early, not
-   late). The downbeat is biggest (every headlight plus a flash of every front light bar), beat 3 next, and beats 2 and 4
-   are the Ys only. The pattern follows the mood: a strong beat under a quiet verse gets a small
-   half-time step on the inner beams; a groove thumps on the inner beams; drive on every headlight;
-   frenzy adds off-beats. Through a build the pulse intensifies (Ys, then every car, then eighths,
-   then half a beat of black) and the build lands on the next downbeat. In driving passages the
-   sustained feature lamps *duck* for a few frames before each hit (sidechain ducking, as producers do
-   so a kick cuts through pads), so every beat lands as dark-to-bright. Organ pieces get a half-time
-   pulse except where the music pounds; songs held quiet (Ave Maria) get none. Cue-sheet and lyric
-   hits are snapped onto the beat. Each show's `pulse.txt` lists the decision for every phrase.
+## From song to show
 
-   **Continuous quantization** (`tempo.py`, `moves._snap`). These recordings aren't metronomic,
-   above all the organ. The tracked beats are turned into a beat map that follows the performer: a
-   beat that already sits on a played attack stays; a beat that drifted moves onto the strongest
-   attack near it, or onto the smooth local tempo through its neighbours (never across a fermata).
-   Before that, a phase check compares the music's onset strength on the beats with half and quarter
-   beats off, window by window, and shifts any run of beats that locked onto the off-beat (the beat
-   tracker's half-time folding used to take every other beat from the first one, which put a whole
-   section anti-phase); downbeats are phased section by section. Every beat is then snapped onto the
-   peak of the music's attack curve (the drums when separated), refined between the tracker's 23 ms
-   frames - Thriller's tracked beats sat a whole frame after the kick.
-   Sixteenths are subdivided from each beat's own length, and a sweep step snaps to that grid and
-   from there onto a note actually played within 40 ms. Ripples and flams span musical lengths
-   (half a beat, thirty-seconds), so they start on the beat whatever the tempo.
+```
+song ─► decode ─► listen (beats, notes, loudness, form) ─► phrases ─► a move per phrase ─► beat layer
+                         │                                                                    │
+                  lyrics (LRCLIB) ─────────────────────► cues ◄─────────────────────────────────┘
+                                                           │
+              motors (lids, windows, mirrors, port, doors) ◄┘ ─► lamps per car ─► FSEQ per car ─► ZIP
+```
 
-   | gesture | unison moves | split moves (Ys | truck) |
-   |---|---|---|
-   | motif (ornament → run → held note) | motif: ticks on the truck, sweep across the stage, hold where it lands | |
-   | run | keyboard (low left → high right), relay, cascade | y_keyboard over the 16 Y lamps | ct_scan |
-   | figuration (fast single notes) | lr_notes, rotation, mirror, keyboard, wave, converge, call_response, meter, pinball, syncopate, rain, tug_of_war, antiphony, checker, beam, lr_channel | y_keyboard, y_ripple in/out, y_turn_ticks, y_bass_fogs | ct_meter, ct_comets, ct_scan, ct_edge_pulse |
-   | beat-driven (band songs) | lr_beat, march (left-right-left-right), syncopate, pinball, checker, beam, lr_channel | | |
-   | crescendo | out_in (corners → truck, bar fills, black, pop), fill_stage, bounce_build, implode (build into the middle, then a slow fade) | |
-   | chords | block, meter, fade_cross (slow crossfade left ↔ right), bar_collide | y_chords | ct_meter |
-   | recitative (slow notes) | pulse, heartbeat, expand_contract | y_breathe | ct_comets / ct_swell |
-   | trill | shimmer | | |
-   | cadence / arrival | all_on / lightning with a blackout before | | |
+The page (`app/pipeline.ts`) decodes the song and hands it to a worker (`app/show.worker.ts`), which
+listens, looks up the lyrics at the same time, and choreographs. The page then shows the result in 3D
+and packs the download.
 
-   In lively sections at least 60 % of the chooser's picks are whole-lineup *collaboration* moves (the
-   stage-wide sweeps, builds, ping-pongs and checker patterns), so the show reads as one instrument
-   rather than cars blinking side by side.
+### Listening (`engine/listen/`)
 
-   Closures (`motors.py`) are their own side stage, every figure crossing the cars:
-   - **Lids** (frunk / liftgates): the opening *is* the crescendo. The biggest builds (two per song,
-     when the music stays loud long enough) get the full figure: every lid opens fully, lands on the
-     peak a beat after its neighbour, **dances** (bobs up and down) through the loud stretch for up to
-     9 s, and closes in the same order - Open + Dance + Close. Other builds get part-way figures —
-     *relay* (one lid lifts part way and Stops; as it drops the next lifts; the last rises onto the
-     peak), *alternate* (the Ys lift together and the truck's frunk rises as they drop) and *wave*.
-     Leftover pairs become slow half-open breaths rolling across the lineup on long calm phrases.
-   - **Windows** never close during a show: Tesla's README points out that the music only plays from
-     the cabin speakers, so the crowd hears it through the open windows. All four go down at the
-     start; the waves are ~4.5 s Dance bursts (a lowered window dancing bobs up a little), fronts
-     first and rears half a burst later, rolling across the cars (left to right, right to left, Ys
-     then truck); the biggest peak gets a 10 s dance; a final Open leaves every window fully down.
-     Up to about 24 s of dancing per window per show, under Tesla's ~30 s thermal recommendation.
-   - **Mirrors**: a short tempo pulse (4 cycles) in the steadiest loud section; fold-and-unfold
-     gestures on the biggest landings (wave, car alternate, outside-in, every-other, inside-out,
-     together); and the rest of their 20 commands fill the stillness - again and again, the longest
-     stretch with nothing moving (over 12 s of lively music, 30 s of calm) gets a figure in its middle.
-   - **Charge port**: its Dance is the rainbow light, so it joins the colours for the most exciting
-     stretch of each song - open, flashing for up to ~2 minutes, closed before the door's own
-     2-minute auto-close. (The ~30 s dance advice is about motors overheating; the audit exempts the
-     port's light.)
-   `tools/motor_activity.py` shows how much of each song has something moving and the longest still
-   stretch.
-   All within Tesla's per-show limits. `tools/closure_audit.py` checks every show against those rules;
-   `tools/motor_log.py <show> [liftgate|windows|mirrors|port]` prints the motor script in time order.
+- **Decoding.** A 44.1 kHz WAV is read by the app itself (`app/wav.ts`), since browsers scale 16-bit
+  samples differently; anything else goes through the browser's decoder at 44.1 kHz. The song is mixed
+  to mono and resampled to 22050 Hz with our own Kaiser-windowed sinc (`resample.ts`), as librosa does:
+  every difference between browsers and Python in testing came from decoding and resampling.
+- **Beats and downbeats**: [Beat This!](https://github.com/CPJKU/beat_this) (the `final0` checkpoint) on
+  ONNX Runtime Web (`beats.ts`). The app computes the log-mel spectrogram itself, and the model is
+  exported without it, with fp16 weights.
+- **Notes**: Spotify's [basic-pitch](https://github.com/spotify/basic-pitch) (`nmp.onnx`, `notes.ts`),
+  with its note decoding ported to typed arrays: identical notes in well under a second, where the npm
+  package takes minutes.
+- **Backends** (`infer.ts`). The models run on the best backend the browser has: WebGPU; else a pool of
+  workers, each with a single-thread WASM session; else one WASM session in the show's worker. A GPU
+  that fails at run time, or pool workers that can't start or die, drop to the next one and start over.
+  The pool is sized by memory as well as cores, since each worker takes about 1 GB at its peak: one
+  worker per 4 GB of `deviceMemory` (Chromium), two on other computers, none on phones and tablets.
+  ONNX Runtime's own threads would need cross-origin isolation, which GitHub Pages can't give.
+- **The analysis** (`audio.ts`, with `dsp.ts` and `cqt.ts`, the subset of librosa it needs): onsets,
+  bass and bright hits, loudness, intensity tiers 0–3 that build across the piece, crescendos, held
+  notes, and chroma. `texture.ts` turns notes into events (a key press or a chord) and labels each
+  passage: melody, run, figuration, trill, chords, arrival. `form.ts` maps the sections from harmony and
+  timbre, letters the repeats (A, B, A′), and gives each section an intensity **ceiling** that shapes the
+  arc: the loudest third may go all out, nothing before the climax gets the top tier, and each repeat may
+  go one step higher.
+- **The beat map follows the performer** (`tempo.ts`). Recordings aren't metronomic, above all organ and
+  orchestra. A tracked beat that drifted moves onto the strongest attack near it, or onto the smooth
+  local tempo through its neighbours; runs of beats locked onto the off-beat are shifted back. Sweeps
+  snap to a sixteenth grid built from each beat's own length, then onto a note played within 40 ms.
 
-   **The legato style** (`legato.py`, `"style": "legato"` in `setlist.json`) is for slow, flowing music
-   with no beat to follow (Ave Maria). The beat-driven moves would leave it dark much of the time, so
-   the lights follow the music's breath and melody instead: a bed of lamps that join and leave in
-   layers as the music swells (the truck's bar glowing at the music's level, then the Ys' signature
-   strips, DRLs, fogs, and every headlight only at the climax), always on 2 s ramps; the melody as one
-   light gliding across the stage by pitch (a spot sliding along the truck's bar, the Ys' inner beams
-   fading in as it passes); the interiors warming from blue to gold; a slow fade at the end.
-6. `fseq.py` — writes FSEQ v2 uncompressed, 200 channels, 20 ms (Tesla's format). `vendor/light-show/validator.py` is Tesla's checker (setup.sh fetches it).
+### Lyrics (`engine/listen/`, `engine/lyrics.ts`)
 
-   The lineup itself is `vehicles.py`: one letter per car (`Y` 2025+ Model Y, `y` 2020-24 Model Y,
-   `C` Cybertruck), crowd's left to right, 1 to 5 cars; each car's folder is named after its place
-   (`Car2_ModelY_CenterLeft`). `make_lineup` in `choreo.py` builds the `Car`s from it.
+The song's artist and title come from its tags (ID3 in MP3, Vorbis comments in FLAC, iTunes atoms in M4A,
+RIFF INFO in WAV), else its file name (`tags.ts`). [LRCLIB](https://lrclib.net) is asked for synced
+lyrics with those and the song's length while the song is being listened to (`lrclib.ts`); it's busy at
+times, so requests are retried, and a song without lyrics plays without lyric effects.
 
-### Motor timing: what's known and what isn't
+LRCLIB's times belong to some release of the song, so the lines are slid, up to 15 s either way, to where
+the singing is in this file (`align.ts`). The singer is nearly always in the middle of the stereo picture,
+so the voice band leaning to the middle marks it. The slide counts only when the song's first, middle
+and last thirds mostly agree on it; otherwise LRCLIB's own times are kept for a release of the same
+length, or the lyrics are left out. On five sung songs, line starts landed a median 0.13–0.75 s from
+word-level timing, about what LRCLIB's own times allow.
 
-Tesla's light-show README is the only published source (checked October 2026; owner forums and videos
-give no stopwatch times, and nothing at all for the Cybertruck frunk):
+Lyrics are line-level, so the show reacts to what a line says, not to one word in it. The moments come
+from one table of words (`LYRIC_WORDS` in `lyrics.ts`): a colour word colours the interiors for the line,
+a scream-type word strikes lightning on its loudest attack, a word sung twice in a line pings across the
+cars on its beats, and every line start is a phrase cut.
 
-| closure | travel (approx.) | commands per show | notes |
+### Choreography (`engine/choreo.ts`)
+
+`choreograph()` runs the steps in order:
+
+1. **Phrases** (`phrases.ts`). Phrases end at rests, after held notes, at arrivals, at texture changes and
+   line starts, and last at most 8 s. Each gets a **gesture**: motif, run, figuration (fast single
+   notes), trill, chords, cadence or recitative (slow notes).
+2. **Mood** (`mood.ts`). Each phrase gets an energy from its loudness, its section's ceiling and its note
+   density, and a mood that sets the pace: *calm* once a bar with soft ramped glows, *groove* every other
+   beat, *drive* every beat, *frenzy* half-beats, kept for climaxes.
+3. **A formation per phrase** (`choosePlan`): **unison**, one move on every car, or **split**, the side
+   cars in one move and the centrepiece in another (see [the stage](#the-stage)). The candidates are the
+   gesture's own list plus every catalogued move whose gestures and moods fit (`catalog.ts`; every move
+   is in [MOVES.md](../MOVES.md)). Then the rules:
+   - least used first: no move takes more than about 7 % of a song, and no formation plays twice running;
+   - in lively sections at least 60 % of the picks are *collaboration* moves, where the cars pass
+     something between them;
+   - each section leans unison or split, so the texture changes with the form;
+   - a repeated section replays its formations, a step bigger when its ceiling allows, and from the third
+     hearing a sibling move on the same grid;
+   - a full-power section uses only strong moves; beat-locked moves need a clear beat.
+4. **The moves** (`moves.ts`) draw their lights, a quarter second of black before a big one, and a flash
+   on the truck's bar when the formation changes kind. `darknessGuard` keeps any lively phrase from
+   playing out mostly dark.
+5. **The beat layer** (`pulse.ts`). Concert lighting gives the beat to the fixtures with the most visual
+   mass, so the **headlights carry the beat** wherever the music is lively and its pulse is clear, and the
+   moves keep the signatures, DRLs, fogs, turns, markers and the bar. The downbeat is biggest (every
+   headlight and a flash of every front bar), beat 3 next, beats 2 and 4 the side cars only, off-beats only
+   in frenzy. Hits are about 120 ms with darkness between. In driving passages the sustained lamps dip
+   for a few frames before each hit (the producer's sidechain trick), so every beat lands dark to bright.
+   The pulse drops out under a build and comes back on the landing; music with no clear pulse gets none.
+6. **Cues** (`cues.ts`, `lyrics.ts`): moments laid over the moves. Every song gets a default sheet: the
+   last section may peak, and the lids rise into the loudest moment of the last quarter. The lyric
+   moments come in here. (The songs of the first event, matched by file name, have their own sheets.)
+7. **Interiors and the finale**: the cabin lights glow purple to orange with the intensity, take the
+   lyric colours, and the whole stage hits on the music's last strong beat and fades out.
+8. **Motors** (`motors.ts`). See [the motors](#the-motors).
+9. **Per car** (`tidy`): flashes shorter than 100 ms are stretched and gaps under 60 ms opened up, so
+   rapid notes read as separate flashes; a 2025+ Model Y's frames are translated to its lamps (`lamps.ts`,
+   [below](#the-2025-model-ys-lamps)); and the last frames are dark.
+
+Slow, flowing music with no beat to follow gets the **legato** style (`legato.ts`): a bed of lamps that
+join and leave in layers as the music swells, always on 2 s ramps; the melody as one light gliding across
+the stage by pitch; the interiors warming from blue to gold; a slow fade at the end.
+
+### Output
+
+Each car's frames become an FSEQ file (`viewer/core/fseq.ts`): version 2, uncompressed, 200 channels,
+20 ms frames, Tesla's format, naming its audio file. The song is written as a 44.1 kHz 16-bit stereo WAV
+(`app/wav.ts`), and every car's `LightShow` folder (the `.fseq` and the `.wav`) goes into one ZIP, stored
+without compression, which show files and audio barely need (`app/zip.ts`, `app/DownloadSheet.tsx`).
+
+### The 3D preview (`viewer/`)
+
+The preview draws the lineup on Tesla's own models from the Tesla app, on a night parking lot after rain
+(`car/lot.ts`). Each car (`rig.ts`) is built from its app model (`car/appBody.ts`): the app keeps each
+kind of lamp in one mesh, so lamps are split by where each triangle sits (per side, inner and outer, the
+Cybertruck's bars LED by LED), and closures play the app's own animation clips. `core/simulate.ts` turns
+the show's bytes into what each car does, frame by frame: lamp brightness following Tesla's ramp rules,
+and closure positions following their travel times. Glow sprites (`glow.ts`) light every lamp in one draw
+call. Renderer and lighting follow Tesla Lightshow Studio (AGPL-3.0), tuned for an iPad: the pixel ratio
+is capped and the bloom switches off when the device is slow.
+
+The models and the paint table are served from `models/tesla-app/`, from the repository's `car-models`
+release. Every car offers every paint in the app's table (it doesn't say which paints each model was sold
+in), except the Cybertruck, which only comes in stainless. Lamps the app has no model of stay dark in the
+preview: the front fogs and aux park lamps of the 2024+ Model 3 and the Model Y Standard (they may not have
+them), the Model Y L's front turn signals and reverse lamps, and the Model X's rear fog.
+
+## The stage
+
+Each car has two **slots**, its crowd-left half and its crowd-right half. A note's pitch picks a slot
+(`moves.slotFor`): low notes on the crowd's left, high on the right, so a scale scrubs across the lineup
+like a keyboard. Each phrase stretches its own pitch range across the whole stage, so every phrase uses
+every car.
+
+Moves are written for two **roles**, so one move works for any lineup:
+
+- **The centrepiece**: the Cybertruck nearest the middle (`moves.centreTruck`, `null` without one). Its
+  front bar is 60 separately driven LEDs, so it plays what lamps can't: comets, sweeps, a level meter, the
+  pop at the top of a build. It takes a wider share of the pitch range, so runs sweep visibly across it.
+- **The side cars**: every other car (`moves.sides`). Each plays its eight front lamps, crowd-left to
+  right: signature, DRL, outer beam, inner beam, then the mirror image.
+
+MOVES.md uses the classic lineup's names: "the truck" is the centrepiece and "the Ys" are the side cars.
+
+| Lineup | Centrepiece | Side cars | What changes |
 |---|---|---|---|
-| liftgate (Cybertruck: frunk) | open 14 s (frunk 10 s, timed on the truck), close 4 s | 6 | dances only once fully open |
+| `YCY` (classic) | the Cybertruck | both Ys | nothing: the moves were designed for this |
+| `YYCYY` | the middle Cybertruck | all four Ys | ripples, keyboards and relays run across four cars |
+| `YC`, `CY` | the Cybertruck | the Y | the centrepiece is at one end; low notes still sit on the crowd's left |
+| `CYC`, `CCC` | the middle truck | the others, trucks included | a side truck plays its lamps, and its bar when a note lands on it |
+| `Y`, `YY`, `SXm` | none | every car | a split plays its side-car half on every car; bar moves fall back to whole-stage versions |
+| `C` alone | the truck | the truck too | one car plays both parts |
+
+Every car but the Cybertruck speaks the Model Y's lamp vocabulary: Tesla's Model S, 3 and X take the same
+channels, and the cars with a front light bar (the 2025+ Model Y and the Model Y L) translate them at the
+end. The lineup letters are in `engine/vehicles.ts`.
+
+Tesla's channels are named for the vehicle's own left (the driver's side), which is on the crowd's
+*right*. `Car`'s lamp groups (`engine/car.ts`) flip every side, and the front bar's pixels are written
+crowd-left to crowd-right.
+
+## The moves
+
+The catalogue's `grid` says what a move locks to:
+
+| Family | Locks to | Examples |
+|---|---|---|
+| note-following | the notes, thinned to the mood's pace | `keyboard`, `relay`, `mirror`, `rotation`, `rain`, `block` |
+| beat | the beat map, every 2nd or 4th beat when calm | `wave`, `converge`, `pinball`, `march`, `checker`, `ping_pong` |
+| bar | the downbeats | `heartbeat`, `curtain`, `stripes` |
+| build | a whole crescendo, landing on its peak | `out_in`, `fill_stage`, `implode`, `accelerando` |
+| self-paced | its own timing | `motif`, `shimmer`, `cadence`, `meter` |
+| split | a side-car move plus a centrepiece move | `y_ripple_in` with `ct_comets`, `y_chords` with `bar_collide` |
+
+Many come from studying community xLights shows, including Tesla's own five-car "The Arrival" and
+"Cyber Symphony": `curtain`, `marquee`, `shockwave`, `sparkle`, `sunrise`, `scanner`, `ping_pong`,
+`metronome`, `stripes`, `flutter`, `accelerando` and `teardown`.
+
+## The motors
+
+The motors are a second stage: slow, limited and loud, so they're saved for the moments that earn them.
+Moves are planned backwards from the travel times, so a lid is fully open exactly on its peak.
+
+| Closure | Travel (approx.) | Commands per show | Notes |
+|---|---|---|---|
+| liftgate (Cybertruck: frunk) | open 14 s (frunk 10 s), close 4 s | 6 | dances only once fully open |
 | each window | 4 s | 6 | can dance from any position |
 | each mirror | 2 s | 20 | no dance |
-| charge port | 2 s | 3 | Dance = rainbow LED; closes itself 2 min after opening |
+| charge port | 2 s | 3 | its Dance is the rainbow light; closes itself 2 min after opening |
+| Model X falcon doors | open 20 s, close 8 s | 6 each | |
 
-Only Open, Close and Dance count toward the limits (Stop doesn't); Idle lets a move in progress
-finish; Stop halts at once; dancing more than ~30 s per show risks a thermal cut-out. Tesla's
-validator checks only the file format and the 4-hour maximum - not these limits - which is why
-`tools/closure_audit.py` exists. Measured on the community shows in `vendor/` (see SOURCES.md):
-creators routinely reverse mirrors at 45-90 % of their travel, and Tesla's own 5-car example starts a
-liftgate dancing 12.8 s after Open and uses four charge-port commands; these shows are stricter.
+Only Open, Close and Dance count. Dancing more than about 30 s per show risks a thermal cut-out. Tesla's
+README is the only published source for these; the Cybertruck's frunk isn't in it and was timed on a 2024
+truck. Some older Model Ys open their liftgates only part way until the opening height is reset to its
+default.
 
-**The Cybertruck's frunk** isn't in Tesla's documentation; timed on a 2024 Cybertruck it opens in
-about 10 s and closes in 4 s (`LIFTGATE_OPEN_S` in `lightshow/motors.py`, `closureSeconds` on the
-Cybertruck profile in `preview3d/src/core/vehicles.ts`, `TRUCK_FRUNK_OPEN` in `tools/closure_audit.py`). Owners
-report liftgates that open only part way on some older cars until the liftgate's opening height is
-reset to its default; check each Model Y opens fully.
+- **Lids: the opening is the crescendo.** On the biggest builds every lid opens, lands on the peak a beat
+  after its neighbour, dances through the loud stretch and closes in the same order. Other builds get
+  part-way figures: a relay (one lid lifts and stops, and as it drops the next lifts), an alternation
+  (the side cars, then the centrepiece) and a wave.
+- **Windows stay down.** The music plays from the cabin speakers, so the crowd hears it through the open
+  windows. They dance in about 4.5 s bursts rolling across the cars, and 10 s on the biggest peak: about
+  24 s per window in all.
+- **Mirrors** pulse to the tempo in the steadiest loud section, fold on the big landings in patterns (a
+  wave, outside-in, every other car), and fill the longest stretches where nothing else moves.
+- **The charge port** opens for the most exciting stretch of the song and dances its rainbow light,
+  closing before its own 2-minute timer.
+- **A Model X's falcon doors** rise into the song's biggest peak, dance and close. Its windows keep still
+  meanwhile: Tesla warns that moving windows can trip the doors' pinch detection and stop the show.
 
-## Checking a show
+`Car.closure()` refuses any command past Tesla's limit, and `vehicles.test.ts` checks every car letter
+against the limits.
 
-- **3D viewer** (the preview): start the server from this folder —
-  `python3 -m http.server 8765 --bind 0.0.0.0` — and open `http://<this Mac's IP>:8765/`
-  (it redirects to `preview3d/dist/`; works from an iPad on the same Wi-Fi, tap Play once for audio).
-  It plays the set list in `preview/shows.json`, or any build's own list with
-  `?manifest=<url of its shows.json>` (`build.py --out` and the web app write one). The lineup is
-  drawn from Tesla's own models and animations from the Tesla app (installed once, see
-  `preview3d/README.md`) on a night lot: every lamp and light-bar LED driven from the real show files,
-  closures moving at their travel times, the truck's bar riding up on the frunk lid. Rebuild after code changes with `cd preview3d && npm install && npm run build` (see
-  `preview3d/README.md`; built on Tesla Lightshow Studio, AGPL-3.0).
-- **Quantization** — `tools/quantize_check.py <show>`: for each phrase, the share of light hits on
-  the performer-following sixteenth grid and on played attacks, flagging beat moves that drift
-  (currently 96 % of the Toccata's hits and 93 % of This Is Halloween's land on one or the other).
-  `tools/move_lab.py <show> [move ...]` renders each move alone on the song's saved analysis and
-  measures the same, so a new move can be checked before it's ever chosen.
-- **Recording a preview video** — start `python3 tools/frame_sink.py <frames_dir>` (port 8767), open
-  the viewer, and in the page console run `await __viewer.recorder.setup(); __viewer.recorder.record('<show>', 24)`:
-  it pins the stage to 1280×720 with a locked front camera and renders every frame at an exact time,
-  so the video is frame-accurate however slowly it renders. Then `.venv312/bin/python tools/video_review.py <show> <frames_dir> 24 [t0-t1 ...]` muxes
-  the song's audio into `output/<show>/<show>_preview.mp4`, measures light-vs-audio sync from the
-  video itself, prints how busy each car is through the song, and writes contact sheets to `checks/`.
-- **Feeling the beat** — `tools/feel.py <show> [t0 t1]` models what the crowd sees (every front
-  lamp weighted by how bright it reads, ramps simulated) and measures, section by section, how
-  clearly the music beats, how strongly the light pulses on the beat (phase-locking), the share of
-  beats with a visible hit, the downbeat accent and the lead; with a window it draws a strip of the
-  drums against each car's brightness. `tools/feel_all.py` runs it over the set list and flags
-  sections where the beat map looks off-phase (two witnesses: onsets and notes) or where the lights
-  hit fewer beats than the beat layer meant to. `tools/pick_moments.py` + the viewer recorder's
-  `shoot` + `tools/beat_sheet.py` give on-the-beat vs half-a-beat-later frames to judge by eye.
-- **Timeline strips** (notes vs lights, for checking sync by eye):
-  `.venv312/bin/python tools/timeline.py 01_toccata_and_fugue 36 48` → `checks/timeline_*.png`.
-- **Orientation check**: `.venv312/bin/python tools/orientation_test.py` builds a 12 s calibration show
-  (slots march crowd-left to crowd-right, then the bar sweeps); open the viewer with `?labels=1` to see
-  car names and which side is the vehicle's left. All choreography is in the crowd's left/right; Tesla's
-  channel names are the vehicle's, which `Car._veh()` flips.
+## Rules every show keeps
 
-## Study material
-
-After `setup.sh`, `vendor/light-show/` is Tesla's light-show repo (its validator and multi-car
-examples). The community shows and xLights sequences that informed the move vocabulary (Tesla's 5-car
-"The Arrival", "Cyber Symphony", a community Toccata) came from public repos listed in
-[docs/SOURCES.md](SOURCES.md).
+- Tesla's per-show command limits for every closure, Dance only once a lid is fully open, and about 30 s
+  of motor dancing at most.
+- 200 channels, 20 ms frames, FSEQ v2 uncompressed.
+- Choreography in the crowd's left and right; car 1 is the crowd's left.
+- **Deterministic**: the same song and code give byte-identical files. The few "random" sparkles come
+  from numpy's generator, ported bit for bit (`engine/rng.ts`), seeded from the phrase.
+- Lights lead the sound by one 20 ms frame (`LIGHT_LEAD_S`): the eye forgives early, not late.
+- Every car is lit for most of the song; no lively phrase plays out mostly dark.
 
 ## The 2025+ Model Y's lamps
 
-Tesla's documentation predates the 2025+ Model Y ("Juniper"). Two on-car
-tests in Oct 2026 - Tesla's light-show issue #183 and github.com/Nghtmare7509/tesla-lightshow-juniper,
-which tested every channel alone - agree on its front: headlights (1/2), lower white lamps (3/4),
-the light bar's outer ends (7/8, "channel 4", one per side), its whole centre (11/12, "channel 6",
-either side), amber turns (13/14) and fender repeaters (21/22). Signature, channel 5, fogs, aux park
-and side markers do nothing, and the bar is not separately controllable LED by LED (the earlier
-community claim that it is, in issues #144/#166, was never shown on a car).
+Tesla's documentation predates the 2025+ Model Y ("Juniper"). Two on-car tests in October 2026, Tesla's
+light-show issue #183 and [Nghtmare7509/tesla-lightshow-juniper](https://github.com/Nghtmare7509/tesla-lightshow-juniper),
+which tested every channel alone, agree on its front: headlights (channels 1/2), lower white lamps (3/4),
+the light bar's outer ends (7/8, "channel 4", one per side), its whole centre (11/12, "channel 6", either
+side), amber turns (13/14) and fender repeaters (21/22). Signature, channel 5, fogs, aux park and side
+markers do nothing, and the bar is not separately controllable LED by LED.
 
-The choreography still writes the Model Y's lamp vocabulary, and `lamps.juniper_output` translates
-it at the end: a side's accents light that outer end of the bar plus the centre (both sides: the
-whole bar), the fogs' low glow and bass pulses light the centre, the side markers become the fender
-repeaters, and flashes drawn on the bar (the downbeats) light the matching sections. The 60-pixel
-picture is still written to 47-106 in case a software version reads it. `make_lineup` in
-`choreo.py` takes `Y` for a 2025+ Model Y and `y` for a 2020-24 one.
+The choreography still writes the Model Y's lamp vocabulary, and `lamps.ts` translates it at the end: a
+side's accents light that outer end of the bar plus the centre, the fogs' glow and bass pulses light the
+centre, the side markers become the fender repeaters, and flashes drawn on the bar light the matching
+sections. The 60-pixel picture is still written in case a software version reads it.
 
-## The diagnostic show
+## Browsers
 
-`00_diagnostic` is generated by `lightshow/diagnostic.py` rather than from music. Its script is a list
-of announcements, each with an action, written for the lineup: each car is introduced by number and
-place, and the lines about liftgates, frunks and light bars name only what the lineup has. macOS's `say`
-(or espeak-ng elsewhere) speaks them into a voice track, and the spoken clips' lengths fix the
-timeline (a `.json` beside it) that the lights and motors follow. Every announcement opens with a short
-tone that every car flashes with, so sync is checked from start to finish. The voice track is only
-regenerated when the script, the lineup or the voice changes. For a set list it lives in `songs/`
-(`python3 build.py 00`); `build.py --diagnostic --lineup ... --out DIR` builds one for any lineup.
+Checked on the built site, served statically under `/carreography/` like GitHub Pages, with Playwright on
+an M1 Max: Hall of the Mountain King (2:34, WAV) for three cars, from "Make the show" to the finished show,
+and the peak memory of the busiest browser process. Every run played and downloaded a valid ZIP.
+
+| Browser | WebGPU | Pool | One thread |
+|---|---|---|---|
+| Chromium 156 | 10.7 s, 1.3 GB | 20.0 s (4 workers), 6.1 GB | 38.0 s, 1.8 GB |
+| Firefox 157 | no adapter | 26.7 s (2 workers), 2.6 GB | 42.8 s, 1.8 GB |
+| WebKit 27.2 (Safari) | 15.8 s, 2.1 GB | 24.3 s (2 workers), 3.8 GB | 40.4 s, 2.6 GB |
+| WebKit as iPad Pro 11 | 15.1 s, 2.2 GB | none on tablets | 36.5 s, 2.6 GB |
+| WebKit as iPhone 17 | 11.5 s, 2.5 GB | none on phones | 37.1 s, 2.5 GB |
+
+| Forced failure | Chromium | Firefox | WebKit |
+|---|---|---|---|
+| WebGPU device refused: pool | 24.9 s | | 27.5 s |
+| WebGPU device lost mid-run: pool | 22.0 s | | 33.2 s |
+| A pool worker dies mid-run: one thread | 43.3 s | 48.1 s | 45.7 s |
+
+Danse Macabre (6:46) takes 19 s in Chromium and 26 s in WebKit on WebGPU, 55 s in Firefox's pool. A second
+show takes about half as long on WebGPU (the worker and its sessions are kept). MP3 and FLAC were checked
+in all three too.
+
+- **Safari** crashed the page a few seconds after a worker that had used WebGPU was terminated, even with
+  its device destroyed, so the show worker that used WebGPU is kept and makes the next show too.
+- **Firefox** has `navigator.gpu` but gives no adapter on macOS, so it uses the pool.
+- **iPhone and iPad** were emulated with WebKit's device profiles, which can't show a real device's memory
+  limit or frame rate. Safari 26 has WebGPU; older versions listen on one thread (about 1 GB at its peak).
+- **The same show everywhere.** With a 44.1 kHz WAV, Hall of the Mountain King's files are byte-identical
+  in every browser and on every backend; Danse Macabre's are too, except 6 bytes of the Cybertruck's in
+  Firefox (one brightness level on a light-bar pixel). An MP3's or FLAC's show can differ a little.
+
+Tried and dropped along the way: Essentia.js (slower, and its beats disagreed), the npm basic-pitch
+decoding (minutes per song), the smaller beat model (too inaccurate on organ music), ONNX Runtime's JSEP
+build (wrong beat output on WebGPU), and Whisper in the browser (a download of hundreds of MB, and
+unreliable).

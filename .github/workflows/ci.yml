@@ -1,37 +1,10 @@
-# Lint, the tests that don't need the machine-learning stack, the viewer's type check, and the app's
-# type check and tests.
-# (The choreography tests need the full analysis environment; run them locally:
-#  .venv312/bin/python -m pytest)
+# The app's type check, lint and tests, on every push and pull request.
 name: ci
 on:
   push:
   pull_request:
 
 jobs:
-  python:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install numpy==1.26.4 pytest==9.0.1 pyflakes==4.0.3
-      - run: python -m pyflakes build.py make_usb.py lightshow tools tests webapp
-      - run: python -m pytest -q
-
-  viewer:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: preview3d
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - run: npm ci
-      - run: npm run typecheck
-
   app:
     runs-on: ubuntu-latest
     defaults:
@@ -46,4 +19,5 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npx tsc -b
+      - run: npx oxlint src
       - run: npx vitest run

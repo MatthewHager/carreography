@@ -1,21 +1,26 @@
-"""Tesla's own car models from the Tesla app, for the 3D preview (preview3d/src/car/appBody.ts).
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "tesla-model-extractor @ git+https://github.com/koenhendriks/tesla-model-extractor@v0.4.2",
+# ]
+# ///
+"""Tesla's own car models from the Tesla app, for the 3D preview (app/src/viewer/car/appBody.ts).
 
-    python3 -m lightshow.tesla_app_models ~/Downloads/Tesla_4.61.6-4647.apkm
+    uv run tools/export_car_models.py ~/Downloads/Tesla_4.61.6-4647.apkm OUT_DIR
 
 The Tesla Android app carries Tesla's 3D models of every car, with Tesla's own animations for the
 frunk, liftgate, doors, windows, mirrors and charge port. tesla-model-extractor (MIT,
 github.com/koenhendriks/tesla-model-extractor) turns an app bundle you have (.apkm, .apks, .xapk or
-.apk; from your phone, or an APK mirror) into GLB files:
+.apk) into GLB files. This runs it for every light-show car (MODELS) and writes the nine .glb files and
+the app's paint table (paints.json, the same for every car) side by side into OUT_DIR, as the site
+serves them from models/tesla-app/. The first run takes a few minutes (the extractor unpacks the app).
 
-    pipx install git+https://github.com/koenhendriks/tesla-model-extractor
+The models are Tesla's: they never enter the git history. The site build downloads them from the
+repository's "car-models" release (.github/workflows/pages.yml). To publish new ones:
 
-This runs it for every light-show car with an app model (MODELS: Model S 2021+, both Model 3s, Model X
-2021+, the four Model Ys and the Cybertruck) and puts each one, with the app's paint table
-(paints.json), where the viewer looks: preview3d/public/models/tesla-app/<id>/ and
-preview3d/dist/models/tesla-app/<id>/. They're the only car models the viewer draws (until they're
-there it says how to get them). The models are Tesla's: they stay out of the repository (.gitignore).
+    gh release upload car-models OUT_DIR/* --clobber
 
-Plain Python with no dependencies; the first run takes a few minutes (the extractor unpacks the app).
+To use them while developing, make OUT_DIR app/public/models/tesla-app.
 """
 
 import os
@@ -25,8 +30,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-TARGETS = [ROOT / "preview3d" / "public" / "models" / "tesla-app", ROOT / "preview3d" / "dist" / "models" / "tesla-app"]
 MODELS = {
     "s_palladium": "S_Palladium.glb",       # Model S 2021+
     "model3_high": "3_High.glb",            # Model 3 2017-23
@@ -38,14 +41,15 @@ MODELS = {
     "bayberry_e80": "BayberryE80.glb",      # Model Y L
     "cybertruck": "Cybertruck.glb",
 }
-EXTRAS = ["paints.json"]                    # the app's paint table (the same for every car)
+PAINTS = "paints.json"
 
 
 def extractor():
-    cli = os.environ.get("TESLA_MODEL_EXTRACT") or shutil.which("tesla-model-extract")
+    """The extractor's command, as uv installed it next to this script's Python."""
+    cli = os.environ.get("TESLA_MODEL_EXTRACT") or shutil.which("tesla-model-extract",
+                                                                path=str(Path(sys.executable).parent))
     if not cli:
-        sys.exit("tesla-model-extract isn't installed: "
-                 "pipx install git+https://github.com/koenhendriks/tesla-model-extractor")
+        sys.exit("tesla-model-extract isn't installed: run this with uv run (see the top of this file)")
     return cli
 
 
@@ -62,10 +66,12 @@ def gdre_args():
     return ["--gdre", str(found[-1])]
 
 
-def main(bundle):
+def main(bundle, out):
     bundle = Path(bundle).expanduser().resolve()
     if not bundle.exists():
         sys.exit(f"{bundle} not found")
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
     cli = extractor()
     with tempfile.TemporaryDirectory() as tmp:
         cmd = [cli, "unreal", *gdre_args(), "--models", ",".join(MODELS), "--variant", "plate_us", "--yes",
@@ -81,18 +87,14 @@ def main(bundle):
             if not src.exists():
                 print(f"  {model}: not in this app bundle")
                 continue
-            for target in TARGETS:
-                if target.parent.exists():
-                    (target / model).mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(src, target / model / glb)
-                    for extra in EXTRAS:
-                        if (src.parent / extra).exists():
-                            shutil.copyfile(src.parent / extra, target / model / extra)
-            print(f"  {model}: {src.stat().st_size / 1e6:.0f} MB")
-    print("done: reload the 3D preview")
+            shutil.copyfile(src, out / glb)
+            if (src.parent / PAINTS).exists():
+                shutil.copyfile(src.parent / PAINTS, out / PAINTS)
+            print(f"  {glb}: {src.stat().st_size / 1e6:.0f} MB")
+    print(f"done: {out}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 3:
         sys.exit(__doc__)
-    main(sys.argv[1])
+    main(sys.argv[1], sys.argv[2])

@@ -1,4 +1,0 @@
-# The web app (webapp/) - installed on top of requirements.txt in the analysis environment.
-fastapi==0.162.0
-uvicorn==0.54.0
-python-multipart==0.0.32  # form and file uploads
