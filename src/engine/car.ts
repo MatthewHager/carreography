@@ -41,6 +41,11 @@ export class Car {
     this.frames = new Uint8Array(nFrames * C.N_CHANNELS);
   }
 
+  /** The same car with nothing on it. */
+  blank(): Car {
+    return new Car(this.kind, this.name, this.x, this.nFrames, this.step, this.juniper, this.falcon);
+  }
+
   get isCt() {
     return this.kind === 'cybertruck';
   }

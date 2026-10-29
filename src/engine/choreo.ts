@@ -168,6 +168,7 @@ function family(an: Analysis, t0: number, t1: number, step: number,
  * stretch, rests included, with the melody riding the trucks' bars on top; a note move plays each phrase's
  * notes. */
 function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
+  const scratch = cars.map((c) => c.blank());
   const used = new Map<string, number>();
   const byKey = new Map<string, string>();
   let prev: string | null = null, prevFamily: 'note' | 'beat' | null = null;
@@ -193,20 +194,39 @@ function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
       prevFamily = CAT.NOTE_MOVES.includes(move) ? 'note' : 'beat';
       for (const ph of own) ph.move = CAT.FOR_GESTURE[ph.gesture] ?? move;
       if (prevFamily === 'beat') {
-        // the beat move across the stretch, around the phrases that play their own
-        let t = t0;
-        for (const ph of [...own.filter((q) => q.move !== move), { t0: t1, t1 } as Phrase]) {
-          for (const [a, b] of beating(an, t, ph.t0)) {
-            if (b - a < 1.0) continue;
-            M.MOVES[move](cars, an, stretch(an, a, b));
-            M.barMelody(cars, an, stretch(an, a, b));
-          }
-          t = Math.max(t, ph.t1);
+        // the beat move across the stretch in one go, so its figure carries on over the phrases that play
+        // their own move, which are cut out of it
+        const cut = own.filter((q) => q.move !== move);
+        for (const [a, b] of beating(an, t0, t1)) {
+          if (b - a < 1.0) continue;
+          drawAround(cars, scratch, cut, a, b, (on) => {
+            M.MOVES[move](on, an, stretch(an, a, b));
+            M.barMelody(on, an, stretch(an, a, b));
+          });
         }
       }
       for (const ph of own) if (ph.move !== move || prevFamily === 'note') M.MOVES[ph.move!](cars, an, ph);
     });
   }
+}
+
+const TAIL_S = 3;          // how far past its stretch a move's fades can reach
+
+/** `draw` over [a, b] on the blank `scratch` cars, laid over the cars except within the phrases `cut`. */
+function drawAround(cars: Car[], scratch: Car[], cut: Phrase[], a: number, b: number, draw: (on: Car[]) => void) {
+  if (!cut.some((q) => q.t1 > a && q.t0 < b + TAIL_S)) return draw(cars);
+  draw(scratch);
+  const c0 = cars[0], f0 = c0.fr(a - 1), f1 = c0.fr(b + TAIL_S), N = C.N_CHANNELS;
+  const keep = new Uint8Array(c0.nFrames).fill(1, f0, f1);
+  for (const q of cut) keep.fill(0, c0.fr(q.t0), c0.fr(q.t1));
+  cars.forEach((c, k) => {
+    const from = scratch[k].frames, to = c.frames;
+    for (let f = f0; f < f1; f++) {
+      if (!keep[f]) continue;
+      for (let i = f * N; i < (f + 1) * N; i++) if (from[i] > to[i]) to[i] = from[i];
+    }
+    from.fill(0, f0 * N, f1 * N);
+  });
 }
 
 /** The parts of [t0, t1] where the music beats (feel.ts). */
