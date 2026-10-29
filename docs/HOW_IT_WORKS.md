@@ -287,18 +287,22 @@ Apart from the windows going down as the music starts, motors move only where th
 groove and beats (not where it flows), and stillness is filled only after the song's first quarter, so the
 budget isn't spent before the song has built. A figure never moves several cars at once: each car starts
 its motor's travel time after the car before it (a window's 4 s, the port's 2 s, at most 4 s for the lids
-and doors), so the motion relays across the lineup.
+and doors), so the motion relays across the lineup. On a peak the relay closes up (to a beat at least) so
+the last of five cars still moves within it.
 
 - **Lids: the opening is the crescendo.** They open to land on the song's peak a relay after their
   neighbour, dance through it (up to 20 s) and close in the same order; other big moments (drops, builds'
   landings, arrival chords) get part-way figures: a relay (one lid lifts and stops, and as it drops the
-  next lifts), an alternation (the side cars, then the centrepiece) and a wave.
+  next lifts) and a wave (2 s apart, the centrepiece on the moment).
 - **Windows stay down.** The music plays from the cabin speakers, so the crowd hears it through the open
   windows. They go down as the music starts, a relay car by car from the crowd's left, the fronts and then
-  the rears; they dance about 10 s on the peak, car after car, and in about 4.5 s bursts rolling across the
-  cars at the starts of loud sections: about 24 s per window in all.
-- **Mirrors** pulse to the tempo in the steadiest loud section, fold on the big landings in patterns (a
-  wave, outside-in, every other car), and fill the longest lively stretches where nothing else moves.
+  the rears; they dance about 10 s on the peak, each car's half a relay after its lid lands, so lid and
+  windows take turns down the line, and in about 4.5 s bursts rolling across the cars at the starts of loud
+  sections: about 24 s per window in all.
+- **Mirrors** pulse to the tempo in the steadiest loud section (the crowd-left mirrors, then the
+  crowd-right ones, car after car a beat apart), fold on the big landings where nothing else moves in
+  patterns (a wave, outside-in, every other mirror), and fill the longest lively stretches where nothing
+  else moves.
 - **The charge port** opens for the most exciting 30 s of the song and dances its rainbow light, the cars
   2 s apart from the crowd's left, so the rainbows arrive and leave as a relay.
 - **A Model X's falcon doors** rise into the song's biggest peak, dance and close. Its windows keep still

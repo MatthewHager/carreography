@@ -2,24 +2,24 @@
 //
 // Lights flash in 20 ms; the motors move in seconds (mirrors 2 s, windows 4 s, frunk and liftgates
 // 14 s up / 4 s down - the Cybertruck's frunk 10 s up - charge port 2 s), and Tesla counts their commands
-// per show *per closure*
-// (liftgate 6, each window 6, each mirror 20, charge port 3). So they get their own choreography,
-// planned from the form map and the crescendos rather than from the lights, with its own moves:
+// per show *per closure* (liftgate 6, each window 6, each mirror 20, charge port 3). So they get their own
+// choreography, planned from the form map and the crescendos rather than from the lights, with its own moves.
+// No figure moves two cars at once: the cars take their turns a relay apart (relay), crowd-left to right or
+// back, and on a peak the relay closes up so the last car still moves within it (relayWithin).
 //
 //   Lids (frunk + liftgates), one gesture per crescendo, biggest first:
 //     dance        the biggest builds: every lid opens fully, lands on the peak a relay after its
-//                  neighbour (relay: RELAY_MAX_S), dances through the loud stretch and closes (Open + Dance +
-//                  Close)
-//     relay / alternate / wave   part-way lifts (a Stop on the peak) for the rest (Open + Close)
+//                  neighbour, dances through the loud stretch and closes (Open + Dance + Close)
+//     relay / wave part-way lifts (a Stop on the peak) for the rest (Open + Close)
 //   Windows (6 commands per window; down at the start as a relay across the cars, left down at the end):
 //     travelling dance   fronts then rears dance ~4.5 s, car after car a window's travel apart, direction
 //                        alternating
-//     peak dance         every window dances 10 s on the biggest peak, car after car (about 24 s per window
-//                        in all)
-//   Mirrors (20 commands per mirror, six mirrors across the lineup), on their own musical timing:
+//     peak dance         every window dances 10 s on the biggest peak, car after car, each car's windows
+//                        half a relay after its lid lands (about 24 s per window in all)
+//   Mirrors (20 commands per mirror, two a car), on their own musical timing, where nothing else moves:
 //     a tempo pulse in the steadiest section; figures on the biggest landings (wave left-right, wave
-//     right-left, outside-in, inside-out, alternate, Ys-vs-truck); and wherever nothing
-//     has moved for 12 s of lively music (30 s of calm), another figure on the next downbeat.
+//     right-left, outside-in, inside-out, alternate); and wherever nothing has moved for 12 s of lively
+//     music (30 s of calm), another figure on the next downbeat.
 //   Charge port (3 commands): its Dance is a rainbow light, so it opens for the most exciting stretch of
 //     the song, at most PORT_DANCE_MAX_S, the cars its travel time apart: a relay of rainbows over the peak.
 
@@ -29,6 +29,7 @@ import * as C from './channels';
 import { flowsAt } from './feel';
 import { DRIVE, GROOVE, levelAt, levelOver, PEAK, stepOf } from './level';
 import * as np from './np';
+import { centreTruck } from './moves';
 import { builds, drops } from './pulse';
 import { barLen, beatLen } from './tempo';
 
@@ -48,11 +49,17 @@ const ARRIVE_S = 0.5, BUILT = 0.55, HOLDS = 0.8, HOLD_MAX_S = 16, SPACING_S = 24
 const MIRROR_PULSE_CYCLES = 4;          // the steady mirror pulse, leaving commands for the rest of the song
 const SHUT_BY_S = 1.0;                  // every lid is shut this long before the show ends
 const RELAY_MAX_S = 4.0;                // the longest a car waits for the one before it (a lid's close)
+const WAVE_S = 2.0;                     // a wave of part-way lids: each lifts as the one before is half up
 
 /** How long after the car before it a car starts a motor's figure: that motor's travel time (at most
  * RELAY_MAX_S for the slow lids and doors), so each car moves while the one before it is on its way: a
  * relay across the lineup, never a unison. */
 const relay = (travel: number) => Math.min(travel, RELAY_MAX_S);
+
+/** The relay for a figure on a moment `span` s long: closed up from the motor's relay so the last of `n` cars
+ * still starts within the moment, but at least a beat, so each car's move reads as its own. */
+const relayWithin = (an: Analysis, travel: number, span: number, n: number) =>
+  Math.max(beatLen(an), Math.min(relay(travel), span / Math.max(n - 1, 1)));
 
 /** (peak_time, build_length, hold_until, score) */
 type Crescendo = [number, number, number, number];
@@ -192,8 +199,9 @@ function windows(cars: Car[], an: Analysis): void {
     const waveCands = Array.from(new Set(loud.map((sc) => Math.round(sc.t0 * 10) / 10))).sort((p, q) => p - q);
     const waves: number[] = [];
     let last = -1e9;
-    const clear = (t: number) => peakT === null || t + 2 * burst < peakT
-      || t > peakT + WINDOW_PEAK_DANCE_S + burst;
+    const across = (nCars - 1) * relay(WINDOW_S);             // from the first car's turn to the last's
+    const clear = (t: number) => peakT === null || t + across + 2 * burst < peakT
+      || t > peakT + across + WINDOW_PEAK_DANCE_S + burst;
     for (const t of waveCands) {
       if (t - last >= Math.max(30.0, (end - 20) / 5) && clear(t)) {
         waves.push(t);
@@ -209,9 +217,10 @@ function windows(cars: Car[], an: Analysis): void {
       for (const w of rears) c.closure(w, t0 + half, t0 + half + burst, C.CLOSURE_DANCE);
     });
     if (peakT !== null && !flowsAt(an, peakT)) {
-      const span = WINDOW_PEAK_DANCE_S;
-      let t0 = onBeat(an, peakT + idx * relay(WINDOW_S));
-      if (t0 + span > end - 6) t0 = Math.max(1.0, end - 6 - span);
+      // half a relay after the car's lid lands on the peak (lids), so the lid and the windows take turns
+      const span = WINDOW_PEAK_DANCE_S, lag = relayWithin(an, WINDOW_S, peaks[0][2] - peakT, nCars);
+      const late = Math.max(0, peakT + (nCars - 0.5) * lag + span - (end - 6));    // the last still ends in time
+      const t0 = onBeat(an, Math.max(1.0, peakT - late) + (idx + 0.5) * lag);
       C.WINDOWS.forEach((w, j) => c.closure(w, t0 + 0.3 * j, t0 + 0.3 * j + span, C.CLOSURE_DANCE));
     }
   }
@@ -241,20 +250,18 @@ function chargePort(cars: Car[], an: Analysis): void {
 function lids(cars: Car[], an: Analysis): void {
   const end = an.duration;
   const n = cars.length;
-  let ctIdx = cars.findIndex((q) => q.isCt);
-  if (ctIdx < 0) ctIdx = Math.floor(n / 2);
+  const ct = centreTruck(cars), ctIdx = ct ? cars.indexOf(ct) : Math.floor(n / 2);
   let cmdsLeft = C.CLOSURE_LIMITS[C.LIFTGATE];                 // Open + Dance + Close / Open + Close
   let danced = 0.0;
   const lead = Math.max(...cars.map((c) => LIFTGATE_OPEN_S[c.kind]));
   const accepted: number[] = [];                                // shared: the cars move as one lineup
   const busyBy = new Map<Car, [number, number][]>(cars.map((c) => [c, []]));
 
-  /** Per car [open at, stop at or null, close at] for one crescendo. Every figure is a
-   * cross-car one rather than three lids rising together:
+  /** Per car [open at, stop at or null, close at] for one crescendo, a figure across the cars:
    *   relay      one lid lifts part way and Stops; as it drops the next lifts; the last rises
    *              all the way onto the peak (crowd-left to right, then right to left next time)
-   *   alternate  the two Ys lift together and, as they drop, the truck's frunk rises to the peak
-   *   wave       left to right two seconds apart, closing in the same order */
+   *   wave       left to right WAVE_S apart, the centrepiece (or the middle car) on the peak, closing in the
+   *              same order */
   const lidPlan = (pattern: number, k: number, peak: number, buildLen: number, holdUntil: number): LidPlan => {
     const travel = Math.max(3.5, Math.min(lead, Math.max(buildLen, 6.0)));     // the lid that lands on the peak
     const rise = Math.max(5.0, Math.min(lead * 0.5, buildLen / 2));      // a part-way lift (a third of the way)
@@ -264,7 +271,7 @@ function lids(cars: Car[], an: Analysis): void {
       let stopAt: number | null = null;
       let openAt = 0, closeAt = 0;
       if (pattern === 0) {
-        const stage = k % 2 ? (n - 1 - idx) : idx;
+        const stage = Math.floor(k / 2) % 2 ? (n - 1 - idx) : idx;     // every other relay goes back
         if (stage === n - 1) {
           openAt = peak - travel;
         } else {
@@ -276,20 +283,13 @@ function lids(cars: Car[], an: Analysis): void {
           stopAt = openAt + rise;
           closeAt = stopAt + 0.3;
         }
-      } else if (pattern === 1) {
-        if (c.isCt) {
-          openAt = peak - travel;
-        } else {
-          closeAt = peak - travel - 0.8;
-          stopAt = closeAt - 0.3;
-          openAt = stopAt - rise;
-        }
       } else {
-        lag = (idx - ctIdx) * 2.0;
+        lag = (idx - ctIdx) * WAVE_S;
         openAt = peak + lag - travel;
       }
       if (stopAt === null) {
-        closeAt = Math.min(Math.max(holdUntil, peak + 2.0), end - LIFTGATE_CLOSE_S - 2.5) + Math.max(lag, 0.0);
+        const last = end - LIFTGATE_CLOSE_S - 2.5 - (n - 1 - ctIdx) * WAVE_S;    // the last car closes in time
+        closeAt = Math.min(Math.max(holdUntil, peak + 2.0), last) + lag;
         if (travel < lead - 0.5) {                      // short build: freeze part-way, on the peak
           stopAt = peak + lag;
         }
@@ -299,20 +299,20 @@ function lids(cars: Car[], an: Analysis): void {
     return plan;
   };
 
-  /** Per car [open at, null, close at, [dance from, dance to]]: every lid opens fully and
-   * lands on the peak a relay after its neighbour (left to right, then right to left the
-   * next time), dances through the loud stretch (the song's peak through as much of it as the budget
-   * allows), then closes in the same order. */
+  /** Per car [open at, null, close at, [dance from, dance to]]: every lid opens a relay after its neighbour
+   * (left to right, then right to left the next time), timed by the slowest lid so a quicker one waits fully
+   * open, lands on the peak a relay after its neighbour, dances through the loud stretch (the song's peak
+   * through as much of it as the budget allows), then closes in the same order. */
   const dancePlan = (k: number, peak: number, holdUntil: number): LidPlan => {
     const most = k === 0 ? LID_DANCE_BUDGET_S : Math.min(LID_DANCE_MAX_S, LID_DANCE_BUDGET_S - danced);
     const danceLen = np.clip(holdUntil - peak, LID_DANCE_MIN_S, most);
     // the last car still lands inside the loud stretch, and every lid is shut before the show ends
-    const each = Math.min(...cars.map((c) => relay(LIFTGATE_OPEN_S[c.kind])), danceLen / Math.max(n - 1, 1));
-    const plan: LidPlan = new Map();
+    const plan: LidPlan = new Map(), each = relayWithin(an, lead, danceLen, n);
+    const lastLand = onBeat(an, peak + each * (n - 1));
+    const len = Math.min(danceLen, end - SHUT_BY_S - LIFTGATE_CLOSE_S - 0.3 - lastLand);
     cars.forEach((c, idx) => {
       const land = onBeat(an, peak + each * (k % 2 ? (n - 1 - idx) : idx));
-      const openAt = land - LIFTGATE_OPEN_S[c.kind] - LID_OPEN_MARGIN_S;
-      const len = Math.min(danceLen, end - SHUT_BY_S - LIFTGATE_CLOSE_S - 0.3 - land);
+      const openAt = land - lead - LID_OPEN_MARGIN_S;
       plan.set(c, [openAt, null, land + len + 0.3, [land, land + len]]);
     });
     return plan;
@@ -325,7 +325,7 @@ function lids(cars: Car[], an: Analysis): void {
     const k = accepted.length;
     const dancing = cmdsLeft >= 3 && holdUntil - peak >= LID_DANCE_MIN_S && !flowsAt(an, peak)
       && danced + LID_DANCE_MIN_S <= LID_DANCE_BUDGET_S;
-    const plan = dancing ? dancePlan(k, peak, holdUntil) : lidPlan(k % 3, k, peak, buildLen, holdUntil);
+    const plan = dancing ? dancePlan(k, peak, holdUntil) : lidPlan(k % 2, k, peak, buildLen, holdUntil);
     let ok = true;
     for (const c of cars) {
       const [openAt, , closeAt] = plan.get(c)!;
@@ -358,10 +358,11 @@ function lids(cars: Car[], an: Analysis): void {
 }
 
 /** Mirrors: 20 commands *per mirror*, two mirrors a car, on their own musical clock.
- *   tempo pulse   in the steadiest loud section: fold on one bar, unfold on the next, the Ys and the
- *                 truck alternating, so the line keeps time
- *   gestures      fold-and-unfold figures spread over the piece on the biggest landings (wave
- *                 left-right, Ys-then-truck, outside-in, ...)
+ *   tempo pulse   in the steadiest loud section: fold on one bar, unfold on the next, every car's
+ *                 crowd-left mirror on one cycle and its crowd-right one on the next, car after car a beat
+ *                 apart, so the line keeps time
+ *   gestures      fold-and-unfold figures spread over the piece on the biggest landings where nothing else
+ *                 is moving (wave left-right, outside-in, ...)
  * Returns the line of mirrors and the commands each has spent, for fillStill and spendLeftovers. */
 function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
   const end = an.duration;
@@ -413,15 +414,16 @@ function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
     }
     let tPrev = -9;
     let cycles = 0;
+    const beat = beatLen(an);
     for (const d of grid) {
       if (d - tPrev < cycle - 0.1 || cycles >= MIRROR_PULSE_CYCLES) continue;
-      const parity = cycles % 2;                      // the Ys on one cycle, the trucks on the next
-      for (const [c, m] of line) {
-        if ((c.isCt ? 0 : 1) !== parity || spentOf(spent, c, m) + 2 > C.CLOSURE_LIMITS[m] - 8) continue;
-        c.closure(m, d, d + 0.4, C.CLOSURE_CLOSE);
-        c.closure(m, d + cycle / 2, d + cycle / 2 + 0.4, C.CLOSURE_OPEN);
+      line.forEach(([c, m], j) => {
+        if (j % 2 !== cycles % 2 || spentOf(spent, c, m) + 2 > C.CLOSURE_LIMITS[m] - 8) return;
+        const t = d + beat * (cycles % 4 < 2 ? c.x : cars.length - 1 - c.x);    // left to right, then back
+        c.closure(m, t, t + 0.4, C.CLOSURE_CLOSE);
+        c.closure(m, t + cycle / 2, t + cycle / 2 + 0.4, C.CLOSURE_OPEN);
         addSpent(spent, c, m, 2);
-      }
+      });
       tPrev = d;
       cycles++;
     }
@@ -436,14 +438,14 @@ function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
     if (levelAt(an, h) >= LOUD) moments.push([h, 1.0]);
   }
   moments.sort((p, q) => -p[1] - -q[1]);
-  const picks: number[] = [];
+  const picks: number[] = [], busy = moving(cars, an);
   for (const [t] of moments.filter(([m]) => !flowsAt(an, m))) {
-    if (t < 3 || t > end - 9) continue;
+    if (t < 3 || t > end - 9 || busy[Math.trunc(t / an.step)]) continue;
     if (pulseWindow && pulseWindow[0] - 4 < t && t < pulseWindow[1] + 4) continue;
     if (picks.every((q) => Math.abs(t - q) >= Math.max(25.0, (end - 12) / 6))) picks.push(t);
   }
   picks.sort((p, q) => p - q);
-  const patterns = ['wave_lr', 'car_alternate', 'outside_in', 'alternate', 'wave_rl', 'inside_out'];
+  const patterns = ['wave_lr', 'outside_in', 'alternate', 'wave_rl', 'inside_out'];
   picks.forEach((t, k) => {
     mirrorGesture(an, line, spent, onBeat(an, t), patterns[k % patterns.length]);
   });
@@ -469,7 +471,7 @@ function falconDoors(cars: Car[], an: Analysis): void {
     if (!c.falcon) continue;
     const idx = cars.indexOf(c);
     for (const [peak, , holdUntil] of peaks) {
-      const land = onBeat(an, peak + idx * relay(FALCON_OPEN_S));
+      const land = onBeat(an, peak + idx * relayWithin(an, FALCON_OPEN_S, holdUntil - peak, cars.length));
       const openAt = land - FALCON_OPEN_S - LID_OPEN_MARGIN_S;
       const danceEnd = land + np.clip(holdUntil - land, LID_DANCE_MIN_S, FALCON_DANCE_S);
       const closeAt = danceEnd + 0.3;
@@ -595,6 +597,7 @@ function spendLeftovers(cars: Car[], an: Analysis, line: Line, spent: Spent): vo
   }
   // 2. Lids: a lift across the lineup in the longest stillness - opening fully and dancing
   //    when three commands and the time allow, else part way (Open, Stop, Close).
+  const full = Math.max(...cars.map((c) => LIFTGATE_OPEN_S[c.kind])) + LID_OPEN_MARGIN_S;   // the slowest
   for (let k = 0; k < 3; k++) {
     const mask = motion(cars, an);
     let placed = false;
@@ -603,7 +606,6 @@ function spendLeftovers(cars: Car[], an: Analysis, line: Line, spent: Spent): vo
         const left = C.CLOSURE_LIMITS[C.LIFTGATE] - used(c, C.LIFTGATE);
         if (left < 2) return;
         const lag = relay(LIFTGATE_OPEN_S[c.kind]) * (k % 2 === 0 ? idx : cars.length - 1 - idx);
-        const full = LIFTGATE_OPEN_S[c.kind] + LID_OPEN_MARGIN_S;
         const tOpen = g0 + 1.0 + lag;
         const dance = left >= 3 && g1 - tOpen >= full + LID_DANCE_MIN_S + LIFTGATE_CLOSE_S + 1
           && danced(c, C.LIFTGATE, step) + LID_DANCE_MIN_S <= DANCE_CAP_S;
@@ -638,9 +640,12 @@ function spendLeftovers(cars: Car[], an: Analysis, line: Line, spent: Spent): vo
 }
 
 
-/** After a window's last dance, one Open puts it fully down again for the rest of the show. */
+/** After a window's last dance, one Open puts it fully down again for the rest of the show (near the end,
+ * car after car a beat apart, as they went down). */
 function finishWindows(cars: Car[], an: Analysis): void {
+  const beat = Math.min(beatLen(an), 1.0);
   for (const c of cars) {
+    const latest = an.duration - 2.0 - (cars.length - 1 - c.x) * beat;
     for (const w of C.WINDOWS) {
       let last = -1;
       for (let f = 0; f < c.nFrames; f++) {
@@ -650,17 +655,17 @@ function finishWindows(cars: Car[], an: Analysis): void {
       if (last < 0) continue;
       let t = (last + 1) * an.step + 1.0;
       for (const [a, b] of c.windowsStill) if (t + WINDOW_S > a && t < b) t = b;   // not while the doors move
-      c.closure(w, Math.min(an.duration - 2.0, t), Math.min(an.duration - 1.5, t + 0.5), C.CLOSURE_OPEN);
+      c.closure(w, Math.min(latest, t), Math.min(latest, t) + 0.5, C.CLOSURE_OPEN);
     }
   }
 }
 
 
-/** One fold-and-unfold figure across the six mirrors, starting at `t`:
+/** One fold-and-unfold figure across the line of mirrors, starting at `t`, each mirror on its own moment:
  *   wave_lr / wave_rl     an eighth note apart, crowd-left to right / right to left
- *   outside_in / inside_out  a beat apart, from the ends to the middle / the middle outward
- *   alternate             every other mirror, then the rest as they unfold
- *   car_alternate         the Ys fold, the truck folds as they unfold
+ *   outside_in / inside_out  from the ends to the middle / the middle outward, a beat a pair, the crowd's
+ *                         left of each pair an eighth before its right (left, right, left, right)
+ *   alternate             every other mirror, car after car an eighth apart, then the rest as they unfold
  * With freeOnly, a mirror that is already moving nearby sits this one out. */
 function mirrorGesture(
   an: Analysis, line: Line, spent: Spent, t: number, pat: string, freeOnly = false,
@@ -674,11 +679,10 @@ function mirrorGesture(
     let lag: number;
     if (pat === 'wave_lr') lag = j * step;
     else if (pat === 'wave_rl') lag = (n - 1 - j) * step;
-    else if (pat === 'outside_in') lag = Math.min(j, n - 1 - j) * beat;
-    else if (pat === 'inside_out') lag = (Math.floor(n / 2) - 1 - Math.min(j, n - 1 - j)) * beat;
-    else if (pat === 'alternate') lag = (j % 2) * hold;
-    else if (pat === 'car_alternate') lag = c.isCt ? hold : 0.0;
-    else lag = 0.0;
+    else if (pat === 'outside_in') lag = Math.min(j, n - 1 - j) * beat + (2 * j > n - 1 ? step : 0);
+    else if (pat === 'inside_out') {
+      lag = (Math.floor(n / 2) - 1 - Math.min(j, n - 1 - j)) * beat + (2 * j > n - 1 ? step : 0);
+    } else lag = (j % 2) * hold + Math.floor(j / 2) * step;          // alternate
     if (spentOf(spent, c, m) + 2 > C.CLOSURE_LIMITS[m]) return;
     const a = t + lag, b = t + lag + hold;
     if (a + 0.5 > an.duration - 3 - hold) return;
@@ -694,12 +698,19 @@ function mirrorGesture(
 
 /** Per frame: is any motor on any car visibly moving (travelling or dancing), or does the music not want one
  * (below a groove, flowing, or in the song's first quarter, so the budget isn't spent before the song has
- * built)? The charge port's dance is a light, not movement, so it doesn't count. */
+ * built)? */
 function motion(cars: Car[], an: Analysis): Uint8Array {
-  const mask = new Uint8Array(an.nFrames), early = Math.trunc((0.25 * an.duration) / an.step);
+  const mask = moving(cars, an), early = Math.trunc((0.25 * an.duration) / an.step);
   for (let f = 0; f < mask.length; f++) {
     if (f < early || an.level![f] < LIVELY || flowsAt(an, f * an.step)) mask[f] = 1;
   }
+  return mask;
+}
+
+/** Per frame: is any motor on any car visibly moving (travelling or dancing)? The charge port's dance is a
+ * light, not movement, so it doesn't count. */
+function moving(cars: Car[], an: Analysis): Uint8Array {
+  const mask = new Uint8Array(an.nFrames);
   const spans: [number, number | null][] = [[C.LIFTGATE, null], [C.L_MIRROR, MIRROR_S], [C.R_MIRROR, MIRROR_S]];
   for (const w of C.WINDOWS) spans.push([w, WINDOW_S]);
   for (const c of cars) {
@@ -739,7 +750,7 @@ function fillStill(cars: Car[], an: Analysis, line: Line, spent: Spent, scale = 
   const mask = motion(cars, an);
   let downbeats: ArrayLike<number> = an.downbeats ?? [];
   if (!downbeats.length) downbeats = an.beats;
-  const patterns = ['wave_lr', 'wave_rl', 'outside_in', 'car_alternate', 'inside_out', 'alternate'];
+  const patterns = ['wave_lr', 'wave_rl', 'outside_in', 'inside_out', 'alternate'];
   const blocked = new Set<string>();
   for (let k = 0; k < 40; k++) {
     let best: [number, number, number] | null = null;

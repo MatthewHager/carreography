@@ -1,7 +1,7 @@
-// Every lineup makes a show within Tesla's rules, on every test song: the closure command limits, lids
-// that dance only once fully open and are shut when the show ends, at most about 30 s of dancing per
-// closure, a Model X's falcon doors with its windows still while they move, the lights dark at the end,
-// and one file per car in order.
+// Every lineup makes a show within Tesla's rules, on every test song: the closure command limits, no two
+// cars' motors starting together, lids that dance only once fully open and are shut when the show ends,
+// at most about 30 s of dancing per closure, a Model X's falcon doors with its windows still while they
+// move, the lights dark at the end, and one file per car in order.
 
 import { describe, expect, it } from 'vitest';
 import * as C from './channels';
@@ -14,6 +14,8 @@ import { lineupCars, parseLineup, VEHICLES } from './vehicles';
 const LINEUPS = ['Y', 'C', 'CY', 'YCY', 'yYC', 'CCC', 'SMXmB', 'YYCYY', 'CYyLX', 'BCYCB'];
 
 const COMMANDS = new Set([C.CLOSURE_OPEN, C.CLOSURE_DANCE, C.CLOSURE_CLOSE]);
+const KINDS = { lid: [C.LIFTGATE], windows: C.WINDOWS, mirrors: C.MIRRORS, port: [C.CHARGE_PORT],
+  doors: [C.L_FALCON, C.R_FALCON] };
 
 /** [start frame, end frame, value] of each command (a run of one non-zero value) on a channel. */
 function commands(frames: Uint8Array, nFrames: number, ch: number): [number, number, number][] {
@@ -45,6 +47,19 @@ describe('every lineup keeps the rules', () => {
         const an = fixture(song);
         const cars = choreograph(an, lineup);
         expect(cars.map((c) => c.name)).toEqual(lineupCars(lineup).map(([name]) => name));
+        // no figure moves two cars at once: no kind of closure starts the same command on two cars at once
+        const started = new Map<string, string>();
+        for (const car of cars) {
+          for (const [kind, chs] of Object.entries(KINDS)) {
+            for (const ch of chs) {
+              for (const [a, , v] of commands(car.frames, car.nFrames, ch)) {
+                const key = `${kind} ${v} at ${(a * an.step).toFixed(2)} s`, other = started.get(key);
+                expect(other === undefined || other === car.name, `${car.name} and ${other}: ${key}`).toBe(true);
+                started.set(key, car.name);
+              }
+            }
+          }
+        }
         for (const car of cars) {
           const n = car.nFrames, step = an.step;
           expect(car.frames.length).toBe(n * C.N_CHANNELS);
