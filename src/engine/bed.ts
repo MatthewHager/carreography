@@ -169,13 +169,6 @@ function breath(an: Analysis): Float64Array {
   return out;
 }
 
-/** A car's breathing lamps, layer 1 to 5 (see above). */
-function layerLamps(c: Car): number[][] {
-  if (c.isCt) return [c.frunk(), c.sig(), [], c.outer(), c.heads()];
-  if (c.juniper) return [c.drl(), c.markers(), c.fogs(), c.outer(), c.heads()];
-  return [c.sig(), c.drl(), c.fogs(), c.outer(), c.heads()];
-}
-
 /** The front lamps breathing where the music flows: per RES step, as many of the layers the level allows
  * as the breath fills, coming in one at a time and going out together, none changing within MIN_DWELL. The
  * louder the song is there, the sooner each phrase fills its layers. */
@@ -197,7 +190,7 @@ function breathe(cars: Car[], an: Analysis, B: Float64Array): void {
   for (let k = 1; k <= 5; k++) {
     for (const [a, b] of runs(Array.from(lay, (v) => v >= k))) {
       for (const c of cars) {
-        const chs = [...layerLamps(c)[k - 1], ...(k === 2 ? c.tails() : [])];
+        const chs = [...c.layers()[k - 1], ...(k === 2 ? c.tails() : [])];
         c.light(chs, a * res, b * res, C.ON_2000);
         c.light(chs, b * res, b * res + 2, C.OFF_2000);
         if (k === 2 && c.isCt) {

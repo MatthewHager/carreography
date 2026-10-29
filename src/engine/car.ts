@@ -15,6 +15,7 @@
 // (JUNIPER), as it writes, so every lighting is shaped on the lamp the crowd sees.
 
 import * as C from './channels';
+import { CALM, DRIVE, GROOVE, PEAK } from './level';
 import { u8 } from './np';
 import { lineupCars } from './vehicles';
 
@@ -226,6 +227,44 @@ export class Car {
     return this.isCt
       ? this.pick(side, [C.L_SIDE_MARKER], [C.R_SIDE_MARKER])
       : this.pick(side, [C.L_SIGNATURE, ...this.drlVeh('L')], [C.R_SIGNATURE, ...this.drlVeh('R')]);
+  }
+
+  /** What one hit lights of the car's half `side` at level s: a single lamp at a hush, then the signature and
+   * DRL, from a groove the inner headlight too, from drive the outer one as well (but those the beat rings:
+   * light). A truck's half is its side marker and headlights (its bar is drawn separately). A 2025+ Model
+   * Y's is its bar's end and centre, but in drive (every beat) only the end, so the busy figures keep its
+   * two halves apart. */
+  half(side: Side, s: number): number[] {
+    const out = this.juniper ? (s >= DRIVE && s < PEAK ? this.drl(side) : this.accents(side))
+      : this.isCt || s < CALM ? this.sig(side) : this.accents(side);
+    if (s >= GROOVE) out.push(...this.inner(side));
+    if (s >= DRIVE) out.push(...this.outer(side));
+    return out;
+  }
+
+  /** Both halves, and a front light bar's whole width. */
+  whole(s: number): number[] {
+    return [...this.half('L', s), ...this.half('R', s), ...this.bar()];
+  }
+
+  /** A 2025+ Model Y's front light bar, its whole width (a truck's bar is pixels: Car.pixels). */
+  bar(): number[] {
+    return this.juniper ? this.sig() : [];
+  }
+
+  /** The lamps that show a place w across the car (0 its crowd-left end, 1 its right), each lit on its own:
+   * the inner beam on that side, and on a 2025+ Model Y the third of its bar there. */
+  at(w: number): number[][] {
+    const beam = this.inner(w < 0.5 ? 'L' : 'R');
+    return this.juniper ? [beam, [this.drl('L'), CENTRE, this.drl('R')][Math.min(2, Math.floor(w * 3))]] : [beam];
+  }
+
+  /** The front lamps that breathe with flowing music, a layer at a time (bed.ts): from the smallest that reads
+   * to every headlight. */
+  layers(): number[][] {
+    if (this.isCt) return [this.frunk(), this.sig(), [], this.outer(), this.heads()];
+    if (this.juniper) return [this.drl(), this.markers(), this.fogs(), this.outer(), this.heads()];
+    return [this.sig(), this.drl(), this.fogs(), this.outer(), this.heads()];
   }
 
   private drlVeh(vside: 'L' | 'R') {

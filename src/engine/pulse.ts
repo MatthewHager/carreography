@@ -173,7 +173,7 @@ export function apply(cars: Car[], an: Analysis): void {
       hit(c, peak ? (cars.length > 1 ? c.outer() : c.heads()) : c.inner(), kind === 'big' ? hold * 1.25 : hold);
       if (kind === 'big' && peak) hit(c, c.everything(), hold);
       if (kind === 'big' && c.isCt) M.barFlash(c, t, Math.min(0.3, end - t), peak ? 1.0 : 0.5);
-      if (kind === 'big' && c.juniper) c.light(c.sig(), t, t + 0.1);       // its whole bar
+      if (kind === 'big') c.light(c.bar(), t, t + 0.1);
     }
     if (peak && end - t > 2 * hold) {             // the off-beat sweeping the turns: 0, 1, 2, 1, 0 ...
       const n = cars.length, j = sweep++ % Math.max(1, 2 * n - 2), c = cars[j < n ? j : 2 * n - 2 - j];
