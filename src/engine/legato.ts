@@ -41,7 +41,7 @@ import type { Car } from './car';
 import type { Feel } from './feel';
 import { END_LEDS } from './lamps';
 import * as M from './moves';
-import { CALM, DRIVE } from './level';
+import { CALM, DRIVE, musicSpan } from './level';
 import { clip, percentile, runs } from './np';
 
 const RES = 0.25;                                  // seconds per step of the bed
@@ -51,19 +51,6 @@ const BREATH_S = 6;                                // the breath is the loudness
 const FULL = DRIVE + 0.1;                          // the level from which a phrase can reach every layer
 const GLIDE_S = 0.5;                               // the melody's smoothing
 const HELD_S = 0.6;                                // a beam lit this long swells in; shorter, a run passing
-
-/** [start, end] of the audible music: the first and last moments louder than 30 dB under its loud end. */
-function musicSpan(an: Analysis): [number, number] {
-  let first = -1, last = -1;
-  for (let i = 0; i < an.loudness.length; i++) {
-    if (an.loudness[i] > 0.25) {
-      if (first < 0) first = i;
-      last = i;
-    }
-  }
-  if (first < 0) return [0.0, an.duration];
-  return [first * an.step, (last + 1) * an.step];
-}
 
 /** Per frame, the breath (see the module notes), 0..1, where `here` is true; 0 elsewhere. */
 function breath(an: Analysis, here: (t: number) => boolean): Float64Array {

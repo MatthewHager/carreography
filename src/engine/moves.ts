@@ -13,7 +13,7 @@
 import type { Analysis, Phrase } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
-import { CALM, DRIVE, GROOVE, levelAt, PEAK, stepOf } from './level';
+import { CALM, DRIVE, GROOVE, levelAt, levelOver, PEAK, stepOf } from './level';
 import { arange, clip, cumsum, diff, linspace, quantiles, searchsorted, sum } from './np';
 import { beatLen } from './tempo';
 
@@ -481,6 +481,27 @@ const motif: Move = (cars, an, ph) => {
   for (const c of cars) c.rgb(t, t + hold, [255, 255, 255], 0.6);
 };
 
+const SWELL_WAVE_S = 0.5;     // each car further from the middle swells this much later: a slow wave out
+
+/** A held chord with no beat to hit swells: from the middle car out, each car's lamps for the level (every
+ * lamp it has at the peak) ramp up over two seconds and hold while the chord sounds, then fade over two; the
+ * trucks' bars fill from their centres as loud as the music is. */
+const swell: Move = (cars, an, ph) => {
+  const mid = (cars.length - 1) / 2, s = levelOver(an, ph.t0, ph.t1);
+  for (const c of cars) {
+    const t0 = ph.t0 + Math.abs(c.x - mid) * SWELL_WAVE_S;
+    if (t0 >= ph.t1) continue;
+    const chs = s >= PEAK ? c.everything() : whole(c, s, owned(an, t0));
+    c.light(chs, t0, ph.t1, C.ON_2000);
+    c.light(chs, ph.t1, ph.t1 + 2.0, C.OFF_2000);
+    if (!c.isCt) continue;
+    const lv = an.level!, f0 = Math.trunc(t0 / an.step), n = frames(c, t0, ph.t1 - t0);
+    const fill = Array.from({ length: n }, (_, f) => Math.min(1, f / (2.0 / an.step)) * lv[f0 + f]);
+    barFill(c, t0, ph.t1 - t0, fill);
+    if (s >= PEAK) c.pixels(C.REAR_BAR, t0, rows(n, (f) => fill[f], C.REAR_BAR.length));
+  }
+};
+
 /** A big closing chord: the whole stage on for the chord. */
 const cadence: Move = (cars, an, ph) => {
   const ev = an.events;
@@ -664,6 +685,6 @@ export function lightning(cars: Car[], t: number) {
 
 /** Every move by its catalogue name (catalog.ts). */
 export const MOVES: Record<string, Move> = {
-  keyboard, relay, mirror, lr_notes: lrNotes, antiphony, block, shimmer, motif, cadence,
+  keyboard, relay, mirror, lr_notes: lrNotes, antiphony, block, shimmer, motif, cadence, swell,
   march, lr_channel: lrChannel, checker, tug_of_war: tugOfWar, beam, converge, shockwave,
 };

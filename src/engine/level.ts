@@ -107,6 +107,19 @@ function reserveTop(an: Analysis, out: Float32Array): Float32Array {
   return out;
 }
 
+/** [start, end] of the audible music: the first and last moments louder than 30 dB under its loud end. */
+export function musicSpan(an: Analysis): [number, number] {
+  let first = -1, last = -1;
+  for (let i = 0; i < an.loudness.length; i++) {
+    if (an.loudness[i] > 0.25) {
+      if (first < 0) first = i;
+      last = i;
+    }
+  }
+  if (first < 0) return [0.0, an.duration];
+  return [first * an.step, (last + 1) * an.step];
+}
+
 /** The level at t, 0..1 (choreograph sets an.level). */
 export function levelAt(an: Analysis, t: number): number {
   const lv = an.level!;

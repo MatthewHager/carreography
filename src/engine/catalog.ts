@@ -36,6 +36,8 @@ export const MOVES: Record<string, Move> = {
   motif: mv('the signature motif: an ornament on the middle car, a sweep across, a hold where it lands',
     'self'),
   cadence: mv('a big closing chord: the whole stage on for the chord', 'self'),
+  swell: mv('a held chord with no beat to hit: the whole stage swells from the middle car out, holds while the '
+    + 'chord sounds and fades slowly, every lamp at the peak', 'self'),
   march: mv('one light marches car to car on the beat, left, centre, right, centre', 'beat'),
   lr_channel: mv('left channel, right channel: the whole left half of the stage on one beat, the right on the '
     + 'next', 'beat'),
@@ -52,6 +54,8 @@ export const MOVES: Record<string, Move> = {
  * which, and the least used of the pool). */
 export const NOTE_MOVES = ['keyboard', 'mirror', 'antiphony', 'relay', 'lr_notes'];
 export const BEAT_MOVES = ['march', 'lr_channel', 'checker', 'beam', 'converge', 'tug_of_war', 'shockwave'];
+/** ... or the swell of a chord held with no beat to follow. */
+export const HELD_MOVES = ['swell'];
 
 /** The move a phrase's shape asks for whatever its passage plays. */
 export const FOR_GESTURE: Record<string, string> = { chords: 'block', cadence: 'cadence', trill: 'shimmer',
@@ -83,5 +87,6 @@ function plays(name: string): string {
   if (shapes.length) return `every phrase shaped as ${shapes.join(', ')}`;
   if (NOTE_MOVES.includes(name)) return 'a passage that follows its melody';
   if (BEAT_MOVES.includes(name)) return 'a passage that follows its beat';
+  if (HELD_MOVES.includes(name)) return 'a chord held with no beat to follow';
   return '';
 }

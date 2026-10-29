@@ -26,6 +26,7 @@
 
 import type { Analysis, Phrase } from './analysis';
 import { clip, mean, median, searchsorted } from './np';
+import { beatLen } from './tempo';
 
 const FLOW_CLARITY = 2.2;
 const STEADY = 0.75, STEADY_TOL = 0.05;
@@ -164,9 +165,44 @@ export function struckShare(an: Analysis, t0: number, t1: number): number {
 }
 
 /** Whether a run of the song has a beat the lights can follow: the tracker keeps time there or the music
- * hits on its beats (as for flow), and the music strikes at least half of them (not a held chord the
- * tracker carried on through). */
+ * hits on its beats (as for flow), its beats cover the run (at least half the beats its tempo would give:
+ * a tracker that stopped hearing a pulse leaves none), and the music strikes at least half of them (not a
+ * held chord the tracker carried on through). */
 export function followable(an: Analysis, t0: number, t1: number): boolean {
+  const n = searchsorted(an.beats, t1) - searchsorted(an.beats, t0);
   const beats = steadyAt(an, (t0 + t1) / 2) || clarity(an, t0, t1, 0) >= FLOW_CLARITY;
-  return beats && struckShare(an, t0, t1) >= 0.5;
+  return beats && n >= (0.5 * (t1 - t0)) / beatLen(an) && struckShare(an, t0, t1) >= 0.5;
+}
+
+const HELD_S = 0.5;      // a note sounding this long after its attack is held, not played
+const VOICES = 2;        // ... and this many held at once are a chord (or a pedal under a held note)
+const HELD_SHARE = 0.6;  // a run is held where they sound for this much of it
+
+const heldMemo = new WeakMap<Analysis, Int32Array>();
+
+/** Per frame, how many notes are held there (sounding HELD_S or more after their attack). */
+function heldVoices(an: Analysis): Int32Array {
+  let out = heldMemo.get(an);
+  if (out) return out;
+  const ev = an.events, n = an.nFrames, d = new Int32Array(n + 1);
+  for (let i = 0; i < ev.t.length; i++) {
+    const a = Math.round((ev.t[i] + HELD_S) / an.step), b = Math.round((ev.t[i] + ev.dur[i]) / an.step);
+    if (b <= a || a >= n) continue;
+    d[a]++;
+    d[Math.min(n, b)]--;
+  }
+  out = new Int32Array(n);
+  for (let f = 0, c = 0; f < n; f++) out[f] = c += d[f];
+  heldMemo.set(an, out);
+  return out;
+}
+
+/** Whether a run of the song is a held chord: VOICES or more notes held through most of it (HELD_SHARE),
+ * as under the Toccata's sustained chords, where nothing new is struck for the lights to hit. */
+export function held(an: Analysis, t0: number, t1: number): boolean {
+  const v = heldVoices(an), a = clip(Math.trunc(t0 / an.step), 0, an.nFrames - 1);
+  const b = clip(Math.trunc(t1 / an.step), a + 1, an.nFrames);
+  let n = 0;
+  for (let f = a; f < b; f++) if (v[f] >= VOICES) n++;
+  return n >= HELD_SHARE * (b - a);
 }

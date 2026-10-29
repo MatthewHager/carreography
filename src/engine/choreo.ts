@@ -18,10 +18,10 @@ import { Car, makeLineup } from './car';
 import * as CAT from './catalog';
 import * as C from './channels';
 import * as DRUMS from './drums';
-import { feel, flowsAt, followable, kitAt } from './feel';
+import { feel, flowsAt, followable, held, kitAt } from './feel';
 import * as LAMPS from './lamps';
 import * as LEGATO from './legato';
-import { DRIVE, GROOVE, levelAt, levelCurve, levelOver, stepOf } from './level';
+import { DRIVE, GROOVE, levelAt, levelCurve, levelOver, musicSpan, stepOf } from './level';
 import * as LY from './lyrics';
 import type { Moment } from './lyrics';
 import * as motors from './motors';
@@ -30,6 +30,7 @@ import { clip, linspace, median, searchsorted } from './np';
 import * as PULSE from './pulse';
 import { segment } from './phrases';
 import * as TEMPO from './tempo';
+import { barLen } from './tempo';
 
 /** The show for a lineup (car letters, crowd-left to right), from the song's analysis (which it leaves as
  * it was heard, so the same analysis can be choreographed again, for another lineup, to the same bytes). */
@@ -67,7 +68,7 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
   accents(cars, an, phrases, said);
   colours(cars, said);
   motors.choreograph(cars, an);
-  if (!endsFlowing) finale(cars, an);      // (music that ends flowing has already faded out)
+  finale(cars, an, endsFlowing);
   hush(cars, an);
   for (const car of cars) {
     tidy(car, an);
@@ -154,74 +155,117 @@ function bands(phrases: Phrase[]): [number, Phrase[]][] {
 }
 
 const DENSE = 5.5, SPARSE = 2.0, SUNG = 3.5;   // notes a second: enough to follow, too few, a singer's line
-/** Does a run of phrases call for a move that follows the melody or one that follows the beat? With no beat
- * to follow (feel.followable: none, or one the music doesn't strike, as under a held chord), the melody.
- * From drive up, and from a groove where a drum kit plays, the beat: the whole stage moves together on it,
- * with the melody along the trucks' bars. Below that, the melody where there are notes enough to follow,
- * the beat under sparse notes (a singer over a band), and in between the one the previous passage didn't
- * take, for contrast. */
-function family(an: Analysis, t0: number, t1: number, step: number,
-  before: 'note' | 'beat' | null): 'note' | 'beat' {
+type Family = 'note' | 'beat' | 'held';
+
+/** Does a stretch call for a move that follows the melody, one that follows the beat, or the swell of a held
+ * chord? With no beat to follow (feel.followable: none, or one the music doesn't strike), the swell where a
+ * chord is held (feel.held), else the melody. From drive up, and from a groove where a drum kit plays, the
+ * beat: the whole stage moves together on it, with the melody along the trucks' bars. Below that, the melody
+ * where there are notes enough to follow, the beat under sparse notes (a singer over a band), and in between
+ * the one the previous figure didn't take, for contrast. */
+function family(an: Analysis, t0: number, t1: number, step: number, before: Family | null): Family {
   const notes = an.events.t.filter((t) => t >= t0 && t < t1).length / Math.max(t1 - t0, 1);
   const kit = kitAt(an, (t0 + t1) / 2);
-  if (!followable(an, t0, t1)) return 'note';
+  if (!followable(an, t0, t1)) return held(an, t0, t1) ? 'held' : 'note';
   if (step >= 3 || (step >= 2 && kit)) return 'beat';
   if (notes >= DENSE) return 'note';
   if (notes < SPARSE || (kit && notes < SUNG)) return 'beat';
   return before === 'note' ? 'beat' : 'note';
 }
 
-/** Every passage's move, and every phrase's: a phrase whose shape asks for its own move (chords, a trill,
- * a cadence, the motif) plays that; the rest play their passage's. A beat move plays across its whole
- * stretch, rests included, with the melody riding the trucks' bars on top; a note move plays each phrase's
- * notes. */
+const familyOf = (move: string): Family =>
+  (CAT.NOTE_MOVES.includes(move) ? 'note' : CAT.BEAT_MOVES.includes(move) ? 'beat' : 'held');
+
+const FIGURE_BARS = 8;     // a figure plays at most this long before the next phrase changes it: a period
+
+/** A run's phrases as figures of at most FIGURE_BARS bars (and at least half that), each cut where a phrase
+ * starts: [t0, t1, its phrases]. Bars are counted on the tracked beats, so they follow the performer. */
+function figures(an: Analysis, t0: number, t1: number, own: Phrase[]): [number, number, Phrase[]][] {
+  const bars = (a: number, b: number) => {
+    const n = searchsorted(an.beats, b) - searchsorted(an.beats, a);
+    return n >= 2 ? n / 4 : (b - a) / barLen(an);
+  };
+  const out: [number, number, Phrase[]][] = [[t0, t1, []]];
+  for (const ph of own) {
+    const last = out[out.length - 1];
+    if (last[2].length && bars(last[0], ph.t1) > FIGURE_BARS && bars(last[0], ph.t0) >= FIGURE_BARS / 2) {
+      last[1] = ph.t0;
+      out.push([ph.t0, t1, [ph]]);
+    } else {
+      last[2].push(ph);
+    }
+  }
+  return out;
+}
+
+/** Every figure's move, and every phrase's: a phrase whose shape asks for its own move (chords, a trill, a
+ * cadence, the motif) plays that; the rest play their figure's. A passage's runs at one level are cut into
+ * figures at phrase starts (figures), each taking the least used move of its family, so the look changes
+ * with the music's periods; material heard again at the same level replays its figures' moves. A beat move
+ * or a swell plays across its whole figure, rests included, the beat moves with the melody riding the
+ * trucks' bars on top; a note move plays each phrase's notes. */
 function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
   const scratch = cars.map((c) => c.blank());
   const used = new Map<string, number>();
-  const byKey = new Map<string, string>();
-  let prev: string | null = null, prevFamily: 'note' | 'beat' | null = null;
+  const byKey = new Map<string, string[]>();
+  const flowing = feel(an).filter((f) => f.flow);
+  let prev: string | null = null, prevFamily: Family | null = null;
   for (const p of passages(an)) {
     const mine = phrases.filter((ph) => ph.t0 >= p.t0 - 0.01 && ph.t0 < p.t1);
     if (!mine.length) continue;
     const runs = bands(mine);
     runs.forEach(([step, own], r) => {
       const t0 = r === 0 ? p.t0 : own[0].t0, t1 = r === runs.length - 1 ? p.t1 : runs[r + 1][1][0].t0;
-      const key = `${p.letters[0]}:${p.piece}:${step}`;      // a letter heard again at this level replays it
-      let move = byKey.get(key);
-      if (move === undefined) {
-        const pool = family(an, t0, t1, step, prevFamily) === 'note' ? CAT.NOTE_MOVES : CAT.BEAT_MOVES;
-        const fresh = pool.filter((m) => m !== prev);
-        move = fresh.reduce((best, m) => ((used.get(m) ?? 0) < (used.get(best) ?? 0) ? m : best), fresh[0]);
-      }
-      for (const letter of p.letters) {
-        const k = `${letter}:${p.piece}:${step}`;
-        if (!byKey.has(k)) byKey.set(k, move);
-      }
-      used.set(move, (used.get(move) ?? 0) + 1);
-      prev = move;
-      prevFamily = CAT.NOTE_MOVES.includes(move) ? 'note' : 'beat';
-      for (const ph of own) ph.move = CAT.FOR_GESTURE[ph.gesture] ?? move;
-      if (prevFamily === 'beat') {
-        // the beat move across the stretch in one go, so its figure carries on over the phrases that play
-        // their own move, which are cut out of it
-        const cut = own.filter((q) => q.move !== move);
-        for (const [a, b] of beating(an, t0, t1)) {
-          if (b - a < 1.0) continue;
-          drawAround(cars, scratch, cut, a, b, (on) => {
-            M.MOVES[move](on, an, stretch(an, a, b));
-            M.barMelody(on, an, stretch(an, a, b));
-          });
+      const keys = p.letters.map((letter) => `${letter}:${p.piece}:${step}`);  // heard again at this level
+      const moves = byKey.get(keys[0]) ?? [];
+      // each figure's family; a chord held on into the next figure is one swell
+      const figs: [number, number, Phrase[], Family][] = [];
+      for (const [g0, g1, group] of figures(an, t0, t1, own)) {
+        const last = figs[figs.length - 1];
+        const fam = family(an, g0, g1, step, last ? last[3] : prevFamily);
+        if (last && fam === 'held' && last[3] === 'held') {
+          last[1] = g1;
+          last[2].push(...group);
+        } else {
+          figs.push([g0, g1, group, fam]);
         }
       }
-      for (const ph of own) if (ph.move !== move || prevFamily === 'note') M.MOVES[ph.move!](cars, an, ph);
+      figs.forEach(([g0, g1, group, fam], j) => {
+        let move = moves[j];
+        // a replay keeps its move where the music still allows it: a beat to follow for a beat move, a held
+        // chord for a swell
+        const fits = (m: string) => (familyOf(m) === 'held') === (fam === 'held')
+          && (familyOf(m) !== 'beat' || fam === 'beat' || followable(an, g0, g1));
+        if (move === undefined || !fits(move)) {
+          const pool = fam === 'note' ? CAT.NOTE_MOVES : fam === 'beat' ? CAT.BEAT_MOVES : CAT.HELD_MOVES;
+          const fresh = pool.length > 1 ? pool.filter((m) => m !== prev) : pool;
+          move = fresh.reduce((best, m) => ((used.get(m) ?? 0) < (used.get(best) ?? 0) ? m : best), fresh[0]);
+          moves[j] ??= move;
+        }
+        used.set(move, (used.get(move) ?? 0) + 1);
+        prev = move;
+        prevFamily = familyOf(move);
+        for (const ph of group) ph.move = CAT.FOR_GESTURE[ph.gesture] ?? move;
+        if (prevFamily !== 'note' && g1 - g0 >= 1.0) {
+          // across the figure in one go, so a beat move carries on over the phrases that play their own move
+          // and the music that flows, which are cut out of it; a swell holds on under them
+          const cut = [...(prevFamily === 'beat' ? group.filter((q) => q.move !== move) : []), ...flowing];
+          drawAround(cars, scratch, cut, g0, g1, (on) => {
+            M.MOVES[move](on, an, stretch(an, g0, g1));
+            if (prevFamily === 'beat') M.barMelody(on, an, stretch(an, g0, g1));
+          });
+        }
+        for (const ph of group) if (ph.move !== move || prevFamily === 'note') M.MOVES[ph.move!](cars, an, ph);
+      });
+      for (const k of keys) if (!byKey.has(k)) byKey.set(k, moves);
     });
   }
 }
 
 const TAIL_S = 3;          // how far past its stretch a move's fades can reach
 
-/** `draw` over [a, b] on the blank `scratch` cars, laid over the cars except within the phrases `cut`. */
-function drawAround(cars: Car[], scratch: Car[], cut: Phrase[], a: number, b: number,
+/** `draw` over [a, b] on the blank `scratch` cars, laid over the cars except within the spans `cut`. */
+function drawAround(cars: Car[], scratch: Car[], cut: { t0: number; t1: number }[], a: number, b: number,
   draw: (on: Car[]) => void) {
   if (!cut.some((q) => q.t1 > a && q.t0 < b + TAIL_S)) return draw(cars);
   draw(scratch);
@@ -238,13 +282,7 @@ function drawAround(cars: Car[], scratch: Car[], cut: Phrase[], a: number, b: nu
   });
 }
 
-/** The parts of [t0, t1] where the music beats (feel.ts). */
-function beating(an: Analysis, t0: number, t1: number): [number, number][] {
-  return feel(an).filter((f) => !f.flow && f.t1 > t0 && f.t0 < t1)
-    .map((f) => [Math.max(f.t0, t0), Math.min(f.t1, t1)] as [number, number]);
-}
-
-/** A stretch of a passage as a phrase, for a beat move. */
+/** A stretch of a passage as a phrase, for a move drawn across it. */
 function stretch(an: Analysis, t0: number, t1: number): Phrase {
   const a = searchsorted(an.events.t, t0), b = searchsorted(an.events.t, t1);
   return { a, b, t0, t1, gesture: 'figuration', up: 0.5, lo: an.pitchLo, hi: an.pitchHi,
@@ -408,14 +446,18 @@ function finalBeat(an: Analysis, end: number): number | null {
   return strong.length ? strong[strong.length - 1] : null;
 }
 
-/** The ending: everything on at the last strong hit, then a 2 s fade to dark, the bars with it. */
-function finale(cars: Car[], an: Analysis) {
-  const end = an.duration;
-  const late = an.hits.filter((h) => h < end - 1.5);
-  let t = late.length && late[late.length - 1] > end - 12 ? late[late.length - 1] : Math.max(end - 3.0, 0);
+/** The ending: everything on at the music's last strong hit in its final 12 s (or its last strong beat),
+ * then a 2 s fade to dark, the bars with it. Music that ends flowing has faded out already (legato.ts),
+ * unless it ends on a loud strike (a band's last hit after a quiet outro). */
+function finale(cars: Car[], an: Analysis, flowed: boolean) {
+  const end = musicSpan(an)[1];
+  const late = an.hits.filter((h) => h > end - 12 && h < end);
+  let t = late.length ? late[late.length - 1] : Math.max(end - 1.5, 0);
   const last = finalBeat(an, end);
   if (last !== null && last > t) t = last;
-  const fadeEnd = Math.min(end - 0.1, t + 2.5);
+  const ring = an.loudness.subarray(cars[0].fr(t), cars[0].fr(t + 0.2) + 1);
+  if (flowed && !(late.includes(t) && Math.max(...ring) >= LOUD)) return;
+  const fadeEnd = Math.min(an.duration - 0.1, t + 2.5);
   const bars: number[] = [];
   for (let ch = C.FRONT_BAR[0]; ch <= C.REAR_BAR[C.REAR_BAR.length - 1]; ch++) bars.push(ch);
   for (const c of cars) {
