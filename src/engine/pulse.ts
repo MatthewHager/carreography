@@ -165,7 +165,7 @@ export function apply(cars: Car[], an: Analysis): void {
     if (kind !== 'big' && kind !== 'beat') continue;
     for (const c of cars) {
       hit(c, peak ? c.outer() : c.inner(), kind === 'big' ? hold * 1.25 : hold);
-      if (kind === 'big' && peak) hit(c, c.everything(), hold, t + hold + 0.5, C.OFF_500);   // flashes, is gone
+      if (kind === 'big' && peak) hit(c, c.everything(), hold, t + hold + 1, C.OFF_1000);   // flashes, fades
       if (kind === 'big' && c.hasBar) M.barFlash(c, t, Math.min(0.3, end - t), peak ? 1.0 : 0.5);
     }
   }

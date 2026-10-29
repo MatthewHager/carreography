@@ -98,10 +98,11 @@ export const owned = (an: Analysis, t: number) =>
 /** What one hit lights of a car's half at level s: a single lamp at a hush, then the signature and DRL, from
  * a groove the inner headlight too, from drive the outer one as well, leaving the headlights the beat layer
  * owns (`own`, as owned() says) to the beat. A truck's half is its side marker and headlights (its bar is
- * drawn separately); a 2025+ Model Y's is its bar's end on that side (its DRL: the signature would light the
- * bar's centre too, leaving no half dark). */
+ * drawn separately); below the peak a 2025+ Model Y's is its bar's end on that side (its DRL: the signature
+ * would light the bar's centre too, leaving no half dark). */
 export function half(car: Car, side: LR, s: number, own = 0): number[] {
-  const out = car.juniper ? car.drl(side) : car.isCt || s < CALM ? car.sig(side) : car.accents(side);
+  const out = car.juniper && s < PEAK ? car.drl(side)
+    : car.isCt || s < CALM ? car.sig(side) : car.accents(side);
   if (s >= GROOVE) out.push(...car.inner(side));
   if (s >= DRIVE) out.push(...car.outer(side));
   return free(car, out, own);
@@ -569,12 +570,13 @@ const checker: Move = (cars, an, ph) => {
   });
 };
 
-/** Tug of war: the light fills the stage slot by slot on the beat, crowd-left to right, then drains back. */
+/** Tug of war: the light fills the stage slot by slot on the beat, crowd-left to right, then drains back;
+ * the next time from the right. */
 const tugOfWar: Move = (cars, an, ph) => {
   const all = slots(cars), n = all.length, beats = grid(an, ph);
   for (let k0 = 0; k0 < beats.length; k0 += 2 * n) {
     for (let j = 0; j < n && k0 + j < beats.length; j++) {
-      const [car, side] = all[j], start = beats[k0 + j];
+      const [car, side] = all[(k0 / (2 * n)) % 2 ? n - 1 - j : j], start = beats[k0 + j];
       const end = beats[Math.min(beats.length - 1, k0 + 2 * n - 1 - j)] + 0.12;
       const s = levelAt(an, start);
       car.light(half(car, side, s, owned(an, start)), start, Math.max(end, start + 0.15));

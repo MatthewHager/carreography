@@ -17,7 +17,7 @@ What each move looks like, when the choreographer plays it, and what it locks to
 | march | one light marches car to car on the beat, left, centre, right, centre | a figure that follows its beat, below the peak | beat |
 | lr_channel | left channel, right channel: the whole left half of the stage on one beat, the right on the next | a figure that follows its beat | beat |
 | checker | a checkerboard: every other car on one beat, the others on the next, the bar in blocks | a figure that follows its beat | beat |
-| tug_of_war | the light fills the stage slot by slot on the beat, crowd-left to right, then drains back | a figure that follows its beat | beat |
+| tug_of_war | the light fills the stage slot by slot on the beat, from one end, then drains back; the next time from the other end | a figure that follows its beat | beat |
 | converge | on the beat the light runs in from both ends and meets in the middle on the "and" | a figure that follows its beat | beat |
 | beam | a searchlight two slots wide sweeps the stage over each bar, and back the next | a figure that follows its beat, below the peak | bar |
 | shockwave | on the beat a ring of light leaves the middle and runs out to both ends, the stage held lit until the next | a figure that follows its beat | beat |
