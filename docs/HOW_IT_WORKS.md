@@ -162,8 +162,8 @@ The show is made in layers, each sized by one **level**:
    the middle car's inner beams on the downbeat when calm, 1 and 3 on the inner beams in a groove, every
    beat on them from drive up, every beat on both headlights at the peak, with the off-beats on the middle
    car. Where it plays, the pulse owns those headlights: each hit is a bright attack that decays on Tesla's
-   half-second ramp, and those lamps alone go dark for 60 ms before the next, so the beat thumps while the
-   bars and the moves stay lit. **Builds and drops**: a drop is a downbeat where the level lands a step
+   half-second ramp until the next, so the beat thumps from a dimmer glow, never from black, while the bars
+   and the moves stay lit. **Builds and drops**: a drop is a downbeat where the level lands a step
    higher and holds there, from a build or onto a drum kit (or with a jump twice as big), at most one for
    every 100 s of song (the biggest steps up, the peak's above all, at least 30 s apart, none in the
    music's first 8 s), and a song can have none; the climb into it is a build, where the pulse goes from

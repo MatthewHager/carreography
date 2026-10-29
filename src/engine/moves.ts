@@ -587,12 +587,11 @@ const converge: Move = (cars, an, ph) => {
   }
 };
 
-/** On each downbeat (each beat at the peak) a ring of light leaves the middle of the stage and travels out
+/** On each downbeat (each beat from drive up) a ring of light leaves the middle of the stage and travels out
  * through every car to both ends. */
 const shockwave: Move = (cars, an, ph) => {
   const all = slots(cars), n = all.length, rings = n / 2;
-  const peak = levelAt(an, ph.t0) >= PEAK;
-  for (const d of grid(an, ph, peak ? 'beats' : 'downbeats')) {
+  for (const d of grid(an, ph, levelAt(an, ph.t0) >= DRIVE ? 'beats' : 'downbeats')) {
     const s = levelAt(an, d), ring = beatAt(an, d) / 8;
     for (let r = 0; r < rings; r++) {                              // r = 0: the middle pair
       const t = d + r * ring;

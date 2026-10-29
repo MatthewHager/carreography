@@ -44,7 +44,8 @@ export const MOVES: Record<string, Move> = {
     'beat'),
   converge: mv('every beat the light runs in from both ends and meets in the middle', 'beat'),
   beam: mv('a searchlight two slots wide sweeps the stage over each bar, and back the next', 'bar'),
-  shockwave: mv('on each downbeat a ring of light leaves the middle and runs out to both ends', 'bar'),
+  shockwave: mv('on each downbeat (each beat from drive up) a ring of light leaves the middle and runs out to '
+    + 'both ends', 'bar'),
 };
 
 /** A passage plays one move: one that follows the melody, or one that follows the beat (choreo.ts chooses

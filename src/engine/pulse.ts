@@ -10,8 +10,8 @@
 //
 // The headlights it plays are the beat's (ownership): where the music strikes most beats, the moves leave a
 // car's inner beams to the pulse from a groove up, and both headlights at the peak. Each hit is a bright
-// attack that decays on Tesla's half-second ramp, the way the drum it follows sounds, and those lamps alone
-// go dark for DIP_S before the next, so every beat lands as a thump while the rest of the stage stays lit.
+// attack that decays on Tesla's half-second ramp until the next, the way the drum it follows sounds, so
+// every beat lands as a thump from a dimmer glow, never from black, and the rest of the stage stays lit.
 // The outer beams are the moves' below the peak, and the bars and every other lamp always are, so a figure
 // travelling the stage shows over the thump.
 // A beat the music doesn't strike gets no hit. Where the beat is unclear (an.beatConfidence under CLEAR, and
@@ -36,7 +36,6 @@ import { beatLen } from './tempo';
 const OWNERS = new Set(['cadence', 'motif']);     // phrase shapes whose moves own the whole stage
 const CLEAR = 0.6, FAINT = 0.25, SURE = 0.9;       // how clear the beat is (an.beatConfidence): a full pulse,
                                                    // downbeats only, a calm tick
-const DIP_S = 0.06;                                // the beat's lamps are dark this long before each hit
 const DROP_EVERY_S = 100, DROP_GAP_S = 30, BUILD_S = 4;
 const DROP_MIN = 0.25, DROP_ALONE = 0.45;          // a drop's size (plan): with a build or a kit, or on its own
 const PEAK_BONUS = 0.2;                            // a drop onto the peak (level.ts) counts as this much more
@@ -166,7 +165,7 @@ export function apply(cars: Car[], an: Analysis): void {
     const hold = clip(gap * (0.2 + clip((s - DRIVE) / (1 - DRIVE), 0, 1) * 0.15), 0.1, 0.2);
     const hit = (c: Car, chs: number[], at: number, dur: number) => {
       c.light(chs, at, at + dur);
-      c.light(chs, at + dur, at + gap - DIP_S, C.OFF_500);
+      c.light(chs, at + dur, at + gap, C.OFF_500);
     };
     if (kind === 'tick') {
       mid.light(mid.inner(), t, t + 0.15, C.ON);
