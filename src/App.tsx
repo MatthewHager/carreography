@@ -8,7 +8,7 @@ import { DownloadSheet } from '@/app/DownloadSheet';
 import { unsupported } from '@/app/errors';
 import { DEFAULT_PAINT, LineupEditor } from '@/app/LineupEditor';
 import { LyricsNote } from '@/app/LyricsNote';
-import { showFromFile, SONG_EXTENSIONS, SONG_TYPES } from '@/app/pipeline';
+import { exampleSong, showFromFile, SONG_EXTENSIONS, SONG_TYPES } from '@/app/pipeline';
 import { Player } from '@/app/player';
 import { PlayerBar } from '@/app/PlayerBar';
 import type { Show } from '@/app/show';
@@ -42,7 +42,7 @@ export default function App() {
   const player = useMemo(() => new Player(), []);
   const [cars, setCars] = useState(savedCars);
   const { lineup } = cars;
-  const [song, setSong] = useState<File | null>(null);
+  const [song, setSong] = useState<File | null>(null);   // null: the example song
   const [show, setShow] = useState<Show | null>(null);
   const [busy, setBusy] = useState<{ step: string; fraction?: number } | null>(null);
   const [camera, setCamera] = useState('3/4');
@@ -83,10 +83,10 @@ export default function App() {
   };
 
   const make = async () => {
-    if (!song) return;
-    setBusy({ step: 'Starting' });
+    setBusy({ step: song ? 'Starting' : 'Fetching the example song' });
     try {
-      setShow(await showFromFile(song, lineup, (step, fraction) => setBusy({ step, fraction })));
+      const file = song ?? await exampleSong();
+      setShow(await showFromFile(file, lineup, (step, fraction) => setBusy({ step, fraction })));
       setOpen(false);                                  // on a phone, make room for the cars
     } catch (err) {
       toast.error((err as Error).message);
@@ -171,13 +171,9 @@ export default function App() {
               <DownloadSheet show={made} />
             </>
           ) : (
-            <>
-              <Button size="lg" className="h-11 w-full rounded-full text-[0.9375rem]" disabled={!song}
-                onClick={() => void make()}>
-                Make the show
-              </Button>
-              {!song && <p className="text-center text-xs text-muted-foreground">Choose a song first.</p>}
-            </>
+            <Button size="lg" className="h-11 w-full rounded-full text-[0.9375rem]" onClick={() => void make()}>
+              Make the show
+            </Button>
           )}
         </footer>
       </aside>

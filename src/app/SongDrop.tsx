@@ -1,9 +1,10 @@
-// Choose the song: pick it here, or drop it anywhere on the page (App.tsx).
+// Choose the song: pick it here, or drop it anywhere on the page (App.tsx). Until then it's the example.
 
 import { Music } from 'lucide-react';
-import { SONG_EXTENSIONS, SONG_TYPES } from './pipeline';
+import { EXAMPLE, SONG_EXTENSIONS, SONG_TYPES } from './pipeline';
 
 export function SongDrop({ song, dragging, disabled, onFiles }: {
+  /** null: the example song. */
   song: File | null;
   /** A file is being dragged over the page. */
   dragging: boolean;
@@ -24,14 +25,14 @@ export function SongDrop({ song, dragging, disabled, onFiles }: {
           <Music className="size-4" />
         </span>
         <span className="min-w-0 text-sm">
-          <span className="block truncate font-medium">{song ? song.name : 'Choose a song'}</span>
+          <span className="block truncate font-medium">{song ? song.name : EXAMPLE.title}</span>
           <span className="block text-muted-foreground">
-            {song ? 'Choose or drop another to replace it' : `Or drop it here. ${SONG_TYPES}.`}
+            {song ? 'Choose or drop another to replace it' : `Example song. Choose or drop your own: ${SONG_TYPES}.`}
           </span>
         </span>
       </label>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        The song stays on this device. Its artist, title and length go
+        {!song && `The example is ${EXAMPLE.credit}. `}Your song stays on this device. Its artist, title and length go
         to <a href="https://lrclib.net" target="_blank" rel="noreferrer" className="underline underline-offset-2
         hover:text-foreground">LRCLIB</a> to find its lyrics.
       </p>

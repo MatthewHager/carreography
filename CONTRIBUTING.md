@@ -18,12 +18,13 @@ npx oxlint src       # lint
 npm run build        # the site, in dist/
 ```
 
-The listening models and Tesla's car models aren't in the repository. Download them from the releases
-once (with the [GitHub CLI](https://cli.github.com/)), as the site build does:
+The listening models, Tesla's car models and the example song aren't in the repository. Download them
+from the releases once (with the [GitHub CLI](https://cli.github.com/)), as the site build does:
 
 ```bash
 gh release download models --dir public/models --pattern "*.onnx"
 gh release download car-models --dir public/models/tesla-app
+gh release download examples --dir public/examples
 ```
 
 **Never commit recordings, Tesla's files or anything in `cache/`.** Keep songs for trying shows in
@@ -105,7 +106,7 @@ what the motors do differ.
 
 ## The releases and the site
 
-The site's large files come from two GitHub releases, so they never enter the git history. Each script
+The site's large files come from GitHub releases, so they never enter the git history. Each script
 installs what it needs when run with [uv](https://docs.astral.sh/uv/), and its docstring says how to
 publish:
 
@@ -114,10 +115,12 @@ publish:
 | `models` | `uv run tools/export_models.py OUT_DIR` | the two ONNX listening models (beat-this exported from PyTorch and checked against it; basic-pitch's own file) |
 | `car-models` | `uv run tools/export_car_models.py BUNDLE.apkm OUT_DIR` | Tesla's nine car models and the paint table, from a Tesla Android app bundle you have |
 
-Then `gh release upload <release> OUT_DIR/* --clobber`.
+Then `gh release upload <release> OUT_DIR/* --clobber`. The `examples` release holds the song the page
+starts with, `hall-of-the-mountain-king.mp3`: a public-domain recording (docs/SOURCES.md), as a 192 kbps
+MP3.
 
-`.github/workflows/pages.yml` builds the site on every push to `main`: it runs the tests, downloads both
-releases into `public/models/`, builds, and deploys `dist` to GitHub Pages at
+`.github/workflows/pages.yml` builds the site on every push to `main`: it runs the tests, downloads the
+releases into `public/`, builds, and deploys `dist` to GitHub Pages at
 matthewhager.github.io/carreography/ (Vite's `base` is `/carreography/`). GitHub serves Pages from a
 free account's repository only once it's public.
 

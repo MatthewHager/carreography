@@ -15,6 +15,7 @@ npm run build                         # the site, in dist/
 npm run review -- SONG --lineup YCY   # the show for a song, drawn and summed up (tools/review/README.md)
 gh release download models --dir public/models --pattern "*.onnx"      # the listening models
 gh release download car-models --dir public/models/tesla-app           # Tesla's car models
+gh release download examples --dir public/examples                      # the example song
 ```
 
 ## Where things are

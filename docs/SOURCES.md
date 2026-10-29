@@ -45,6 +45,11 @@ lights, and the wet-ground mirror is optional. The cars themselves are Tesla's m
 
 ## Recordings
 
+The example song the page starts with is Grieg's In the Hall of the Mountain King, played by the Czech
+National Symphony Orchestra (credited as the Musopen Symphony Orchestra) for
+[Musopen](https://musopen.org)'s Kickstarter project, which released its recordings into the public
+domain. It's served from the repository's `examples` release, not the git history.
+
 The shows were tuned on the twelve songs of a Halloween 2026 show for two Model Ys and a Cybertruck. They
 are not in the repository; several are commercial recordings. No song gets settings of its own: every show
 comes from the music alone.

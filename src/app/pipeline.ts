@@ -15,6 +15,30 @@ export type Progress = (step: string, fraction?: number) => void;
 export const SONG_TYPES = 'MP3, M4A, WAV or FLAC';
 export const SONG_EXTENSIONS = ['.mp3', '.m4a', '.wav', '.flac'];
 
+/** The song the page starts with, so a first visit can make a show at once: Grieg's In the Hall of the
+ * Mountain King, played by the Czech National Symphony Orchestra for Musopen, in the public domain. The
+ * Pages build downloads it from the repository's "examples" release. */
+export const EXAMPLE = {
+  title: 'In the Hall of the Mountain King',
+  credit: 'Grieg, played by the Czech National Symphony Orchestra for Musopen (public domain)',
+  url: `${import.meta.env.BASE_URL}examples/hall-of-the-mountain-king.mp3`,
+};
+let example: Promise<File> | undefined;
+
+/** The example song as a file, fetched once. */
+export function exampleSong(): Promise<File> {
+  example ??= fetch(EXAMPLE.url)
+    .then(async (res) => {
+      if (!res.ok) throw new Error();
+      return new File([await res.blob()], `${EXAMPLE.title}.mp3`, { type: 'audio/mpeg' });
+    })
+    .catch(() => {
+      example = undefined;           // try again next time
+      throw new Error("The example song couldn't load. Choose a song of your own.");
+    });
+  return example;
+}
+
 /** One show in a worker of its own, ended when it's done: each holds its own copy of the models. */
 function run(req: Request, onProgress: Progress, transfer: Transferable[]): Promise<Extract<Reply, { kind: 'done' }>> {
   const worker = new Worker(new URL('./show.worker.ts', import.meta.url), { type: 'module' });

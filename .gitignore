@@ -5,6 +5,9 @@ dist
 # The analysis models and Tesla's car models: downloaded from the repository's releases, never committed
 public/models
 
+# The example song the page starts with: downloaded from the "examples" release, never committed
+public/examples
+
 # The frozen comparison with the Python version (bridge.test.ts): it describes copyrighted
 # recordings, so it stays on your machine
 cache/
