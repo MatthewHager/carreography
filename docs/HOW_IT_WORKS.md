@@ -107,13 +107,20 @@ The show is made in layers, each sized by one **level**:
    second and a half), two fifths how loud the music is against the rest of the song, a tenth how busy it
    is. Its five steps name the pace: *hush* and *calm* (one hit a bar for the beat moves, soft fades),
    *groove* (every other beat), *drive* (every beat), the *peak*. The peak step is kept for the loudest
-   twenty seconds of the song's second half and the nearly as loud music around them, lifted to the top
-   if it falls short; everywhere else the level stops just under it. A pianissimo is a lamp at a time,
+   twenty seconds from 45 % of the way into the song on and the nearly as loud music around them, lifted
+   to the top if it falls short; everywhere else the level stops just under it. A pianissimo is a lamp at a time,
    the peak is every lamp.
 2. **Where it flows** (`feel.ts`). A section with no steady beat to follow (the neural tracker's beats
-   wander there, and the music doesn't hit on them) gets the **legato** style (`legato.ts`): a bed of lamps
-   that join and leave in layers with the level on 2 s ramps, the melody as one light gliding across the
-   stage, the interiors warming from blue to gold, and a slow fade at the end.
+   wander there, and the music doesn't hit on them) gets the **legato** style (`legato.ts`). Its breath
+   (the level together with the loudness ranked within the flowing music) swells with each sung phrase and
+   grows to the climax: lamps that read on each car join and leave in layers on 2 s ramps (a 2025+ Model
+   Y's bar centre and fender repeaters, a Cybertruck's side markers and frunk light, the outer beams at the
+   top), a Cybertruck's whole bar glows with it and with the voice, the melody's spot glides along the bar
+   and every note is a comet on it, the melody sweeps the inner beams car to car (smoothed over half a
+   second, so an arpeggio drifts while a run sweeps the stage as fast as it is played), the interiors warm
+   from blue to gold, and the song fades slowly at the end. Its notes are as dense as any (Ave Maria's
+   accompaniment runs 9-11 notes a second, the Toccata's free runs 9-13), so what decides flowing is the
+   beat, not the notes.
 3. **The bed** (`bed.ts`): the rear lamps from a groove up, the trucks' rear bars pumping with the bass,
    their front bars glowing under the comets, and the cabins in the harmony's colour bar by bar (the
    leading pitch class round the circle of fifths), brighter as the level rises.
@@ -121,31 +128,43 @@ The show is made in layers, each sized by one **level**:
    starts, and each gets a gesture (motif, run, figuration, trill, chords, cadence, recitative). The song
    is cut into passages where its material changes: a section of the form map that brings back earlier
    material starts one (and replays the moves that material had), and so does a new section where the
-   sound changes (a strong novelty peak); a passage over 40 s splits where its sound changes most. Each
-   passage plays **one move** (`moves.ts`, [MOVES.md](../MOVES.md)): one that follows the melody where
-   there are notes to follow, one that follows the beat where the beat is clear and the notes sparse,
-   alternating where either would do, the least used first. Chords, trills, cadences and the motif take
-   their own move inside any passage. So Hall of the Mountain King's theme, eighteen times and growing,
-   keeps its keyboard all the way to the climax and grows with the level.
-5. **Every hit is sized by the level at its moment**: a single lamp at a hush, a half car's signature and
-   DRL, then its inner beam, then both headlights. Notes are shaped like their sound with Tesla's ramps: a
-   quiet short note flashes and fades over half a second, a quiet long one swells in and fades, a loud
-   one is struck and held most of the way to the next.
-6. **The drums** (`drums.ts`): kicks on the fogs (and the brakes and rear bars from drive up), snares,
-   claps and snaps on the amber turn signals, hats on the markers at the peak only; each wherever that
-   voice plays at least a hit every other beat, so the Addams Family's finger snaps tick the turn signals
-   from the first bar.
-7. **The pulse** (`pulse.ts`). The headlights carry the beat where it is clear and the music strikes it:
-   a tick of the middle car's inner beams on the downbeat when calm, 1 and 3 in a groove, every beat from
-   drive up with the downbeat biggest, the off-beats at the peak; each hit held longer as the level rises,
-   with the sustained lamps ducking just before it (the producer's sidechain). **Builds and drops**: a drop
-   is a downbeat where the level lands a step higher and stays there; the climb into it is a build, where
-   the pulse goes from half notes to every beat to eighths and spreads from the middle car out; then the
-   whole stage goes black for a beat and every lamp of every car hits the drop together.
+   sound changes (a strong novelty peak); a passage over 40 s splits where its sound changes most, and
+   wherever the level settles on another step for 8 s or more. Each passage plays **one move** (`moves.ts`,
+   [MOVES.md](../MOVES.md)), the least used first: from drive up, where the music strikes a beat it can
+   follow, a figure that moves the whole stage on the beat (with the melody riding the trucks' bars);
+   below that, one that follows the melody where there are notes to follow, one that follows the beat where
+   the notes are sparse, alternating where either would do; with no beat struck (a held chord, a free
+   passage), the melody. Chords, trills, cadences and the motif take their own move inside any passage. So
+   Hall of the Mountain King's theme, eighteen times and growing, goes from a keyboard in its pianissimo
+   to a mirror, a march as it drives, left and right channels at the climax and a checkerboard in the
+   coda, and a chorus heard again at the same level looks like the chorus.
+5. **Every hit is sized by the level at its moment**: a single lamp at a hush, then a half car's signature
+   and DRL, from a groove its inner beam, from drive its outer beam too - except the headlights the beat
+   layer owns there (below), which the moves leave to the beat. Notes are shaped like their sound with
+   Tesla's ramps: a quiet short note flashes and fades over half a second, a quiet long one swells in and
+   fades, a loud one is struck and held most of the way to the next.
+6. **The drums** (`drums.ts`): kicks on the fogs (a truck's frunk light; the brakes and rear bars from
+   drive up), snares, claps and snaps on the amber turn signals, hats on the markers at the peak only; each
+   wherever that voice keeps time - its hits on a beat or halfway between, a few every few beats - so the
+   Addams Family's finger snaps tick the turn signals from the first bar while an organ's pedal attacks
+   light nothing.
+7. **The pulse** (`pulse.ts`). The headlights carry the beat where it is clear (the beat confidence, or
+   the tracker keeping steady time, as through an orchestra's tutti) and the music strikes it: a tick of
+   the middle car's inner beams on the downbeat when calm, 1 and 3 on the inner beams in a groove, every
+   beat on them from drive up, every beat on every headlight and bar at the peak, with the off-beats on the
+   middle car; each hit held longer as the level rises, dipping just before and with the sustained lamps
+   ducking (the producer's sidechain). Where it plays, the pulse owns those headlights, so they are dark
+   between its hits. **Builds and drops**: a drop is a downbeat where the level lands a step higher and
+   holds there, one for every 100 s of song (the biggest steps up, the peak's above all, at least 30 s
+   apart, none in the music's first 8 s); the climb into it is a build, where the pulse goes from half
+   notes to every beat to eighths and spreads from the middle car out; then the whole stage goes black for
+   a beat and every lamp of every car hits the drop together. **Blasts**: in loud music an accent that
+   jumps 16 dB out of a breath (an orchestra's chord after a rest, a band's hit after a stop) lights the
+   whole stage at once.
 8. **Lyric moments, the motors and the end**: lightning and chant pings on the music's grid, colour words in
    the cabins; the motors (below); everything on at the music's last strong beat, then a 2 s fade.
-9. **Silence is dark** (`hush`): wherever the music stops, whatever is still lit fades out over half a
-   second. Then per car (`tidy`): flashes shorter than 100 ms are stretched and gaps under 60 ms opened up,
+9. **Silence is dark** (`hush`): wherever the music stops, whatever lamp is still lit fades out over half a
+   second, the bars and cabins a little quicker. Then per car (`tidy`): flashes shorter than 100 ms are stretched and gaps under 60 ms opened up,
    and a 2025+ Model Y's frames are translated to its lamps (`lamps.ts`, [below](#the-2025-model-ys-lamps)).
 
 ### Output
@@ -242,12 +261,13 @@ filled only after the song's first quarter, so the budget isn't spent before the
   landings, arrival chords) get part-way figures: a relay (one lid lifts and stops, and as it drops the
   next lifts), an alternation (the side cars, then the centrepiece) and a wave.
 - **Windows stay down.** The music plays from the cabin speakers, so the crowd hears it through the open
-  windows. They dance about 10 s on the peak and in about 4.5 s bursts rolling across the cars at the
+  windows. They go down as the music starts, a relay car by car from the crowd's left, the fronts and then
+  the rears; they dance about 10 s on the peak and in about 4.5 s bursts rolling across the cars at the
   starts of loud sections: about 24 s per window in all.
 - **Mirrors** pulse to the tempo in the steadiest loud section, fold on the big landings in patterns (a
   wave, outside-in, every other car), and fill the longest lively stretches where nothing else moves.
-- **The charge port** opens for the most exciting stretch of the song and dances its rainbow light,
-  closing before its own 2-minute timer.
+- **The charge port** opens for the most exciting 30 s of the song and dances its rainbow light, the cars a
+  beat apart from the crowd's left, so the rainbows arrive and leave as a relay.
 - **A Model X's falcon doors** rise into the song's biggest peak, dance and close. Its windows keep still
   meanwhile: Tesla warns that moving windows can trip the doors' pinch detection and stop the show.
 

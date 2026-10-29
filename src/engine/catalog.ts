@@ -11,8 +11,9 @@
 //               self   its own timing (a cadence's chords, the Toccata's motif, a trill)
 //
 // Every move lights the whole lineup and grows with the level (level.ts): at a hush a single lamp a hit,
-// at the peak whole halves of cars with their headlights. Written for the classic lineup, Model Y |
-// Cybertruck | Model Y: "the truck" is the Cybertruck nearest the middle, "the Ys" every other car.
+// from drive up whole halves of cars with their headlights, but for those the beat plays (pulse.ts).
+// Written for the classic lineup, Model Y | Cybertruck | Model Y: "the truck" is the Cybertruck nearest the
+// middle, "the Ys" every other car.
 
 export interface Move {
   readonly what: string;

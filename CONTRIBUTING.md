@@ -60,9 +60,9 @@ and lineups (one car, the classic three, five mixed).
 1. **Write it** in `src/engine/moves.ts` as a function `(cars, an, ph) => void`.
    - `cars` is the lineup, crowd-left to right (`Car` objects); `an` is the analysis; `ph` is the phrase
      (`ph.t0`, `ph.t1`, and `ph.a` to `ph.b`, its notes in `an.events`).
-   - Size every hit by the level at its moment: `half(car, side, levelAt(an, t))` gives what a hit lights of
-     a half car, from one lamp at a hush to both headlights at the peak; `note(...)` shapes a note's light
-     like its sound. A truck's bar takes `car.pixels(C.FRONT_BAR, t, values)` (0–1 per LED, crowd-left to
+   - Size every hit by the level at its moment: `half(car, side, levelAt(an, t), owned(an, t))` gives what a
+     hit lights of a half car, from one lamp at a hush to both headlights from drive up, leaving the
+     headlights the beat layer owns there to the beat; `note(...)` shapes a note's light like its sound. A truck's bar takes `car.pixels(C.FRONT_BAR, t, values)` (0–1 per LED, crowd-left to
      right). Everything takes the crowd's left and right.
    - Light the whole lineup. Use `sides(cars)` and `centreTruck(cars)` (which may be `null`); never
      assume three cars, and never take `cars[1]` as the truck.
