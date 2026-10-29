@@ -33,7 +33,7 @@ describe('Car.light', () => {
 
   it('lights the beat itself and the whole stage over it', () => {
     const c = ringing(50, 80);
-    c.light(c.inner(), 50 * STEP + 0.02, 60 * STEP + 0.02, C.ON, true);
+    c.lightOver(c.inner(), 50 * STEP + 0.02, 60 * STEP + 0.02);
     expect(column(c, C.L_INNER_MAIN).slice(50, 60).every((v) => v === C.ON)).toBe(true);
   });
 });

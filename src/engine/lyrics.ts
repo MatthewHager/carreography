@@ -4,7 +4,6 @@
 
 import type { Analysis, LyricLine } from './analysis';
 import type { Car } from './car';
-import * as C from './channels';
 import { flowsAt } from './feel';
 import * as M from './moves';
 import { beatAt, onBeat } from './tempo';
@@ -110,7 +109,7 @@ export function apply(cars: Car[], an: Analysis, said: Moment[]) {
       M.lightning(cars, t);
     } else {
       const car = cars[m.car! % cars.length];
-      car.light([...car.sig(), ...car.drl(), ...car.heads()], t, t + 0.22, C.ON, true);
+      car.lightOver([...car.sig(), ...car.drl(), ...car.heads()], t, t + 0.22);
       if (car.isCt) M.barFlash(car, t, 0.3, 1.0);
     }
   }

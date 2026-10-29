@@ -29,7 +29,7 @@
 
 import type { Analysis } from './analysis';
 import * as C from './channels';
-import type { Car } from './car';
+import { type Car, LIGHT_LEAD_S } from './car';
 import { flowsAt, kitAt, steadyAt, struckBeats, struckShare } from './feel';
 import { CALM, DRIVE, GROOVE, levelAt, levelOver, stepOf } from './level';
 import { type Moment, onGrid } from './lyrics';
@@ -150,7 +150,7 @@ function hits(an: Analysis): Hit[] {
  * every other layer lights around them (Car.light). */
 export function ownership(an: Analysis): Uint8Array {
   const out = new Uint8Array(an.nFrames);
-  const f = (x: number) => clip(Math.round(x / an.step) - 1, 0, an.nFrames);     // the lights lead a frame
+  const f = (x: number) => clip(Math.round((x - LIGHT_LEAD_S) / an.step), 0, an.nFrames);     // as Car.fr
   for (const h of hits(an)) if (h.own) out.fill(h.own, f(h.t), f(h.end));
   return out;
 }
@@ -163,8 +163,8 @@ export function apply(cars: Car[], an: Analysis): void {
   for (const { t, kind, hold, ramp, end } of hits(an)) {
     const peak = stepOf(levelAt(an, t)) === 4;
     const hit = (c: Car, chs: number[], dur: number, until = end, code = ramp) => {
-      c.light(chs, t, t + dur, C.ON, true);
-      c.light(chs, t + dur, until, code, true);
+      c.lightOver(chs, t, t + dur);
+      c.lightOver(chs, t + dur, until, code);
     };
     if (kind === 'tick') hit(mid, mid.inner(), ATTACK_S[0]);
     if (kind !== 'big' && kind !== 'beat') continue;
@@ -176,7 +176,7 @@ export function apply(cars: Car[], an: Analysis): void {
     }
     if (peak && end - t > 2 * hold) {             // the off-beat sweeping the turns: 0, 1, 2, 1, 0 ...
       const n = cars.length, j = sweep++ % Math.max(1, 2 * n - 2), c = cars[j < n ? j : 2 * n - 2 - j];
-      c.light(c.turns(), (t + end) / 2, (t + end) / 2 + hold, C.ON, true);
+      c.light(c.turns(), (t + end) / 2, (t + end) / 2 + hold);
     }
   }
   for (const [s0, land] of builds(an)) buildPulse(cars, an, s0, land);
@@ -200,7 +200,7 @@ function buildPulse(cars: Car[], an: Analysis, t0: number, land: number): void {
       if (t >= land - gap - 0.01) continue;                             // the beat of black before the landing
       const hold = clip(gap * 0.3, 0.08, 0.14);
       const lamps = (c: Car) => (levelAt(an, t) >= DRIVE ? c.heads() : c.inner());
-      for (const c of order.slice(0, reach)) c.light(lamps(c), t, t + hold, C.ON, true);
+      for (const c of order.slice(0, reach)) c.lightOver(lamps(c), t, t + hold);
     }
   });
 }

@@ -50,7 +50,7 @@ const CENTRE_SHARE = 4 / 3;   // the centrepiece's share of the pitch range agai
 /** A place on the stage (0 the crowd's left end, 1 the right) -> (car, half, place across that car 0..1):
  * the centre truck takes a wider share, so a run sweeps visibly along its bar. Every style places the
  * melody this way, so a note sits in the same place whether the music beats or flows. */
-export function slotAt(cars: Car[], pos: number): [Car, LR, number] {
+function slotAt(cars: Car[], pos: number): [Car, LR, number] {
   const ct = centreTruck(cars);
   const widths = cars.map((c) => (c === ct ? CENTRE_SHARE : 1.0));
   const edges = [0.0, ...Array.from(cumsum(widths), (v) => v / sum(widths))];
@@ -64,7 +64,7 @@ export function slotAt(cars: Car[], pos: number): [Car, LR, number] {
 const slotFor = (cars: Car[], pitch: number, lo: number, hi: number) => slotAt(cars, posOf(pitch, lo, hi));
 
 /** The pitch range a phrase spreads across the stage: its own, at least an octave wide. */
-export function phraseRange(ph: Pick<Phrase, 'lo' | 'hi'>): [number, number] {
+function phraseRange(ph: Pick<Phrase, 'lo' | 'hi'>): [number, number] {
   if (ph.hi - ph.lo >= 12) return [ph.lo, ph.hi];
   const mid = (ph.lo + ph.hi) / 2;
   return [mid - 6, mid + 6];
@@ -75,7 +75,7 @@ const LOCAL_S = 3;
 /** Per note of a phrase, the pitch range the stage spreads over around it: the range (phraseRange) of the
  * phrase's top notes within LOCAL_S of it, so wherever the melody wanders it uses the whole stage and
  * neither end sits idle for long. */
-export function localRanges(an: Analysis, ph: Pick<Phrase, 'a' | 'b'>): [number, number][] {
+function localRanges(an: Analysis, ph: Pick<Phrase, 'a' | 'b'>): [number, number][] {
   const ev = an.events, out: [number, number][] = [];
   let a = ph.a, b = ph.a;
   for (let i = ph.a; i < ph.b; i++) {
@@ -133,7 +133,7 @@ const frames = (car: Car, t: number, dur: number) => Math.max(2, car.fr(t + dur)
 
 /** A note as a comet at `pos` (0..1 along the bar), wider and brighter as the level rises (times `gain`): a
  * short note plucks and fades, a held one swells in over a third of its length and fades through the rest. */
-export function comet(car: Car, t: number, pos: number, noteDur: number, s: number, gain = 1) {
+function comet(car: Car, t: number, pos: number, noteDur: number, s: number, gain = 1) {
   const held = noteDur >= HELD_NOTE_S;
   const dur = held ? Math.min(noteDur, SWELL_MAX_S) : clip(noteDur, 0.15, 0.5) + 0.15;
   const width = 3 + 8 * s, amp = (0.55 + 0.45 * s) * gain, n = frames(car, t, dur);
@@ -726,8 +726,8 @@ const bloom = flowing((p) => [0.5 - p / 2, 0.5 + p / 2]);
 /** Every lamp of every car on at t for `hold`, then a half-second fade: the whole stage at once. */
 export function allOn(cars: Car[], t: number, hold: number) {
   for (const c of cars) {
-    c.light(c.everything(), t, t + hold, C.ON, true);
-    c.light(c.everything(), t + hold, t + hold + 0.6, OFF_500, true);
+    c.lightOver(c.everything(), t, t + hold);
+    c.lightOver(c.everything(), t + hold, t + hold + 0.6, OFF_500);
     if (c.isCt) {
       const n = frames(c, t, hold + 0.4), fade = linspace(1.6, 0, n).map((v) => clip(v, 0, 1));
       c.pixels(C.FRONT_BAR, t, rows(n, (f) => fade[f]));
@@ -741,7 +741,7 @@ export function lightning(cars: Car[], t: number) {
   for (const c of cars) {
     for (let k = 0; k < 3; k++) {
       const t0 = t + k * 0.18;
-      c.light(c.everything(), t0, t0 + 0.1, C.ON, true);
+      c.lightOver(c.everything(), t0, t0 + 0.1);
       if (c.isCt) barFlash(c, t0, 0.1, 1.0);
       c.dark(c.everything(), t0 + 0.1, t0 + (k < 2 ? 0.18 : 0.45));
       c.set(C.FRONT_BAR, t0 + 0.1, t0 + (k < 2 ? 0.18 : 0.45), 0);

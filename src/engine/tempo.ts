@@ -28,7 +28,7 @@ export function beatAt(an: Analysis, t: number): number {
 export function onBeat(an: Analysis, t: number, reach = 0.35): number {
   let best = t;
   for (const b of an.beats) if (Math.abs(b - t) <= reach && Math.abs(b - t) < Math.abs(best - t)) best = b;
-  return Math.abs(best - t) <= reach && best !== t ? best : t;
+  return best;
 }
 
 /** [times, strengths] of the played attacks: transcribed note events (chords count more) and the

@@ -19,7 +19,7 @@ import { CALM, DRIVE, GROOVE, PEAK } from './level';
 import { u8 } from './np';
 import { lineupCars } from './vehicles';
 
-const LIGHT_LEAD_S = 0.02;   // lights fire one frame before the sound so they read as on the beat
+export const LIGHT_LEAD_S = 0.02;   // lights fire one frame before the sound so they read as on the beat
 const MIN_ON = 5, MIN_OFF = 3;   // frames: a lamp lit under 100 ms doesn't read, nor one dark under 60 ms
 const FADE = 25, PIXEL_FADE = 15;   // frames: a lamp fades out of a silence on the shortest ramp, a bar quicker
 
@@ -93,14 +93,22 @@ export class Car {
   /** The lamps lit from t0 to t1, shaped so the lighting reads: lit at least MIN_ON frames, joined to another
    * lighting under MIN_OFF frames away (so short a dark is a flicker, not a pause), and never lit in a
    * silence: one still lit as the music stops fades out on Tesla's shortest ramp. The headlights are left to
-   * the beat while it rings them (`beat`), unless this is the beat or the whole stage at once (`over`), and
-   * a lighting cut there to under MIN_ON frames is left out. */
-  light(chs: Chs, t0: number, t1: number, value = C.ON, over = false) {
+   * the beat while it rings them (`beat`), and a lighting cut there to under MIN_ON frames is left out. */
+  light(chs: Chs, t0: number, t1: number, value = C.ON) {
+    this.write(chs, t0, t1, value, this.beat);
+  }
+
+  /** As light, over the beat's headlights: the beat itself, and the whole stage at once. */
+  lightOver(chs: Chs, t0: number, t1: number, value = C.ON) {
+    this.write(chs, t0, t1, value, null);
+  }
+
+  private write(chs: Chs, t0: number, t1: number, value: number, beat: Uint8Array | null) {
     const a = this.fr(t0), on = value >= 128, n = this.nFrames, cs = this.out(chs);
     let b = this.fr(t1);
     if (b <= a || !cs.length) return;
     if (on) b = Math.min(n, Math.max(b, a + MIN_ON));
-    const F = this.frames, N = C.N_CHANNELS, q = this.hush, beat = over ? null : this.beat;
+    const F = this.frames, N = C.N_CHANNELS, q = this.hush;
     for (const ch of cs) {
       const bit = !beat ? 0 : INNER.includes(ch) ? 1 : OUTER.includes(ch) ? 2 : 0;
       const free = (f: number) => !(bit && beat![f] & bit);

@@ -29,7 +29,6 @@ export function argmax(a: Arr): number {
   return k;
 }
 
-/** Index of the first minimum. */
 /** The indices that sort `a` ascending; ties keep their order, NaNs go last. */
 export function argsort(a: Arr): number[] {
   const key = (i: number) => (Number.isNaN(a[i]) ? Infinity : a[i]);

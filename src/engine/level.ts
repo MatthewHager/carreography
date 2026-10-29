@@ -24,7 +24,7 @@
 import type { Analysis } from './analysis';
 import { clip, quantile } from './np';
 
-export const STEPS = [0.2, 0.4, 0.6, 0.8];
+const STEPS = [0.2, 0.4, 0.6, 0.8];
 /** Where each step starts: the level from which the show is calm, in a groove, driving, at the peak. */
 export const [CALM, GROOVE, DRIVE, PEAK] = STEPS;
 export const STEP_NAMES = ['hush', 'calm', 'groove', 'drive', 'peak'];
