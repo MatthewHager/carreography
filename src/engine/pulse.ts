@@ -27,7 +27,7 @@
 import type { Analysis } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
-import { flowsAt, kitAt, steadyAt } from './feel';
+import { flowsAt, kitAt, steadyAt, struckBeats, struckShare } from './feel';
 import { levelAt, levelOver, STEPS, stepOf } from './level';
 import * as M from './moves';
 import { clip, quantile, searchsorted } from './np';
@@ -36,7 +36,6 @@ import { beatLen } from './tempo';
 const OWNERS = new Set(['cadence', 'motif']);     // phrase shapes whose moves own the whole stage
 const CLEAR = 0.6, FAINT = 0.25, SURE = 0.9;       // how clear the beat is (an.beatConfidence): a full pulse,
                                                    // downbeats only, a calm tick
-const STRUCK = 1.3;
 const DIP_S = 0.06;                                // the beat's lamps are dark this long before each hit
 const DROP_EVERY_S = 100, DROP_GAP_S = 30, BUILD_S = 4;
 const DROP_MIN = 0.25, DROP_ALONE = 0.45;          // a drop's size (plan): with a build or a kit, or on its own
@@ -111,36 +110,6 @@ function plan(an: Analysis) {
 
 export const drops = (an: Analysis) => plan(an).drops;
 export const builds = (an: Analysis) => plan(an).builds;
-
-/** Whether the music strikes on the beat at t: the onset curve within 30 ms of it at least STRUCK times its
- * mean over the two seconds around. A beat the tracker carried on through a held chord or a free passage
- * gets no hit. */
-function struck(an: Analysis, t: number): boolean {
-  const env = an.pulseEnv, hop = an.pulseHop;
-  const i = Math.round(t / hop), w = Math.max(1, Math.round(0.03 / hop)), r = Math.round(2 / hop);
-  let peak = 0, sum = 0, n = 0;
-  for (let k = Math.max(0, i - w); k <= Math.min(env.length - 1, i + w); k++) peak = Math.max(peak, env[k]);
-  for (let k = Math.max(0, i - r); k <= Math.min(env.length - 1, i + r); k++, n++) sum += env[k];
-  return n > 0 && peak >= STRUCK * (sum / n);
-}
-
-const struckMemo = new WeakMap<Analysis, Uint8Array>();
-
-/** Per tracked beat, whether the music strikes it (struck). */
-function struckBeats(an: Analysis): Uint8Array {
-  let out = struckMemo.get(an);
-  if (!out) struckMemo.set(an, (out = Uint8Array.from(an.beats, (t) => (struck(an, t) ? 1 : 0))));
-  return out;
-}
-
-/** The share of the beats in [t0, t1) that the music strikes: where it is under a half, the music doesn't
- * play on the beat (a held chord, a free passage) and the beat figures and the pulse have nothing to hit. */
-export function struckShare(an: Analysis, t0: number, t1: number): number {
-  const a = searchsorted(an.beats, t0), b = searchsorted(an.beats, t1), on = struckBeats(an);
-  let n = 0;
-  for (let i = a; i < b; i++) n += on[i];
-  return b > a ? n / (b - a) : 0;
-}
 
 /** How clear the beat at t is: the listening's beat confidence, or CLEAR where the tracker keeps steady
  * time. */

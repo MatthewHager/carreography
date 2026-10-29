@@ -15,19 +15,23 @@
 //
 // Alongside: whether the tracker keeps time there (steady). An orchestra's tutti strikes every eighth, so
 // its beats stand out little from the notes between them (a low an.beatConfidence), yet the beat is plain to
-// follow: the beat layer takes a steady beat as a clear one (pulse.ts).
+// follow: the beat layer takes a steady beat as a clear one (pulse.ts). And whether the music strikes each
+// beat (struck): the tracker carries on through a held chord, which gives the lights nothing to hit. A run
+// of the song has a beat to follow (followable) where it is steady or clear and mostly struck; the choice
+// between the moves that follow the melody and those that follow the beat starts there (choreo.ts).
 //
 // Measured on the beats as the listening tracked them, before tempo.ts moves them onto what is played. The
 // neural tracker's own beats say best whether there is a pulse: where it hears none its beats wander, while
 // the fallback tracker always draws an even grid.
 
 import type { Analysis, Phrase } from './analysis';
-import { clip, mean, median } from './np';
+import { clip, mean, median, searchsorted } from './np';
 
 const FLOW_CLARITY = 2.2;
 const STEADY = 0.75, STEADY_TOL = 0.05;
 const ISLAND_S = 20;
 const KIT = 0.6;
+const STRUCK = 1.3;
 
 /** One section of the song and how it moves. */
 export interface Feel {
@@ -128,3 +132,41 @@ export const kitAt = (an: Analysis, t: number) => at(an, t).kit;
 
 /** Whether the beat tracker keeps steady time at t. */
 export const steadyAt = (an: Analysis, t: number) => at(an, t).steady;
+
+/** Whether the music strikes on the beat at t: the onset curve within 30 ms of it at least STRUCK times its
+ * mean over the two seconds around. A beat the tracker carried on through a held chord or a free passage
+ * gets no hit. */
+function struck(an: Analysis, t: number): boolean {
+  const env = an.pulseEnv, hop = an.pulseHop;
+  const i = Math.round(t / hop), w = Math.max(1, Math.round(0.03 / hop)), r = Math.round(2 / hop);
+  let peak = 0, sum = 0, n = 0;
+  for (let k = Math.max(0, i - w); k <= Math.min(env.length - 1, i + w); k++) peak = Math.max(peak, env[k]);
+  for (let k = Math.max(0, i - r); k <= Math.min(env.length - 1, i + r); k++, n++) sum += env[k];
+  return n > 0 && peak >= STRUCK * (sum / n);
+}
+
+const struckMemo = new WeakMap<Analysis, Uint8Array>();
+
+/** Per tracked beat, whether the music strikes it (struck). */
+export function struckBeats(an: Analysis): Uint8Array {
+  let out = struckMemo.get(an);
+  if (!out) struckMemo.set(an, (out = Uint8Array.from(an.beats, (t) => (struck(an, t) ? 1 : 0))));
+  return out;
+}
+
+/** The share of the beats in [t0, t1) that the music strikes: where it is under a half, the music doesn't
+ * play on the beat (a held chord, a free passage) and the beat figures and the pulse have nothing to hit. */
+export function struckShare(an: Analysis, t0: number, t1: number): number {
+  const a = searchsorted(an.beats, t0), b = searchsorted(an.beats, t1), on = struckBeats(an);
+  let n = 0;
+  for (let i = a; i < b; i++) n += on[i];
+  return b > a ? n / (b - a) : 0;
+}
+
+/** Whether a run of the song has a beat the lights can follow: the tracker keeps time there or the music
+ * hits on its beats (as for flow), and the music strikes at least half of them (not a held chord the
+ * tracker carried on through). */
+export function followable(an: Analysis, t0: number, t1: number): boolean {
+  const beats = steadyAt(an, (t0 + t1) / 2) || clarity(an, t0, t1, 0) >= FLOW_CLARITY;
+  return beats && struckShare(an, t0, t1) >= 0.5;
+}

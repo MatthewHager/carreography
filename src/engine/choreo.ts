@@ -18,7 +18,7 @@ import { Car, makeLineup } from './car';
 import * as CAT from './catalog';
 import * as C from './channels';
 import * as DRUMS from './drums';
-import { clarity, feel, flowsAt, kitAt, steadyAt } from './feel';
+import { feel, flowsAt, followable, kitAt } from './feel';
 import * as LAMPS from './lamps';
 import * as LEGATO from './legato';
 import { levelAt, levelCurve, levelOver, STEPS, stepOf } from './level';
@@ -146,22 +146,20 @@ function bands(phrases: Phrase[]): [number, Phrase[]][] {
 }
 
 const DENSE = 5.5, SPARSE = 2.0, SUNG = 3.5;   // notes a second: enough to follow, too few, a singer's line
-const BEATS = 2.0;                             // clarity (feel.ts) of a beat the figures can follow
-
-/** Does a run of phrases call for a move that follows the melody or one that follows the beat? With no
- * beat to follow, or none the music strikes (a held chord), the melody. From drive up, the beat: the whole
- * stage moves together on it, whatever the notes do. Below that, the melody where there are notes enough to
- * follow, the beat under sparse notes (a singer over a band), and in between the one the previous passage
- * didn't take, for contrast. */
+/** Does a run of phrases call for a move that follows the melody or one that follows the beat? With no beat
+ * to follow (feel.followable: none, or one the music doesn't strike, as under a held chord), the melody.
+ * From drive up, and from a groove where a drum kit plays, the beat: the whole stage moves together on it,
+ * with the melody along the trucks' bars. Below that, the melody where there are notes enough to follow,
+ * the beat under sparse notes (a singer over a band), and in between the one the previous passage didn't
+ * take, for contrast. */
 function family(an: Analysis, t0: number, t1: number, step: number,
   before: 'note' | 'beat' | null): 'note' | 'beat' {
   const notes = an.events.t.filter((t) => t >= t0 && t < t1).length / Math.max(t1 - t0, 1);
-  const mid = (t0 + t1) / 2;
-  if (!steadyAt(an, mid) && clarity(an, t0, t1, 0) < BEATS) return 'note';
-  if (PULSE.struckShare(an, t0, t1) < 0.5) return 'note';
-  if (step >= 3) return 'beat';
+  const kit = kitAt(an, (t0 + t1) / 2);
+  if (!followable(an, t0, t1)) return 'note';
+  if (step >= 3 || (step >= 2 && kit)) return 'beat';
   if (notes >= DENSE) return 'note';
-  if (notes < SPARSE || (kitAt(an, mid) && notes < SUNG)) return 'beat';
+  if (notes < SPARSE || (kit && notes < SUNG)) return 'beat';
   return before === 'note' ? 'beat' : 'note';
 }
 
