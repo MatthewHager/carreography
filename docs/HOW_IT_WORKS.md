@@ -114,10 +114,11 @@ The show is made in layers, each sized by one **level**:
    wander there, and the music doesn't hit on them) gets the **legato** style (`legato.ts`). Its breath
    (the level together with the loudness ranked within the flowing music) swells with each sung phrase and
    grows to the climax: lamps that read on each car join and leave in layers on 2 s ramps (a 2025+ Model
-   Y's bar centre and fender repeaters, a Cybertruck's side markers and frunk light, the outer beams at the
+   Y's fender repeaters and bar centre, a Cybertruck's side markers and frunk light, the outer beams at the
    top), a Cybertruck's whole bar glows with it and with the voice, the melody's spot glides along the bar
-   and every note is a comet on it, the melody sweeps the inner beams car to car (smoothed over half a
-   second, so an arpeggio drifts while a run sweeps the stage as fast as it is played), the interiors warm
+   and every note is a comet on it, the melody sweeps the inner beams car to car and a 2025+ Model Y's bar
+   end, centre, end (smoothed over half a second, so an arpeggio drifts while a run sweeps the stage as
+   fast as it is played), the interiors warm
    from blue to gold, and the song fades slowly at the end. Its notes are as dense as any (Ave Maria's
    accompaniment runs 9-11 notes a second, the Toccata's free runs 9-13), so what decides flowing is the
    beat, not the notes.
