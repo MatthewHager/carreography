@@ -19,8 +19,9 @@
 // The choreography still speaks the Model Y's lamp vocabulary; `juniperOutput` translates it to
 // the lamps the Juniper has, at the end:
 //
-//   accents (signature + channels 4-5) on the crowd's left/right -> that outer end of the bar, plus
-//                                          the centre - so a side reads as end + centre, both as the whole bar
+//   signature on the crowd's left/right   -> that outer end of the bar, plus the centre: a side's accents
+//                                          read as end + centre, both sides as the whole bar
+//   channels 4-5 (the DRL) on one side     -> that outer end alone
 //   fogs (low glow, bass pulses)       -> the bar's centre
 //   side markers / aux park            -> the fender repeaters
 //   flashes drawn on the bar's pixels (downbeats) -> the matching sections
@@ -66,25 +67,24 @@ export function juniperOutput(car: Car): void {
   const nF = car.nFrames;
   const bar = [...C.FRONT_BAR];
   const n = bar.length;
-  const accL = car.accents('L'), accR = car.accents('R'), fogs = car.fogs();
+  const accL = car.accents('L'), accR = car.accents('R'), sigL = car.sig('L'), sigR = car.sig('R');
+  const fogs = car.fogs();
   const maxOf = (chs: readonly number[], fr: number) => {
     let m = 0;
     for (const ch of chs) if (f[fr * N + ch] > m) m = f[fr * N + ch];
     return m;
   };
   const lit = (x: number) => (x >= BAR_ON ? C.ON : 0);
-  const accLArr = new Uint8Array(nF), accRArr = new Uint8Array(nF), fogArr = new Uint8Array(nF);
+  const fogArr = new Uint8Array(nF);
   const endL = new Uint8Array(nF), endR = new Uint8Array(nF), centre = new Uint8Array(nF);
   const row = new Float64Array(n);                       // flashes drawn on the bar, crowd-left first
   for (let fr = 0; fr < nF; fr++) {
     for (let k = 0; k < n; k++) row[k] = f[fr * N + bar[n - 1 - k]] / 255;
     const al = maxOf(accL, fr), ar = maxOf(accR, fr), fg = maxOf(fogs, fr);
-    accLArr[fr] = al;
-    accRArr[fr] = ar;
     fogArr[fr] = fg;
     endL[fr] = Math.max(al, lit(mean(row, 0, END_LEDS)));
     endR[fr] = Math.max(ar, lit(mean(row, n - END_LEDS, n)));
-    centre[fr] = Math.max(al, ar, fg, lit(mean(row, END_LEDS, n - END_LEDS)));
+    centre[fr] = Math.max(maxOf(sigL, fr), maxOf(sigR, fr), fg, lit(mean(row, END_LEDS, n - END_LEDS)));
   }
   // the 60-pixel picture, for a car that reads the pixels: accents by halves, fogs in the middle
   const colLevels = (chs: readonly number[]) => chs.map((ch) => {

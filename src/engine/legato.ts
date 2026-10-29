@@ -13,7 +13,7 @@
 //            when calm, all four well into drive), so the song's arc shows too. Each car uses lamps that read
 //            on it:
 //                          Model Y            2025+ Model Y            Cybertruck
-//              1           signatures         -                        -
+//              1           signatures         the bar's outer ends     -
 //              2           DRLs               the fender repeaters     side markers
 //              3           fogs               the bar's centre         -
 //              4           outer beams        outer beams              outer beams     (the bloom)
@@ -117,7 +117,7 @@ function layers(L: ArrayLike<number>, cap: ArrayLike<number>): Int32Array {
 /** The lamps of a car's bed, layer 1 to 4 (see the module notes). */
 function bedLamps(c: Car): number[][] {
   if (c.isCt) return [[], c.sig(), [], c.outer()];
-  if (c.juniper) return [[], c.markers(), c.fogs(), c.outer()];
+  if (c.juniper) return [c.drl(), c.markers(), c.fogs(), c.outer()];
   return [c.sig(), c.drl(), c.fogs(), c.outer()];
 }
 
