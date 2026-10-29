@@ -58,7 +58,7 @@ export class Car {
     /** Per frame, how long the music has been silent there (0 while it sounds): silence is dark. */
     readonly hush: Uint8Array | null = null,
     /** Per frame, the headlights the beat rings there (pulse.ownership: 1 the inner beams, 2 the outer, 3
-     * both): theirs alone, and the whole-stage moments', so the moves light around them. */
+     * both): theirs alone, and the whole-stage moments', so the moves light around them (light). */
     readonly beat: Uint8Array | null = null,
   ) {
     this.frames = new Uint8Array(nFrames * C.N_CHANNELS);
@@ -92,25 +92,33 @@ export class Car {
 
   /** The lamps lit from t0 to t1, shaped so the lighting reads: lit at least MIN_ON frames, joined to another
    * lighting under MIN_OFF frames away (so short a dark is a flicker, not a pause), and never lit in a
-   * silence: one still lit as the music stops fades out on Tesla's shortest ramp. The headlights the beat
-   * rings at t0 are left to it, unless this is the beat or the whole stage at once (`over`). */
+   * silence: one still lit as the music stops fades out on Tesla's shortest ramp. The headlights are left to
+   * the beat while it rings them (`beat`), unless this is the beat or the whole stage at once (`over`), and
+   * a lighting cut there to under MIN_ON frames is left out. */
   light(chs: Chs, t0: number, t1: number, value = C.ON, over = false) {
-    const a = this.fr(t0), on = value >= 128, n = this.nFrames, own = over ? 0 : this.beat?.[a] ?? 0;
-    const cs = this.out(own ? list(chs).filter((ch) => !(own & 1 && INNER.includes(ch))
-      && !(own & 2 && OUTER.includes(ch))) : chs);
+    const a = this.fr(t0), on = value >= 128, n = this.nFrames, cs = this.out(chs);
     let b = this.fr(t1);
     if (b <= a || !cs.length) return;
     if (on) b = Math.min(n, Math.max(b, a + MIN_ON));
-    const F = this.frames, N = C.N_CHANNELS, q = this.hush;
+    const F = this.frames, N = C.N_CHANNELS, q = this.hush, beat = over ? null : this.beat;
     for (const ch of cs) {
+      const bit = !beat ? 0 : INNER.includes(ch) ? 1 : OUTER.includes(ch) ? 2 : 0;
+      const free = (f: number) => !(bit && beat![f] & bit);
       let from = a, to = b;
       for (let g = a - 1; on && g >= Math.max(0, a - MIN_OFF); g--) {
         if (F[g * N + ch] >= 128) [from, g] = [g + 1, -1];
       }
       for (let g = b; on && g < Math.min(n, b + MIN_OFF); g++) if (F[g * N + ch] >= 128) [to, g] = [g, n];
-      for (let f = from; f < to; f++) {
-        const v = q?.[f] && on ? (q[f] <= FADE ? C.OFF_500 : 0) : value;
-        if (F[f * N + ch] < v) F[f * N + ch] = v;
+      for (let f = from; f < to;) {
+        let g = f;
+        while (g < to && free(g)) g++;
+        if (!on || g - f >= MIN_ON || g - f === to - from) {
+          for (let k = f; k < g; k++) {
+            const v = q?.[k] && on ? (q[k] <= FADE ? C.OFF_500 : 0) : value;
+            if (F[k * N + ch] < v) F[k * N + ch] = v;
+          }
+        }
+        for (f = g; f < to && !free(f);) f++;
       }
     }
   }
