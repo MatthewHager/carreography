@@ -4,11 +4,12 @@
 // The rest of the generator finds its timing in beats and drums; music that flows gives it no beat to hit.
 // Here the light follows the music's breath and its melody instead:
 //
-//   breath   how full the music is at each moment: the show's level (level.ts, the song's arc) together with
-//            the loudness against the rest of the flowing music, so the light swells with each sung phrase
-//            and sinks between them as well as growing toward the climax
+//   breath   where the music is in its own breathing: half the swell of each phrase (rising from its start,
+//            falling into its end) and half its loudness against the music around it (BREATH_S either side)
 //   bed      lamps join and leave in layers as the breath rises and falls, on 2 s ramps, one layer at a
-//            time with a short dwell so none flickers; each car uses lamps that read on it:
+//            time with a short dwell so none flickers, so the stage inhales with each sung phrase and exhales
+//            after it; how many layers a phrase can reach grows with the show's level (level.ts: one when
+//            calm, four at the peak), so the song's arc shows too. Each car uses lamps that read on it:
 //                          Model Y            2025+ Model Y            Cybertruck
 //              1           signatures         the fender repeaters     side markers
 //              2           DRLs               -                        frunk light
@@ -36,12 +37,13 @@ import type { Car } from './car';
 import type { Feel } from './feel';
 import { END_LEDS } from './lamps';
 import * as M from './moves';
-import { STEPS } from './level';
+import { stepOf } from './level';
 import { clip, percentile, runs } from './np';
 
 const RES = 0.25;                                  // seconds per step of the bed
-const HYST = 0.04;                                 // a layer goes out this much below where it came in
-const MIN_DWELL = 1.5;                             // seconds a layer stays once it changes
+const HYST = 0.2;                                  // a layer goes out this far (in layers) below where it came in
+const MIN_DWELL = 0.75;                            // seconds a layer stays once it changes
+const BREATH_S = 6;                                // the breath is the loudness against this much either side
 const GLIDE_S = 0.5;                               // the melody's smoothing
 const HELD_S = 0.6;                                // a beam lit this long swells in; shorter, a run passing
 
@@ -66,26 +68,37 @@ function breath(an: Analysis, here: (t: number) => boolean): Float64Array {
     const a = Math.max(0, i - w), b = Math.min(n, i + w + 1);
     return (cs[b] - cs[a]) / (b - a);
   });
-  const pool = Float64Array.from(loud.filter((_, i) => here(i * an.step))).sort();
-  const out = new Float64Array(n);
-  if (!pool.length) return out;
-  const lo = percentile(pool, 5), hi = Math.max(percentile(pool, 95), lo + 1e-6);
-  for (let i = 0; i < n; i++) {
-    if (here(i * an.step)) out[i] = 0.5 * an.level![i] + 0.5 * clip((loud[i] - lo) / (hi - lo), 0, 1);
+  const swell = new Float64Array(n);
+  for (const ph of an.phrases ?? []) {
+    const a = Math.trunc(ph.t0 / an.step), b = Math.min(n, Math.trunc(ph.t1 / an.step));
+    for (let f = a; f < b; f++) swell[f] = Math.sin((Math.PI * (f - a)) / Math.max(1, b - a)) ** 0.7;
+  }
+  const out = new Float64Array(n), reach = Math.round(BREATH_S / an.step), stride = 5;
+  for (let i = 0; i < n; i += stride) {
+    if (!here(i * an.step)) continue;
+    let lo = Infinity, hi = -Infinity;
+    for (let j = Math.max(0, i - reach); j < Math.min(n, i + reach); j += stride) {
+      if (!here(j * an.step)) continue;
+      lo = Math.min(lo, loud[j]);
+      hi = Math.max(hi, loud[j]);
+    }
+    for (let f = i; f < Math.min(n, i + stride); f++) {
+      out[f] = 0.5 * swell[f] + 0.5 * clip((loud[f] - lo) / Math.max(hi - lo, 0.1), 0, 1);
+    }
   }
   return out;
 }
 
-/** Layer count (0-4) per RES step: one more for each of the level's steps the breath reaches, with
- * hysteresis and a minimum dwell, one layer at a time. */
-function layers(L: ArrayLike<number>): Int32Array {
+/** Layer count (0-4) per RES step: of the `cap` layers the level allows there, as many as the breath fills,
+ * with hysteresis and a minimum dwell, one layer at a time. */
+function layers(L: ArrayLike<number>, cap: ArrayLike<number>): Int32Array {
   const out = new Int32Array(L.length);
   let cur = 0, since = -1e9;
   for (let i = 0; i < L.length; i++) {
-    const v = L[i], t = i * RES;
+    const v = L[i] * (cap[i] + 1), t = i * RES;
     let want = cur;
-    while (want < 4 && v >= STEPS[want]) want += 1;
-    while (want > 0 && v < STEPS[want - 1] - HYST) want -= 1;
+    while (want < cap[i] && v >= want + 1) want += 1;
+    while (want > 0 && (v < want - HYST || want > cap[i])) want -= 1;
     if (want !== cur && t - since >= MIN_DWELL) {
       cur = cur + (want > cur ? 1 : -1);       // one layer at a time
       since = t;
@@ -155,7 +168,8 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
   // 1. the bed, layer by layer, and the tail lights from layer 2
   const stride = Math.max(1, Math.round(RES / step));
   const coarse = Array.from({ length: Math.ceil(n / stride) }, (_, i) => B[i * stride]);
-  const lay = layers(coarse).map((v, i) => (flows(i * RES) ? v : -1));
+  const cap = coarse.map((_, i) => Math.max(1, stepOf(an.level![Math.min(n - 1, i * stride)])));
+  const lay = layers(coarse, cap).map((v, i) => (flows(i * RES) ? v : -1));
   for (let k = 1; k <= 4; k++) {
     for (const [a, b] of runs(Array.from(lay, (v) => v >= k))) {
       for (const c of cars) {
