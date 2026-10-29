@@ -69,9 +69,9 @@ and lineups (one car, the classic three, five mixed).
    - Take times from the music: `an.events.t`, `an.beats`, `an.downbeats`, and the helpers in `moves.ts`
      (`grid` thins beats to the level's pace). Never use a fixed tempo.
 2. **Name it** in the `MOVES` table at the end of `moves.ts`.
-3. **Catalogue it** in `catalog.MOVES`: what the crowd sees, the phrase gestures it fits, and what it
-   locks to (`note`, `beat`, `bar`, `self`). Put it in `NOTE_MOVES` or `BEAT_MOVES` for passages to take
-   it, or in `FOR_GESTURE` if a phrase shape should always get it.
+3. **Catalogue it** in `catalog.MOVES`: what the crowd sees and what it locks to (`note`, `beat`, `bar`,
+   `self`). Put it in `NOTE_MOVES` or `BEAT_MOVES` for passages to take it, or in `FOR_GESTURE` if a phrase
+   shape should always get it; MOVES.md's "plays" column is written from those lists.
 4. **Watch it** in the review tool or the 3D preview in at least a one-car, the classic three-car and a
    five-car lineup, and regenerate `MOVES.md` with `UPDATE_MOVES=1 npx vitest run catalog` (the tests fail
    while it's stale).
