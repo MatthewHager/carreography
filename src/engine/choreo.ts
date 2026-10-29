@@ -62,7 +62,7 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   if (!endsFlowing) finale(cars, an);      // (music that ends flowing has already faded out)
   hush(cars, an);
   for (const car of cars) {
-    tidy(car);
+    tidy(car, an);
     if (car.juniper) LAMPS.juniperOutput(car);
     for (let f = Math.max(0, car.nFrames - 3); f < car.nFrames; f++) {
       for (let ch = 0; ch < C.L_FALCON; ch++) car.put(f, ch, 0);
@@ -418,11 +418,18 @@ function onRuns(col: Uint8Array): [number[], number[]] {
   return [starts, ends];
 }
 
-/** Boolean lights: flashes shorter than 100 ms get stretched, gaps under 60 ms get opened up, so rapid
- * notes read as separate flashes instead of a smear. */
-function tidy(car: Car) {
+const MERGE_S = [0.25, 0.25, 0.2];     // a lamp lit again this soon at a hush, calm or groove stays lit
+
+/** On-off lamps, so that rapid notes read as separate flashes and calm music doesn't flicker: flashes shorter
+ * than 100 ms get stretched; below drive a lamp lit again within MERGE_S of going out stays lit, so a quick
+ * figure on one lamp is held light rather than blinking; from drive up gaps under 60 ms get opened up. */
+function tidy(car: Car, an: Analysis) {
   const minOn = 5, minOff = 3;
-  const n = car.nFrames;
+  const n = car.nFrames, lv = an.level!;
+  const merge = (f: number) => {
+    const k = stepOf(lv[clip(f, 0, n - 1)]);
+    return k < MERGE_S.length ? Math.round(MERGE_S[k] / an.step) : 0;
+  };
   for (let ch = C.L_OUTER_MAIN; ch <= C.LICENSE_PLATE; ch++) {
     const col = car.column(ch);
     let [starts, ends] = onRuns(col);
@@ -434,9 +441,10 @@ function tidy(car: Car) {
       }
     });
     [starts, ends] = onRuns(col);
-    for (let k = 0; k < ends.length - 1; k++) {  // open up short gaps
+    for (let k = 0; k < ends.length - 1; k++) {
       const e0 = ends[k], s1 = starts[k + 1];
-      if (s1 - e0 < minOff) for (let f = s1; f < Math.min(n, e0 + minOff); f++) col[f] = 0;
+      if (s1 - e0 < merge(e0)) col.fill(col[e0 - 1], e0, s1);                      // hold calm figures
+      else if (s1 - e0 < minOff) for (let f = s1; f < Math.min(n, e0 + minOff); f++) col[f] = 0;
     }
     for (let f = 0; f < n; f++) car.put(f, ch, col[f]);
   }

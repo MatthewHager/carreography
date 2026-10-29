@@ -101,10 +101,10 @@ const free = (car: Car, chs: number[], own: number) =>
 
 const whole = (car: Car, s: number, own = 0) => [...half(car, 'L', s, own), ...half(car, 'R', s, own)];
 
-/** One note's light, shaped like its sound (Tesla's ramps are the envelopes). Quiet: a short note flashes
- * and fades over half a second, a pluck; a long note swells in and fades over a second, a pad. From the
- * middle level up, every note is struck and held for its length, at least most of the way to the next one
- * when it is loud, so the light has mass. */
+/** One note's light, shaped like its sound (Tesla's ramps are the envelopes). Calm: a short note flashes
+ * and fades over half a second, a pluck; a long note swells in and fades over a second, a pad. From a
+ * groove up, every note is struck and held for its length, at least most of the way to the next one, so the
+ * light moves from lamp to lamp rather than blinking. */
 export function note(car: Car, chs: number[], t: number, dur: number, s: number, next = Infinity) {
   if (s < STEPS[1]) {
     if (dur >= 0.6) {
@@ -119,7 +119,7 @@ export function note(car: Car, chs: number[], t: number, dur: number, s: number,
     return;
   }
   let hold = clip(dur, 0.1, 1.2);
-  if (s >= STEPS[2] && next < Infinity) hold = Math.max(hold, Math.min(0.8 * (next - t), 0.6));
+  if (next < Infinity) hold = Math.max(hold, Math.min(0.8 * (next - t), 0.6));
   car.light(chs, t, t + hold);
 }
 
