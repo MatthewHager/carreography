@@ -21,7 +21,7 @@ import * as DRUMS from './drums';
 import { feel, flowsAt, followable, kitAt } from './feel';
 import * as LAMPS from './lamps';
 import * as LEGATO from './legato';
-import { levelAt, levelCurve, levelOver, STEPS, stepOf } from './level';
+import { DRIVE, GROOVE, levelAt, levelCurve, levelOver, stepOf } from './level';
 import * as LY from './lyrics';
 import type { Moment } from './lyrics';
 import * as motors from './motors';
@@ -270,14 +270,14 @@ function accents(cars: Car[], an: Analysis, phrases: Phrase[], said: Moment[]) {
   const jump = (t: number) => around(t)[1] - around(t)[0];
   const lift = (t: number) => levelOver(an, t, t + 2) - levelOver(an, t - 4, t - 0.3);
   const strength = (t: number) => jump(t) + 2 * Math.max(0, lift(t));
-  const lively = (t: number) => levelAt(an, t) >= STEPS[2] && !flowsAt(an, t);
+  const lively = (t: number) => levelAt(an, t) >= DRIVE && !flowsAt(an, t);
   const taken = [...PULSE.drops(an), ...said.filter((m) => m.do === 'lightning').map((m) => onGrid(an, m.t0))];
   for (const ph of phrases) if (ph.move === 'cadence') for (let i = ph.a; i < ph.b; i++) taken.push(ev.t[i]);
   const cands: [number, number, number][] = [];               // [t, strength, hold]
   const kept: number[] = [];
   for (const h of an.hits) {
     const [before, after] = around(h), hold = Math.min(0.3, M.beatAt(an, h) * 0.6);
-    if (after < LOUD || after - before < BLAST || levelAt(an, h + RING_S) < STEPS[1] || flowsAt(an, h)) continue;
+    if (after < LOUD || after - before < BLAST || levelAt(an, h + RING_S) < GROOVE || flowsAt(an, h)) continue;
     if (before > REST) cands.push([h, strength(h), hold]);
     else if (kept.every((u) => h - u >= STRIKE_GAP_S) && taken.every((u) => Math.abs(u - h) >= 1)) {
       kept.push(h);
@@ -304,7 +304,7 @@ function accents(cars: Car[], an: Analysis, phrases: Phrase[], said: Moment[]) {
   for (const i of arrivals) {
     const t = ev.t[i];
     if (kept.includes(t)) continue;
-    if (levelAt(an, t) < STEPS[1]) {
+    if (levelAt(an, t) < GROOVE) {
       for (const c of cars) {
         c.light(c.inner(), t, t + 0.8, C.ON_500);
         c.light(c.inner(), t + 0.8, t + 1.8, C.OFF_1000);
@@ -327,7 +327,7 @@ function pedal(cars: Car[], an: Analysis) {
   const anchor = trucks.length ? trucks : [cars[Math.floor(cars.length / 2)]];
   for (let i = 0; i < ev.t.length; i++) {
     const t = ev.t[i];
-    if (ev.low[i] <= 45 && ev.dur[i] >= 0.8 && levelAt(an, t) < STEPS[2] && !flowsAt(an, t)) {
+    if (ev.low[i] <= 45 && ev.dur[i] >= 0.8 && levelAt(an, t) < DRIVE && !flowsAt(an, t)) {
       const d = Math.min(ev.dur[i], 2.5);
       for (const c of anchor) {
         c.light(c.inner(), t, t + d, C.ON_2000);

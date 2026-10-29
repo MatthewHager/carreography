@@ -13,19 +13,21 @@
 //              song on (PEAK_FROM) and the nearly as loud music either side (reserveTop); everywhere else the
 //              level stops just under it
 //
-// Five steps (STEP_NAMES), each with a pace (moves.paced) and a size:
+// Five steps (STEP_NAMES), each with a pace (moves.paced) and a size; each starts at its threshold (CALM,
+// GROOVE, DRIVE, PEAK: STEPS[k] is where step k + 1 starts):
 //   0  hush     single soft lamps, no pulse, no motors
 //   1  calm     a lamp or two a note, soft fades, a pulse on the downbeats where the beat is clear
-//   2  groove   half cars, the pulse on 1 and 3, the drums
-//   3  drive    every beat, half cars with headlights, the rear lit, the motors
+//   2  groove   half cars, the pulse on 1 and 3, the drums, the motors start to move
+//   3  drive    every beat, half cars with headlights, the rear lit, the motors spend the most
 //   4  peak     everything: whole cars, every beat and its off-beat, the lids dancing
 
 import type { Analysis } from './analysis';
 import { clip, quantile } from './np';
 
 export const STEPS = [0.2, 0.4, 0.6, 0.8];
+/** Where each step starts: the level from which the show is calm, in a groove, driving, at the peak. */
+export const [CALM, GROOVE, DRIVE, PEAK] = STEPS;
 export const STEP_NAMES = ['hush', 'calm', 'groove', 'drive', 'peak'];
-const TOP = STEPS[3];
 const RISE_S = 0.15, FALL_S = 1.5;
 
 /** Per frame: notes and drum hits a second, over the two seconds around. */
@@ -97,10 +99,10 @@ function reserveTop(an: Analysis, out: Float32Array): Float32Array {
   while (b < n && near(b) >= 0.9 * top) b++;
   const peak = new Uint8Array(n).fill(1, a, b);
   for (let i = b; i < n; i++) if (near(i) >= 0.95 * top) peak[i] = 1;
-  const lift = Math.max(0, TOP + 0.06 - top);
+  const lift = Math.max(0, PEAK + 0.06 - top);
   for (let i = 0; i < n; i++) {
     out[i] = peak[i] ? Math.min(1, out[i] + lift * clip((out[i] - 0.4) / 0.4, 0, 1))
-      : Math.min(out[i], TOP - 0.01);
+      : Math.min(out[i], PEAK - 0.01);
   }
   return out;
 }

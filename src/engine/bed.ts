@@ -17,7 +17,7 @@ import type { Analysis } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
 import { flowsAt } from './feel';
-import { STEPS } from './level';
+import { CALM, DRIVE, GROOVE, PEAK } from './level';
 import { clip, runs } from './np';
 
 const DWELL_S = 4.0;          // a lamp of the bed stays at least this long once it changes
@@ -46,8 +46,8 @@ function hueOf(pc: number): number[] {
 export function apply(cars: Car[], an: Analysis): void {
   const lv = an.level!, step = an.step;
   const lit: [number, (c: Car) => number[]][] = [
-    [STEPS[1], (c) => c.tails()],
-    [STEPS[2], (c) => [C.LICENSE_PLATE, c.isCt ? C.REVERSE : C.REAR_FOG]],
+    [GROOVE, (c) => c.tails()],
+    [DRIVE, (c) => [C.LICENSE_PLATE, c.isCt ? C.REVERSE : C.REAR_FOG]],
   ];
   for (const [at, chs] of lit) {
     for (const [a, b] of runs(above(an, at))) for (const c of cars) c.light(chs(c), a * step, b * step);
@@ -58,9 +58,9 @@ export function apply(cars: Car[], an: Analysis): void {
     const front: Float64Array[] = [], rear: Float64Array[] = [];
     for (let f = 0; f < an.nFrames; f++) {
       const on = !flowsAt(an, f * step);
-      const lead = (glow(f, STEPS[0], 0.35) + glow(f, STEPS[3], 0.2)) * (0.5 + 0.5 * highMid[f]);
+      const lead = (glow(f, CALM, 0.35) + glow(f, PEAK, 0.2)) * (0.5 + 0.5 * highMid[f]);
       front.push(new Float64Array(C.FRONT_BAR.length).fill(on ? lead : 0));
-      rear.push(new Float64Array(C.REAR_BAR.length).fill(on ? glow(f, STEPS[0], 0.7) * (0.3 + 0.7 * low[f]) : 0));
+      rear.push(new Float64Array(C.REAR_BAR.length).fill(on ? glow(f, CALM, 0.7) * (0.3 + 0.7 * low[f]) : 0));
     }
     c.pixels(C.FRONT_BAR, 0, front);
     c.pixels(C.REAR_BAR, 0, rear);
@@ -104,9 +104,9 @@ function cabins(cars: Car[], an: Analysis): void {
   }
   const loud = (t: number) => lv[clip(Math.trunc(t / step), 0, lv.length - 1)];
   for (const d of an.downbeats) {
-    if (loud(d) >= STEPS[2] && !flowsAt(an, d)) for (const c of cars) c.rgb(d, d + 0.1, [255, 255, 255], 0.8);
+    if (loud(d) >= DRIVE && !flowsAt(an, d)) for (const c of cars) c.rgb(d, d + 0.1, [255, 255, 255], 0.8);
   }
   for (const h of an.hits) {
-    if (loud(h) >= STEPS[1] && !flowsAt(an, h)) for (const c of cars) c.rgb(h, h + 0.12, [255, 255, 255]);
+    if (loud(h) >= GROOVE && !flowsAt(an, h)) for (const c of cars) c.rgb(h, h + 0.12, [255, 255, 255]);
   }
 }

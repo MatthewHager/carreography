@@ -13,7 +13,7 @@
 import type { Analysis, Phrase } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
-import { levelAt, STEPS, stepOf } from './level';
+import { CALM, DRIVE, GROOVE, levelAt, PEAK, stepOf } from './level';
 import { arange, clip, cumsum, diff, linspace, quantiles, searchsorted, sum } from './np';
 import { beatLen } from './tempo';
 
@@ -108,9 +108,9 @@ export const owned = (an: Analysis, t: number) =>
  * owns (`own`, as owned() says) to the beat. A truck's half is its side marker and headlights (its bar is
  * drawn separately). */
 export function half(car: Car, side: LR, s: number, own = 0): number[] {
-  const out = car.isCt || s < STEPS[0] ? car.sig(side) : car.accents(side);
-  if (s >= STEPS[1] && own < 1) out.push(...car.inner(side));
-  if (s >= STEPS[2] && own < 2) out.push(...car.outer(side));
+  const out = car.isCt || s < CALM ? car.sig(side) : car.accents(side);
+  if (s >= GROOVE && own < 1) out.push(...car.inner(side));
+  if (s >= DRIVE && own < 2) out.push(...car.outer(side));
   return out;
 }
 
@@ -125,7 +125,7 @@ const whole = (car: Car, s: number, own = 0) => [...half(car, 'L', s, own), ...h
  * groove up, every note is struck and held for its length, at least most of the way to the next one, so the
  * light moves from lamp to lamp rather than blinking. */
 export function note(car: Car, chs: number[], t: number, dur: number, s: number, next = Infinity) {
-  if (s < STEPS[1]) {
+  if (s < GROOVE) {
     if (dur >= 0.6) {
       const end = Math.min(t + Math.min(dur, 2.0), next);
       car.light(chs, t, end, ON_500);
@@ -295,14 +295,14 @@ const keyboard: Move = (cars, an, ph) => {
     const [lo, hi] = ranges[i - ph.a];
     const top = slotFor(cars, ev.top[i], lo, hi);
     let span: [Car, LR][] = [[top[0], top[1]]];
-    if (ev.kind[i] >= 2 && s >= STEPS[2]) {
+    if (ev.kind[i] >= 2 && s >= DRIVE) {
       const low = slotFor(cars, ev.low[i], lo, hi);
       const a = all.findIndex(([c, d]) => c === low[0] && d === low[1]);
       const b = all.findIndex(([c, d]) => c === top[0] && d === top[1]);
       span = all.slice(Math.min(a, b), Math.max(a, b) + 1);
     }
     for (const [car, side] of span) {
-      if (!car.isCt || s >= STEPS[1]) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
+      if (!car.isCt || s >= GROOVE) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
     }
   }
   barMelody(cars, an, ph);
@@ -325,9 +325,9 @@ const relay: Move = (cars, an, ph) => {
     const hold = Math.max(clip(ev.dur[i], 0.1, 0.25), 0.2 + 0.2 * s);    // a trail, longer when loud
     if (typeof st === 'number') {
       barSpan(car, t, hold + 0.1, st / 6, (st + 1) / 6, 0.6 + 0.4 * s);
-      if (s >= STEPS[2]) car.light(half(car, side, s, own), t, t + hold);
+      if (s >= DRIVE) car.light(half(car, side, s, own), t, t + hold);
     } else {
-      car.light(s >= STEPS[2] ? half(car, side, s, own) : free(car, st, own), t, t + hold);
+      car.light(s >= DRIVE ? half(car, side, s, own) : free(car, st, own), t, t + hold);
     }
     if (i + 1 < ph.b) {
       const step = Math.sign(ev.top[i + 1] - ev.top[i]);
@@ -355,7 +355,7 @@ const mirror: Move = (cars, an, ph) => {
     const r = Math.min(rings - 1, Math.trunc(p * rings));          // 0: the middle pair
     for (const k of new Set([rings - 1 - r, rings + r])) {
       const [car, side] = all[k];
-      if (!car.isCt || s >= STEPS[1]) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
+      if (!car.isCt || s >= GROOVE) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
     }
     if (ct !== null) {
       for (const at of [0.5 - 0.45 * p, 0.5 + 0.45 * p]) comet(ct, t, at, clip(ev.dur[i], 0.15, 0.5) + 0.15, s);
@@ -376,7 +376,7 @@ const lrNotes: Move = (cars, an, ph) => {
   for (let k = 0, i = ph.a; i < ph.b; k++, i++) {
     const t = ev.t[i], s = levelAt(an, t), group = sidesOf[k % 2];
     const at = Math.min(group.length - 1, Math.trunc(posOf(ev.top[i], ...ranges[i - ph.a]) * group.length));
-    const pick = s >= STEPS[2] ? group : [group[at]];
+    const pick = s >= DRIVE ? group : [group[at]];
     const d = clip(ev.dur[i], 0.1, 0.25);
     for (const [car, side] of pick) slotHit(car, side, t, d, s, owned(an, t));
   }
@@ -424,7 +424,7 @@ const shimmer: Move = (cars, an, ph) => {
   const mid = (ph.lo + ph.hi) / 2, [home] = slotFor(cars, mid, lo, hi);
   for (let k = 0, i = ph.a; i < ph.b; k++, i++) {
     const t = ev.t[i], s = levelAt(an, t), side: LR = k % 2 === 0 ? 'L' : 'R';
-    for (const car of s >= STEPS[1] ? cars : [home]) {
+    for (const car of s >= GROOVE ? cars : [home]) {
       const sd = car.x > home.x ? (side === 'L' ? 'R' : 'L') : side;
       slotHit(car, sd, t, 0.07, s, owned(an, t));
     }
@@ -451,9 +451,9 @@ const motif: Move = (cars, an, ph) => {
   const path = far < target ? all.slice(far, target + 1) : all.slice(target, far + 1).reverse();
   run.forEach((i, k) => {
     const [car, side] = path[Math.min(k, path.length - 1)];
-    slotHit(car, side, ev.t[i], 0.1, Math.max(STEPS[2], levelAt(an, ev.t[i])));
+    slotHit(car, side, ev.t[i], 0.1, Math.max(DRIVE, levelAt(an, ev.t[i])));
   });
-  const t = ev.t[landI], hold = clip(ev.dur[landI], 0.4, 3.0), s = Math.max(STEPS[3], levelAt(an, t));
+  const t = ev.t[landI], hold = clip(ev.dur[landI], 0.4, 3.0), s = Math.max(PEAK, levelAt(an, t));
   landCar.light(half(landCar, landSide, s), t, t + hold);
   landCar.light(half(landCar, landSide, s), t + hold, t + hold + 0.8, OFF_500);
   if (landCar.isCt) barSpan(landCar, t, hold + 0.5, ...barHalf(landSide));
@@ -490,7 +490,7 @@ function units(cars: Car[]): [Car, LR | null][] {
 
 function unitHit(car: Car, side: LR | null, t: number, dur: number, s: number, own: number) {
   if (side) return slotHit(car, side, t, dur, s, own);
-  car.light(whole(car, Math.max(s, STEPS[1]), own), t, t + dur);
+  car.light(whole(car, Math.max(s, GROOVE), own), t, t + dur);
   if (car.isCt) barFlash(car, t, dur + 0.1, 0.5 + 0.5 * s);
 }
 
@@ -558,7 +558,7 @@ const beam: Move = (cars, an, ph) => {
       for (const j of [pos - 1, pos]) {
         if (j < 0 || j >= n) continue;
         const [car, side] = all[j];
-        car.light(half(car, side, Math.max(s, STEPS[1]), owned(an, t)), t, t + per * 1.2);
+        car.light(half(car, side, Math.max(s, GROOVE), owned(an, t)), t, t + per * 1.2);
         if (car.isCt) {
           const centre = side === 'L' ? 0.25 : 0.75;
           barSpan(car, t, per * 1.2, centre - 0.25, centre + 0.25, 0.6 + 0.4 * s);
@@ -591,14 +591,14 @@ const converge: Move = (cars, an, ph) => {
  * through every car to both ends. */
 const shockwave: Move = (cars, an, ph) => {
   const all = slots(cars), n = all.length, rings = n / 2;
-  const peak = levelAt(an, ph.t0) >= STEPS[3];
+  const peak = levelAt(an, ph.t0) >= PEAK;
   for (const d of grid(an, ph, peak ? 'beats' : 'downbeats')) {
     const s = levelAt(an, d), ring = beatAt(an, d) / 8;
     for (let r = 0; r < rings; r++) {                              // r = 0: the middle pair
       const t = d + r * ring;
       for (const k of new Set([rings - 1 - r, rings + r])) {
         const [car, side] = all[k];
-        car.light(half(car, side, Math.max(s, STEPS[1]), owned(an, t)), t, t + 0.14);
+        car.light(half(car, side, Math.max(s, GROOVE), owned(an, t)), t, t + 0.14);
       }
     }
     for (const car of cars.filter((c) => c.isCt)) {

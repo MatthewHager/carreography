@@ -28,7 +28,7 @@ import type { Analysis } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
 import { flowsAt, kitAt, steadyAt, struckBeats, struckShare } from './feel';
-import { levelAt, levelOver, STEPS, stepOf } from './level';
+import { CALM, DRIVE, levelAt, levelOver, stepOf } from './level';
 import * as M from './moves';
 import { clip, quantile, searchsorted } from './np';
 import { beatLen } from './tempo';
@@ -77,7 +77,7 @@ function plan(an: Analysis) {
   let out = cached.get(an);
   if (out) return out;
   let first = 0;
-  while (first < an.nFrames && an.level![first] < STEPS[0]) first++;
+  while (first < an.nFrames && an.level![first] < CALM) first++;
   const start = first * an.step;
   const jump = (d: number) => held(an, d + 0.1, d + 4) - levelOver(an, d - 2, d - 0.1);
   const smooth = (t: number) => levelOver(an, t - 2, t);
@@ -163,7 +163,7 @@ export function apply(cars: Car[], an: Analysis): void {
     const s = levelAt(an, t), step = stepOf(s);
     // the louder, the longer the attack holds before it decays: a tick at a groove, a third of the beat at the
     // peak
-    const hold = clip(gap * (0.2 + clip((s - STEPS[2]) / (1 - STEPS[2]), 0, 1) * 0.15), 0.1, 0.2);
+    const hold = clip(gap * (0.2 + clip((s - DRIVE) / (1 - DRIVE), 0, 1) * 0.15), 0.1, 0.2);
     const hit = (c: Car, chs: number[], at: number, dur: number) => {
       c.light(chs, at, at + dur);
       c.light(chs, at + dur, at + gap - DIP_S, C.OFF_500);
@@ -199,7 +199,7 @@ function buildPulse(cars: Car[], an: Analysis, t0: number, land: number): void {
     for (const t of ticks) {
       if (t >= land - gap - 0.01) continue;                             // the beat of black before the landing
       const hold = clip(gap * 0.3, 0.08, 0.14);
-      const lamps = (c: Car) => (levelAt(an, t) >= STEPS[2] ? c.heads() : c.inner());
+      const lamps = (c: Car) => (levelAt(an, t) >= DRIVE ? c.heads() : c.inner());
       for (const c of order.slice(0, reach)) c.set(lamps(c), t, t + hold, C.ON);
     }
   });

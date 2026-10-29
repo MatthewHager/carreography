@@ -19,7 +19,7 @@ import type { Analysis } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
 import { flowsAt } from './feel';
-import { levelAt, STEPS } from './level';
+import { DRIVE, GROOVE, levelAt, PEAK } from './level';
 import { clip, searchsorted } from './np';
 
 const REACH_S = 2.0;            // presence is counted over this much either side of a hit
@@ -64,7 +64,7 @@ export function apply(cars: Car[], an: Analysis): void {
     const hold = 0.08 + 0.08 * strength * s;
     for (const c of cars) {
       c.light(c.isCt ? c.frunk() : c.fogs(), t, t + hold);
-      if (s >= STEPS[2]) {
+      if (s >= DRIVE) {
         c.light([C.BRAKE], t, t + hold + 0.04);
         if (c.isCt) rearBar(c, t, hold + 0.15, 0.6 + 0.4 * strength);
       }
@@ -74,13 +74,13 @@ export function apply(cars: Car[], an: Analysis): void {
     const hold = clip(0.06 + 0.1 * s, 0.08, 0.16);
     for (const c of cars) {
       c.light(c.turns().filter((ch) => !c.rearTurns().includes(ch)), t, t + hold);
-      if (s >= STEPS[1]) c.light(c.rearTurns(), t, t + hold);
-      if (c.isCt && s >= STEPS[2]) c.pixels(C.OFFROAD_BAR, t, Array.from({ length: c.fr(t + hold) - c.fr(t) },
+      if (s >= GROOVE) c.light(c.rearTurns(), t, t + hold);
+      if (c.isCt && s >= DRIVE) c.pixels(C.OFFROAD_BAR, t, Array.from({ length: c.fr(t + hold) - c.fr(t) },
         () => new Float64Array(C.OFFROAD_BAR.length).fill(strength)));
     }
   });
   play(an.hats, NEED.hats, (t, _, s) => {
-    if (s < STEPS[3]) return;
+    if (s < PEAK) return;
     for (const c of cars) c.light(c.markers(), t, t + 0.06);
   });
 }

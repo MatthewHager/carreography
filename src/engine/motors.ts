@@ -23,13 +23,13 @@ import type { Analysis, Section } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
 import { flowsAt } from './feel';
-import { levelAt, levelOver, STEPS, stepOf } from './level';
+import { DRIVE, GROOVE, levelAt, levelOver, PEAK, stepOf } from './level';
 import * as np from './np';
 import { builds, drops } from './pulse';
 import { barLen, beatLen } from './tempo';
 
-const LIVELY = STEPS[1];                // motors move only where the music is at least this lively (a groove)
-const LOUD = STEPS[2];                  // ... and spend the most where it is loud (drive and the peak)
+const LIVELY = GROOVE;                // motors move only where the music is at least this lively (a groove)
+const LOUD = DRIVE;                  // ... and spend the most where it is loud (drive and the peak)
 
 export const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };   // Cybertruck frunk: timed on the truck, Oct 2026
 const LIFTGATE_CLOSE_S = 4.0;
@@ -76,7 +76,7 @@ function crescendos(an: Analysis, lead: number): Crescendo[] {
   const step = an.step, lv = an.level!;
   const cands: [number, number | null, number][] = [];
   let top = -1;
-  for (let f = 0; f < lv.length; f++) if (lv[f] >= STEPS[3]) { top = f; break; }
+  for (let f = 0; f < lv.length; f++) if (lv[f] >= PEAK) { top = f; break; }
   for (const [t0, land] of builds(an)) cands.push([land, land - t0, 0.5]);
   for (const d of drops(an)) cands.push([d, null, 0.3]);
   const ev = an.events;
@@ -765,7 +765,7 @@ function portWindow(an: Analysis): [number, number] | null {
   const lv = an.level!, exc = new Float64Array(lv.length);
   let total = 0;
   for (let i = 0; i < exc.length; i++) {
-    exc[i] = (lv[i] >= LOUD ? 1 : 0) + (lv[i] >= STEPS[3] ? 1 : 0);
+    exc[i] = (lv[i] >= LOUD ? 1 : 0) + (lv[i] >= PEAK ? 1 : 0);
     total += exc[i];
   }
   if (total === 0) return null;
