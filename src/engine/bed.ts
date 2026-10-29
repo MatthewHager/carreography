@@ -4,7 +4,7 @@
 //   rear       the tail lights from groove up, the number plates, rear fogs and a truck's bed lights from
 //              drive up; a truck's rear bar (its tail light) pumps with the bass, a level meter, brighter as
 //              the level rises
-//   front bar  a truck's front bar glows under the comets wherever the music plays (BAR_GLOW: from a tenth at a
+//   front bar  a truck's front bar glows under the comets wherever the music plays (BAR_GLOW: from a sixth at a
 //              hush, so the centrepiece is there in the dark, to two fifths at the peak), breathing with the
 //              voice and the lead (the 600 Hz-4 kHz band)
 //   cabins     the interiors take the harmony's colour, bar by bar (the pitch class leading the bar, round
@@ -22,7 +22,7 @@ import { CALM, DRIVE, GROOVE } from './level';
 import { clip, runs } from './np';
 
 const DWELL_S = 4.0;          // a lamp of the bed stays at least this long once it changes
-const BAR_GLOW = [0.1, 0.4];  // a truck's front bar's glow at a hush and at the top, under the comets
+const BAR_GLOW = [0.15, 0.4]; // a truck's front bar's glow at a hush (seen in the dark) and at the top
 const METER = 0.7;            // the rear bar's level meter at the top, so a kick's flash still stands out
 const DULL = [110, 0, 200], BRIGHT = [255, 140, 20];
 

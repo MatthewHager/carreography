@@ -128,7 +128,7 @@ The show is made in layers, each sized by one **level**:
    (Ave Maria's accompaniment runs 9-11 notes a second, the Toccata's free runs 9-13), so what decides
    flowing is the beat, not the notes.
 3. **The bed** (`bed.ts`): the rear lamps from a groove up, the trucks' rear bars pumping with the bass,
-   their front bars glowing under the comets wherever the music plays (a tenth at a hush, so the
+   their front bars glowing under the comets wherever the music plays (a sixth at a hush, so the
    centrepiece is there in a pianissimo, two fifths at the peak), and the cabins in the harmony's colour
    bar by bar (the leading pitch class round the circle of fifths), brighter as the level rises.
 4. **Passages, figures and moves.** Phrases (`phrases.ts`) end at rests, after held notes, at arrivals and
