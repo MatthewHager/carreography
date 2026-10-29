@@ -74,7 +74,8 @@ and lineups (one car, the classic three, five mixed).
 2. **Name it** in the `MOVES` table at the end of `moves.ts`.
 3. **Catalogue it** in `catalog.MOVES`: what the crowd sees and what it locks to (`note`, `beat`, `bar`,
    `self`). Put it in `NOTE_MOVES`, `BEAT_MOVES`, `HELD_MOVES` or `FLOW_MOVES` for figures to take it, or in
-   `FOR_GESTURE` if a phrase shape should always get it; MOVES.md's "plays" column is written from those
+   `FOR_GESTURE` if a phrase shape should always get it, and in `SPARSE_MOVES` too if a beat move lights
+   only a car or two at a time (it is kept below the peak); MOVES.md's "plays" column is written from those
    lists.
 4. **Watch it** in the review tool or the 3D preview in at least a one-car, the classic three-car and a
    five-car lineup, and regenerate `MOVES.md` with `UPDATE_MOVES=1 npx vitest run catalog` (the tests fail
