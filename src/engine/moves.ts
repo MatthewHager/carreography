@@ -98,9 +98,10 @@ export const owned = (an: Analysis, t: number) =>
 /** What one hit lights of a car's half at level s: a single lamp at a hush, then the signature and DRL, from
  * a groove the inner headlight too, from drive the outer one as well, leaving the headlights the beat layer
  * owns (`own`, as owned() says) to the beat. A truck's half is its side marker and headlights (its bar is
- * drawn separately). */
+ * drawn separately); a 2025+ Model Y's is its bar's end on that side (its DRL: the signature would light the
+ * bar's centre too, leaving no half dark). */
 export function half(car: Car, side: LR, s: number, own = 0): number[] {
-  const out = car.isCt || s < CALM ? car.sig(side) : car.accents(side);
+  const out = car.juniper ? car.drl(side) : car.isCt || s < CALM ? car.sig(side) : car.accents(side);
   if (s >= GROOVE) out.push(...car.inner(side));
   if (s >= DRIVE) out.push(...car.outer(side));
   return free(car, out, own);
