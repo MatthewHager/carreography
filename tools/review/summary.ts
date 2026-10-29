@@ -3,7 +3,7 @@
 
 import * as C from '@/engine/channels';
 import { CLOSURE_CLOSE, CLOSURE_DANCE, CLOSURE_LIMITS, CLOSURE_OPEN, CLOSURE_STOP, N_CHANNELS } from '@/engine/channels';
-import { bpm, meanOf, type Review } from './timeline';
+import { bpm, meanOf, type Review, stepName } from './timeline';
 
 const STEP = 0.02;
 const NEAR = 3;                 // frames (60 ms) either side of a beat or a note that count as "on" it
@@ -106,7 +106,7 @@ export function summarize(r: Review, frames: Uint8Array[]): string {
       + `level ${meanOf(an.level, s.t0, s.t1).toFixed(2)}`);
     const phrases = (an.phrases ?? []).filter((p) => p.t0 >= s.t0 - 1e-6 && p.t0 < s.t1);
     for (const p of phrases) {
-      out.push(`    ${clock(p.t0)}  ${(p.t1 - p.t0).toFixed(1).padStart(4)} s  ${(p.mood ?? '').padEnd(6)} `
+      out.push(`    ${clock(p.t0)}  ${(p.t1 - p.t0).toFixed(1).padStart(4)} s  ${stepName(p).padEnd(6)} `
         + `${p.gesture.padEnd(10)} ${p.move ?? ''}`);
     }
     line('  ', Math.round(s.t0 / STEP), Math.min(n, Math.round(s.t1 / STEP)));

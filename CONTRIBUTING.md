@@ -33,7 +33,7 @@ gh release download car-models --dir public/models/tesla-app
 
 | Folder | What |
 |---|---|
-| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts`, `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, builds and drops), `motors.ts` (the closures), `legato.ts` (music with no beat), `lyrics.ts`, `car.ts` (one car's frames and lamp groups), `vehicles.ts` (the lineup letters), `lamps.ts` (the 2025+ Model Y), and the reading of the music (`feel.ts`, `texture.ts`, `form.ts`, `phrases.ts`, `mood.ts`, `tempo.ts`). |
+| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts`, `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, builds and drops), `motors.ts` (the closures), `legato.ts` (music with no beat), `lyrics.ts`, `car.ts` (one car's frames and lamp groups), `vehicles.ts` (the lineup letters), `lamps.ts` (the 2025+ Model Y), and the reading of the music (`feel.ts`, `texture.ts`, `form.ts`, `phrases.ts`, `tempo.ts`). |
 | `src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend), song tags, LRCLIB and lyric alignment. |
 | `src/viewer/` | The 3D preview (three.js), adapted from Tesla Lightshow Studio (AGPL-3.0): `core/` reads, writes and simulates show files, `car/appBody.ts` draws Tesla's app models. |
 | `src/app/` | The page: the 3D stage, the panels, the worker that makes a show (`show.worker.ts`), the WAV and the ZIP. |

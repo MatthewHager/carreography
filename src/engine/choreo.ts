@@ -24,7 +24,6 @@ import * as LEGATO from './legato';
 import { levelAt, levelCurve, levelOver, STEPS, stepOf } from './level';
 import * as LY from './lyrics';
 import type { Moment } from './lyrics';
-import * as MD from './mood';
 import * as motors from './motors';
 import * as M from './moves';
 import { clip, linspace, median, searchsorted } from './np';
@@ -44,7 +43,7 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   // spacing so a bar-long sweep ends on the next downbeat rather than drifting off it.
   if (an.beats.length > 8) an.tempo = 60.0 / median(an.beats.slice(1).map((b, i) => b - an.beats[i]));
   an.level = levelCurve(an);
-  MD.assign(an, phrases);
+  for (const ph of phrases) ph.level = levelOver(an, ph.t0, ph.t1);
   for (const ph of phrases) if (flowsAt(an, ph.t0)) ph.move = 'legato';
   const said = sung ? LY.moments(sung, an) : [];
   const endsFlowing = flowing.length > 0 && LEGATO.choreograph(cars, an, flowing);
@@ -238,7 +237,7 @@ function beating(an: Analysis, t0: number, t1: number): [number, number][] {
 /** A stretch of a passage as a phrase, for a beat move. */
 function stretch(an: Analysis, t0: number, t1: number): Phrase {
   const a = searchsorted(an.events.t, t0), b = searchsorted(an.events.t, t1);
-  return { a, b, t0, t1, gesture: 'figuration', density: 0, up: 0.5, lo: an.pitchLo, hi: an.pitchHi,
+  return { a, b, t0, t1, gesture: 'figuration', up: 0.5, lo: an.pitchLo, hi: an.pitchHi,
     level: levelOver(an, t0, t1) };
 }
 

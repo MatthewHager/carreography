@@ -12,7 +12,6 @@ export interface Events {
   kind: number[];       // 0 single note, 1 dyad, 2 chord, 3 big chord
   trill: number[];      // 1 inside a rapid two-note alternation
   arrival: number[];    // 1 on a strong chord that lands after a run or a rest
-  density: number[];    // events in the surrounding second
   phrase: string[];     // the texture of the passage each event is in (texture.labelPhrases)
 }
 
@@ -28,19 +27,17 @@ export interface Section {
 }
 
 /** A phrase: the unit a move plays over (phrases.ts), events [a, b). The choreographer adds its level
- * and mood (mood.ts) and the move it plays. */
+ * (level.ts) and the move it plays. */
 export interface Phrase {
   a: number;
   b: number;
   t0: number;
   t1: number;
   gesture: string;
-  density: number;      // notes per second
   up: number;           // share of rising steps in the melody
   lo: number;           // the melody's lowest and highest pitch, but for strays (its 10th and 90th percentiles)
   hi: number;
   level?: number;
-  mood?: string;
   move?: string;
 }
 

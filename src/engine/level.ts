@@ -13,7 +13,7 @@
 //              song on (PEAK_FROM) and the nearly as loud music either side (reserveTop); everywhere else the
 //              level stops just under it
 //
-// Five steps, each with a pace (mood.ts) and a size:
+// Five steps (STEP_NAMES), each with a pace (moves.paced) and a size:
 //   0  hush     single soft lamps, no pulse, no motors
 //   1  calm     a lamp or two a note, soft fades, a pulse on the downbeats where the beat is clear
 //   2  groove   half cars, the pulse on 1 and 3, the drums
@@ -24,6 +24,7 @@ import type { Analysis } from './analysis';
 import { clip, quantile } from './np';
 
 export const STEPS = [0.2, 0.4, 0.6, 0.8];
+export const STEP_NAMES = ['hush', 'calm', 'groove', 'drive', 'peak'];
 const TOP = STEPS[3];
 const RISE_S = 0.15, FALL_S = 1.5;
 

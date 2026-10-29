@@ -6,7 +6,6 @@
 //   kind: 0 single note, 1 dyad, 2 chord, 3 big chord (by the number of distinct pitch classes)
 //   trill: 1 if part of a rapid two-note alternation
 //   arrival: 1 if a strong chord that lands after a run or a gap
-//   density: events in the surrounding second
 
 import type { Events } from './analysis';
 import { median, quantile } from './np';
@@ -16,8 +15,7 @@ const GROUP_WINDOW = 0.045;   // onsets this close together are one event (one h
 /** `notes`: basic-pitch rows (start s, end s, midi pitch, amplitude 0..1), sorted by start. */
 export function groupEvents(notes: readonly (readonly number[])[]): Events {
   if (notes.length === 0) {
-    return { t: [], dur: [], low: [], high: [], top: [], amp: [], kind: [], trill: [], arrival: [], density: [],
-      phrase: [] };
+    return { t: [], dur: [], low: [], high: [], top: [], amp: [], kind: [], trill: [], arrival: [], phrase: [] };
   }
   const groups: [number, number][] = [];
   let i = 0;
@@ -59,13 +57,6 @@ export function groupEvents(notes: readonly (readonly number[])[]): Events {
 
   const kind = n.map((k) => (k >= 5 ? 3 : k >= 3 ? 2 : k === 2 ? 1 : 0));
 
-  // Density: events in the surrounding second.
-  const density = t.map((ti) => {
-    let c = 0;
-    for (const tj of t) if (Math.abs(tj - ti) <= 0.5) c++;
-    return c;
-  });
-
   // Trills: rapid alternation between two nearby pitch classes.
   const trill = new Array<number>(m).fill(0);
   for (let i = 3; i < m; i++) {
@@ -95,7 +86,7 @@ export function groupEvents(notes: readonly (readonly number[])[]): Events {
     }
   }
 
-  return { t, dur, low, high, top, amp, kind, trill, arrival, density, phrase: [] };
+  return { t, dur, low, high, top, amp, kind, trill, arrival, phrase: [] };
 }
 
 /** Texture taxonomy: label every event with the kind of passage it belongs to. A phrase starts where the

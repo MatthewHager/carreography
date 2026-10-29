@@ -32,11 +32,11 @@ npm run review -- song.mp3 --lineup YCY --from 60 --to 90 --video
    run it again. The show files are byte for byte the page's when the page listens on the CPU: Hall of
    the Mountain King and the Addams Family (WAV, `YCY`) match the ZIP the built site makes in headless
    Chromium (the worker pool). A browser that listens on WebGPU hasn't been compared.
-2. **Writes** `show/CarN_*.fseq` (as the page's download), `show.json` (sections, phrases with their mood,
+2. **Writes** `show/CarN_*.fseq` (as the page's download), `show.json` (sections, phrases with their level,
    gesture and move, beats, downbeats, hits, the builds and drops, the drum voices' hits, and the
    loudness and level curves at 10 a second), the pictures and `summary.txt`.
 3. **Prints the summary**: the arc (every 10 s, the music's loudness and the show's level against each car's light and flashes
-   a second: does the show grow with the song?), then per section each phrase's mood, gesture and move,
+   a second: does the show grow with the song?), then per section each phrase's step, gesture and move,
    and per car how much of the time it's lit, how much light it gives, how many flashes a second, and how
    many of those land within 60 ms of a beat or a note; then every motor command with its time and the
    count against Tesla's limit.
@@ -54,7 +54,7 @@ uses `src/` as it is, with no build. `npx tsc -p tools/review` type-checks it.
 | header | song, lineup, stretch, tempo, beat score (2 and up: a beat to follow), the rhythm driver |
 | section, level | the form map's sections (letters repeat for repeated material) and each one's mean level (`level.ts`) |
 | move | the move each phrase got (`a \| b`: a split, side cars \| centrepiece) |
-| mood, gesture | the phrase's mood (colour: calm blue, groove green, drive amber, frenzy red) and gesture |
+| step, gesture | the phrase's level step (`level.ts`; colour: hush and calm blue, groove green, drive amber, the peak red) and gesture |
 | each car | one row per lamp the car really has, as the preview simulates it (Tesla's ramps; a 2025+ Model Y's bar sections; lamps it lacks left out), in the lamp's colour, brightness as brightness. A lamp with two sides is one row: upper half the crowd's left, lower half the crowd's right. A Cybertruck's front bar is 60 rows, one per LED, the crowd's left on top. Closures: brightness is how open (mirrors start unfolded, so bright), magenta while dancing. `interior` is the cabin's colour. Faint vertical lines are the beats, brighter on downbeats |
 | loudness, level | `an.loudness` as an area coloured by the level's step (hush, calm, groove, drive, the peak in red), the level as a white line, the strongest hits as white ticks on top |
 | beat confidence, kit | how clearly the beats land on accents (the beat layer backs off where it is low) and how much a drum kit plays |

@@ -118,7 +118,7 @@ export function segment(ev: Events, cutsAt?: number[] | null): Phrase[] {
     // the melody's range without its strays (a passing high note would push the rest to one end of the stage)
     const [lo, hi] = quantiles(top.slice(a, b), [0.1, 0.9]);
     const t1 = Math.min(maxEnd(a, b), t[b - 1] + 4);
-    phrases.push({ a, b, t0: t[a], t1, gesture: g, density: dens, up, lo, hi });
+    phrases.push({ a, b, t0: t[a], t1, gesture: g, up, lo, hi });
   }
   return phrases;
 }

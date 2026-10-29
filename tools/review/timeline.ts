@@ -2,8 +2,8 @@
 // pixels, the closures, the cabin), then the music the lights answer (sections, phrases and their moves,
 // loudness, beats, bass and treble hits, notes). One picture per stretch of the song, and an overview.
 
-import type { Analysis } from '@/engine/analysis';
-import { stepOf } from '@/engine/level';
+import type { Analysis, Phrase } from '@/engine/analysis';
+import { STEP_NAMES, stepOf } from '@/engine/level';
 import { builds, drops } from '@/engine/pulse';
 import { dim, mix, Picture, type Rgb } from './image';
 import type { CarView, Row } from './stage';
@@ -20,9 +20,9 @@ const STEP = 0.02;
 const GUTTER = 168, RIGHT = 12, PITCH = 10;
 const WHITE: Rgb = [255, 255, 255], TEXT: Rgb = [200, 200, 205], FAINT: Rgb = [120, 120, 130];
 const BG: Rgb = [14, 14, 18], ROW_BG: Rgb = [24, 24, 30], DANCING: Rgb = [255, 60, 220];
-const MOODS: Record<string, Rgb> = {
-  calm: [40, 60, 115], groove: [35, 100, 60], drive: [140, 95, 20], frenzy: [150, 35, 35],
-};
+/** A phrase's step by its level (level.ts). */
+export const stepName = (p: Phrase) => STEP_NAMES[stepOf(p.level ?? 0)];
+const STEP_SHADES: Rgb[] = [[40, 50, 90], [40, 60, 115], [35, 100, 60], [140, 95, 20], [150, 35, 35]];
 const STEP_COLORS: Rgb[] = [[60, 70, 110], [70, 90, 140], [40, 160, 150], [230, 150, 40], [235, 60, 50]];
 const SECTION_COLORS: Rgb[] = [[70, 70, 120], [110, 70, 50], [50, 100, 90], [110, 60, 110], [90, 100, 40],
   [60, 90, 130], [120, 80, 80], [70, 110, 60]];
@@ -107,11 +107,11 @@ export function drawTimeline(r: Review, t0: number, t1: number, pxPerS: number):
   } });
   const phrases = (an.phrases ?? []).filter((p) => p.t1 > t0 && p.t0 < t1);
   const phraseBand = (text: (p: (typeof phrases)[number]) => string) => (y: number) => phrases.forEach((p, i) => {
-    const c = MOODS[p.mood ?? ''] ?? [60, 60, 60];
+    const c = STEP_SHADES[stepOf(p.level ?? 0)];
     span(y, p.t0, p.t1, i % 2 ? c : mix(c, [0, 0, 0], 0.3), text(p));
   });
   bands.push({ h: PITCH, label: 'move', draw: phraseBand((p) => p.move ?? '') });
-  bands.push({ h: PITCH + 4, label: 'mood, gesture', draw: phraseBand((p) => `${p.mood ?? ''} · ${p.gesture}`) });
+  bands.push({ h: PITCH + 4, label: 'step, gesture', draw: phraseBand((p) => `${stepName(p)} · ${p.gesture}`) });
 
   // --- the cars ---
   for (const car of r.cars) {

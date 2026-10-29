@@ -31,7 +31,7 @@ gh release download car-models --dir public/models/tesla-app           # Tesla's
     `pulse.ts` (the beat, builds and drops), `motors.ts` (closures), `legato.ts` (music with no beat),
     `lyrics.ts` (lyric moments), `lamps.ts` (2025+ Model Y output), `channels.ts` (Tesla's channel map and
     limits).
-  - `feel.ts` (flow or beat, kit), `texture.ts`, `form.ts`, `phrases.ts`, `mood.ts`, `tempo.ts`: reading
+  - `feel.ts` (flow or beat, kit), `texture.ts`, `form.ts`, `phrases.ts`, `tempo.ts`: reading
     the music.
 - `src/engine/listen/`: decoding helpers, resampling, the librosa subset (`dsp.ts`, `cqt.ts`),
   `audio.ts` (the analysis), `visual.ts` (loudness, bands, the drum voices, harmony, novelty, kit, beat

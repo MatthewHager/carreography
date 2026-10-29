@@ -13,8 +13,7 @@
 import type { Analysis, Phrase } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
-import { levelAt, STEPS } from './level';
-import { paced } from './mood';
+import { levelAt, STEPS, stepOf } from './level';
 import { arange, clip, cumsum, diff, linspace, quantiles, searchsorted, sum } from './np';
 import { beatLen } from './tempo';
 
@@ -211,8 +210,21 @@ export function beatAt(an: Analysis, t: number): number {
 
 const within = (a: ArrayLike<number>, lo: number, hi: number) => Array.from(a).filter((x) => x >= lo && x < hi);
 
+/** Beats at the level's pace there: every one from drive up, every other in a groove, one a bar when calm,
+ * so a calm passage swoops and every-beat hitting is kept for the climbs. */
+function paced(an: Analysis, beats: number[]): number[] {
+  const out: number[] = [];
+  for (let k = 0; k < beats.length; k++) {
+    const b = beats[k], st = stepOf(levelAt(an, b));
+    const gap = k + 1 < beats.length ? beats[k + 1] - b : k > 0 ? b - beats[k - 1] : 0.5;
+    const every = st >= 3 ? 1 : st === 2 ? 2 : 4;
+    if (!out.length || b - out[out.length - 1] >= every * gap * 0.9 - 0.02) out.push(b);
+  }
+  return out;
+}
+
 /** The beats (or downbeats) inside a phrase, carried on at the local pace where the tracker has none, and
- * thinned to the level's pace (every 2nd beat in a groove, one a bar when calm: mood.paced). */
+ * thinned to the level's pace (paced). */
 function grid(an: Analysis, ph: Span, kind: 'beats' | 'downbeats' = 'beats'): number[] {
   let g = within(kind === 'beats' ? an.beats : an.downbeats, ph.t0 - 0.02, ph.t1);
   if (g.length < 2) {
