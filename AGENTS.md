@@ -23,18 +23,20 @@ gh release download examples --dir public/examples                      # the ex
 - `src/engine/`: the choreographer.
   - `vehicles.ts`: the lineup letters (`S`, `M`, `m`, `X`, `Y`, `y`, `B`, `L`, `C`), folder names and
     places.
-  - `car.ts`: `Car` (one car's frames, the lamp groups, crowd-side flipping, closure command counting, and
-    each lighting shaped as it is written: at least 100 ms, dark in a silence).
+  - `car.ts`: `Car` (one car's frames, the lamp groups and what a hit lights of a half or the whole car at
+    a level, crowd-side flipping, closure command counting, and each lighting shaped as it is written: at
+    least 100 ms, dark in a silence, the beat's headlights left to it).
   - `choreo.ts`: `choreograph()` (the pipeline: the layers in order), the passages, their figures and the
     move each plays, and the end.
   - `level.ts`: one level per frame from the loudness, its top kept for the peak; every layer sizes by it.
   - `bed.ts` (steady lamps, the trucks' bars, the cabins' colour, and the breath where the music flows),
     `moves.ts` (every move as `(cars, an, ph) => void`, sized by the level, the `MOVES` table,
-    `centreTruck`, `slotAt`), `catalog.ts` (the catalogue; `MOVES.md` is generated from it), `drums.ts`
+    `centreTruck`), `catalog.ts` (the catalogue; `MOVES.md` is generated from it), `drums.ts`
     (kick, snare, hats), `pulse.ts` (the beat, builds, drops and accents), `motors.ts` (closures),
     `lyrics.ts` (lyric moments), `channels.ts` (Tesla's channel map and limits). Each layer lights lamps of
     its own: docs/HOW_IT_WORKS.md has the table.
-  - `feel.ts` (flow or beat, kit), `phrases.ts`, `tempo.ts`: reading the music.
+  - `feel.ts` (flow or beat, kit), `phrases.ts`, `tempo.ts` (the beat map and its grid): reading the
+    music.
 - `src/engine/listen/`: decoding helpers, resampling, the librosa subset (`dsp.ts`, `cqt.ts`),
   `audio.ts` (the analysis), `texture.ts` (notes into events), `form.ts` (the sections), `visual.ts`
   (loudness, bands, the drum voices, harmony, novelty, kit, beat confidence), beat-this and basic-pitch
@@ -73,8 +75,8 @@ gh release download examples --dir public/examples                      # the ex
 ## Adding things
 
 - **A move:** a function in `moves.ts` sized by the level, its name in the `MOVES` table at the end of
-  `moves.ts`, and an entry in `catalog.MOVES` (and `NOTE_MOVES`, `BEAT_MOVES` or
-  `HELD_MOVES`). Dispatch is by name. Details in CONTRIBUTING.md.
+  `moves.ts`, and an entry in `catalog.MOVES` (and `NOTE_MOVES`, `BEAT_MOVES`, `HELD_MOVES` or
+  `FLOW_MOVES`, and `SPARSE_MOVES` for a beat move that lights only a car or two). Dispatch is by name. Details in CONTRIBUTING.md.
 - **A car:** `vehicles.ts`, the `Car` lamp groups (and `Car.out` if the hardware differs), `motors.ts`
   travel times, the viewer profile (`viewer/core/vehicles.ts`) and app model (`viewer/car/appBody.ts`,
   `tools/export_car_models.py`). Details in CONTRIBUTING.md.

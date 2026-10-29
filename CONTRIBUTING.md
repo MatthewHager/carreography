@@ -61,16 +61,15 @@ and lineups (one car, the classic three, five mixed).
 1. **Write it** in `src/engine/moves.ts` as a function `(cars, an, ph) => void`.
    - `cars` is the lineup, crowd-left to right (`Car` objects); `an` is the analysis; `ph` is the phrase
      (`ph.t0`, `ph.t1`, and `ph.a` to `ph.b`, its notes in `an.events`).
-   - Size every hit by the level at its moment: `half(car, side, levelAt(an, t))` gives what a hit lights
+   - Size every hit by the level at its moment: `car.half(side, levelAt(an, t))` gives what a hit lights
      of a half car, from one lamp at a hush to both headlights from drive up (`Car.light` leaves the inner
-     beams to the beat while one of its hits rings); `note(...)` shapes a note's light like its
-     sound. A truck's bar takes `car.pixels(C.FRONT_BAR, t, values)` (0–1 per LED, crowd-left to right).
+     beams to the beat while one of its hits rings); `note(...)` shapes a note's light like its sound. A truck's bar takes `car.pixels(C.FRONT_BAR, t, values)` (0–1 per LED, crowd-left to right).
      Everything takes the crowd's left and right. Light only the lamps the moves own (docs/HOW_IT_WORKS.md
      has the table): the fogs, turns and markers are the drums', the rear lamps the bed's.
    - Light the whole lineup. Use `centreTruck(cars)` (which may be `null`) and treat every other car alike;
      never assume three cars, and never take `cars[1]` as the truck.
-   - Take times from the music: `an.events.t`, `an.beats`, `an.downbeats`, and the helpers in `moves.ts`
-     (`grid` thins beats to the level's pace). Never use a fixed tempo.
+   - Take times from the music: `an.events.t`, `an.beats`, `an.downbeats`, `grid` in `moves.ts` (beats
+     thinned to the level's pace) and `snap` in `tempo.ts`. Never use a fixed tempo.
 2. **Name it** in the `MOVES` table at the end of `moves.ts`.
 3. **Catalogue it** in `catalog.MOVES`: what the crowd sees and what it locks to (`note`, `beat`, `bar`,
    `self`). Put it in `NOTE_MOVES`, `BEAT_MOVES`, `HELD_MOVES` or `FLOW_MOVES` for figures to take it, or in
@@ -87,9 +86,9 @@ What makes a move good:
   needs the bar's 60 LEDs belongs on the centrepiece.
 - **Locked to the music**, never to a clock.
 - **Contrast without blinking.** Space between hits in calm music, every beat for the climbs, every lamp at
-  the peak; a lamp a figure reaches holds until the next beat or decays into it, so the stage never reads
-  as a bunch of blinking lights (and a car lights at most five times a second, but in fast figures).
-- **Fewer, better moves.** A new move earns its place by reading differently from the seventeen there are.
+  the peak; a lamp a figure reaches holds most of the way to the next beat (`holdFor`), so the stage never
+  reads as a bunch of blinking lights.
+- **Fewer, better moves.** A new move earns its place by reading differently from the eighteen there are.
 - **One idea per move.** If it needs a paragraph to describe, it's two moves.
 
 ## Adding a car
