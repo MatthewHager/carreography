@@ -736,7 +736,8 @@ const flowing = (places: (p: number) => number[]): Move => (cars, an, ph) => {
   }
   for (const [key, on] of lit) {
     const [k, part] = key.split(' '), car = cars[Number(k)];
-    const chs = part === 'L' || part === 'R' ? car.inner(part) : [car.drl('L'), car.fogs(), car.drl('R')][+part];
+    const chs = part === 'L' || part === 'R' ? car.inner(part)
+      : [car.drl('L'), car.fogs(), car.drl('R')][+part];                    // a 2025+ Model Y's bar section
     for (const [f0, f1] of runs(on)) {
       const held = (f1 - f0) * step >= HELD_NOTE_S, t0 = (a + f0) * step;
       const t1 = (a + f1) * step + (held ? 0.25 : 0.1);
