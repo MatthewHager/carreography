@@ -10,16 +10,16 @@
 //   bed      lamps join and leave in layers as the breath rises and falls, on 2 s ramps, one layer at a
 //            time with a short dwell so none flickers; each car uses lamps that read on it:
 //                          Model Y            2025+ Model Y            Cybertruck
-//              1           signatures         the bar's centre         side markers
-//              2           DRLs               the fender repeaters     frunk light
-//              3           fogs               -                        -
+//              1           signatures         the fender repeaters     side markers
+//              2           DRLs               -                        frunk light
+//              3           fogs               the bar's centre         -
 //              4           outer beams        outer beams              outer beams     (the bloom)
 //            from layer 2 the tail lights glow too
 //   truck    a Cybertruck's bar breathes: all of it glows with the breath (it dims, as no lamp can), brighter
 //            with the voice and the lead (the 600 Hz-4 kHz band), with the melody as a bright spot gliding
 //            along it and every note a comet at its pitch, faint for a quiet accompaniment, bright for a run
-//   swoop    the melody gliding across the stage by pitch (low = crowd's left) on the inner beams (and a
-//            2025+ Model Y's bar ends, the parts of its bar that can show a side), each
+//   swoop    the melody gliding across the stage by pitch (low = crowd's left) on the inner beams, and across
+//            a 2025+ Model Y's bar section by section (the bed adds its centre only from layer 3), each
 //            phrase spread over the whole stage, smoothed over half a second: an arpeggio's turns cancel
 //            out and the line moves slowly, while a run keeps its direction and sweeps the stage car to
 //            car as fast as it is played. A passing run lights each beam crisply; a held note swells
@@ -98,7 +98,7 @@ function layers(L: ArrayLike<number>): Int32Array {
 /** The lamps of a car's bed, layer 1 to 4 (see the module notes). */
 function bedLamps(c: Car): number[][] {
   if (c.isCt) return [c.sig(), c.frunk(), [], c.outer()];
-  if (c.juniper) return [c.fogs(), c.markers(), [], c.outer()];
+  if (c.juniper) return [c.markers(), [], c.fogs(), c.outer()];
   return [c.sig(), c.drl(), c.fogs(), c.outer()];
 }
 
@@ -176,9 +176,18 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
       const held = (b - a) * step >= HELD_S;
       glow(car, car.inner(side), a * step, b * step + (held ? 0.25 : 0.1), held ? C.ON_1000 : C.ON,
         held ? C.OFF_1000 : C.OFF_500);
-      if (car.juniper) {                       // that end of the bar: lamps.ts lights it from the picture
-        const lo = side === 'L' ? 0 : C.FRONT_BAR.length - END_LEDS, hi = lo + END_LEDS;
-        car.pixels(C.FRONT_BAR, a * step, Array.from({ length: b - a + (held ? 12 : 5) }, () =>
+    }
+  }
+  // a 2025+ Model Y's bar in its three sections (lamps.ts lights each from the picture): the melody crosses
+  // the car end, centre, end
+  const bar = C.FRONT_BAR.length, sections = [[0, END_LEDS], [END_LEDS, bar - END_LEDS], [bar - END_LEDS, bar]];
+  for (const car of cars.filter((c) => c.juniper)) {
+    const x = cars.indexOf(car);
+    for (let k = 0; k < 3; k++) {
+      const on = Array.from(path, (v) => !Number.isNaN(v) && Math.floor((v * cars.length - x) * 3) === k);
+      for (const [a, b] of runs(on)) {
+        const [lo, hi] = sections[k], tail = (b - a) * step >= HELD_S ? 12 : 5;
+        car.pixels(C.FRONT_BAR, a * step, Array.from({ length: b - a + tail }, () =>
           Float64Array.from(C.FRONT_BAR, (_, j) => (j >= lo && j < hi ? 1 : 0))));
       }
     }
