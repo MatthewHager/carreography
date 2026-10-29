@@ -21,7 +21,6 @@ export interface Section {
   t0: number;
   t1: number;
   letter: string;       // sections with the same letter are the same material
-  repeatOf: number;     // index of the first section with this letter, or -1
   index: number;
   nth: number;          // how many times the letter was heard before
   tempo: number;

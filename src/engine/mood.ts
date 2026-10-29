@@ -8,7 +8,7 @@
 // The note moves follow every note whatever the mood; the level sets how big each one is.
 
 import type { Analysis, Phrase } from './analysis';
-import { levelAt, levelOver, stepOf } from './level';
+import { levelAt, levelOver, STEPS, stepOf } from './level';
 
 const MOODS = ['calm', 'calm', 'groove', 'drive', 'frenzy'];
 
@@ -17,11 +17,9 @@ export function assign(an: Analysis, phrases: Phrase[]): void {
   for (const ph of phrases) {
     ph.level = levelOver(an, ph.t0, ph.t1);
     ph.mood = MOODS[stepOf(ph.level)];
-    if (ph.gesture === 'trill' && ph.level >= 0.4) ph.mood = 'frenzy';
+    if (ph.gesture === 'trill' && ph.level >= STEPS[1]) ph.mood = 'frenzy';
   }
 }
-
-export const moodAt = (an: Analysis, t: number) => MOODS[stepOf(levelAt(an, t))];
 
 /** Beats `every` beats apart at the level there: every one from drive up, every other in a groove, one a
  * bar when calm. */

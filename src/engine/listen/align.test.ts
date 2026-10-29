@@ -58,8 +58,9 @@ describe('align', () => {
     expect(align(lines, null, duration, duration - 2)).toMatchObject({ offset: 0, by: 'length' });
   });
 
-  it('gives up when neither the voice nor the length says where the lines go', () => {
-    expect(align(lines, new Float64Array(Math.round(duration / STEP)), duration, duration + 20)).toBeNull();
+  const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  it.each(seeds)('gives up when neither the voice nor the length says where the lines go (noise %s)', (seed) => {
+    expect(align(lines, curveFor([], duration, 0, 1.5, seed), duration, duration + 20)).toBeNull();
     expect(align(lines, null, duration, duration + 20)).toBeNull();
   });
 

@@ -2,7 +2,6 @@
 //
 //   sections   boundaries from beat-synchronous chroma + timbre (agglomerative clustering)
 //   letters    repeated material gets the same letter (A, B, A', ...) by chroma/timbre similarity
-//   repeatOf   index of the first section with the same letter
 
 import type { Section } from './analysis';
 import { chromaCqt } from './listen/cqt';
@@ -70,13 +69,12 @@ export function analyzeForm(y: Float32Array, duration: number, s: Spectrum): Sec
     letters.push(letter);
   }
 
-  const sections: Section[] = spans.map(([t0, t1], i) => ({ t0, t1, letter: letters[i], repeatOf: -1, index: i,
+  const sections: Section[] = spans.map(([t0, t1], i) => ({ t0, t1, letter: letters[i], index: i,
     nth: 0, tempo: 0.0, beats: [] }));
   const first = new Map<string, Section>();
   for (const s of sections) {
     const f = first.get(s.letter);
     if (f) {
-      s.repeatOf = f.index;
       s.nth = sections.slice(0, s.index).filter((q) => q.letter === s.letter).length;
     } else first.set(s.letter, s);
   }

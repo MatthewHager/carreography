@@ -55,9 +55,12 @@ function neuralBeats(d: NeuralBeats | null | undefined, env: Float32Array, minSt
   return [mendHalves(b, env), db.slice()];
 }
 
-/** The beats with the tracker's half-time slips mended: where a run of beat gaps is twice the steady gaps
- * just before it and the music still hits halfway between (the onset curve `env` there at least half as
- * strong as on the beats), the halfway beats go back in. */
+const HALF = [1.75, 2.3];    // a gap this many times the steady one is a beat dropped (twice, give or take)
+const IN_STEP = 0.15;         // gaps within this share of each other keep the same pace
+
+/** The beats with the tracker's half-time slips mended: where a run of beat gaps (at least two, each IN_STEP
+ * of the one before) is twice the steady gaps just before it (HALF) and the music still hits halfway between
+ * (the onset curve `env` there at least half as strong as on the beats), the halfway beats go back in. */
 function mendHalves(b: number[], env: Float32Array): number[] {
   const at = (t: number) => {
     const i = Math.round(t / (HOP / SR));
@@ -69,9 +72,9 @@ function mendHalves(b: number[], env: Float32Array): number[] {
   let ref = median(Array.from(g).slice(0, 8));
   for (let i = 0; i < g.length; i++) {
     const r = g[i] / ref;
-    if (r > 1.75 && r < 2.3 && g[i] < brk) {
+    if (r > HALF[0] && r < HALF[1] && g[i] < brk) {
       let j = i + 1;      // the slow beats run on while each gap is in step with the one before
-      while (j < g.length && Math.abs(g[j] / g[j - 1] - 1) < 0.15) j++;
+      while (j < g.length && Math.abs(g[j] / g[j - 1] - 1) < IN_STEP) j++;
       const mids = [];
       for (let k = i; k < j; k++) mids.push((b[k] + b[k + 1]) / 2);
       const onBeats = median(b.slice(i, j + 1).map(at)), between = median(mids.map(at));
@@ -82,7 +85,7 @@ function mendHalves(b: number[], env: Float32Array): number[] {
       }
     }
     out.push(b[i + 1]);
-    if (g[i] < brk && Math.abs(r - 1) < 0.15) ref = 0.75 * ref + 0.25 * g[i];   // follows the tempo
+    if (g[i] < brk && Math.abs(r - 1) < IN_STEP) ref = 0.75 * ref + 0.25 * g[i];   // follows the tempo
   }
   return out;
 }

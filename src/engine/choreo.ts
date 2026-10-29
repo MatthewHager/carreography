@@ -350,12 +350,15 @@ function finale(cars: Car[], an: Analysis) {
 }
 
 const SILENT = 0.06, SILENT_S = 0.4;     // the loudness (an.loudness) of silence, and how long it must last
+const LAMP_FADE_S = 0.5, PIXEL_FADE_S = 0.3;
 
 /** Silence is dark: wherever the music stops for SILENT_S or more, every lamp that is still on fades out
- * over half a second from the moment the sound stopped, and the bars and cabins go dark with it. Fades
- * already running (a finale, the legato ending) carry on. */
+ * from the moment the sound stopped (over LAMP_FADE_S, Tesla's shortest ramp), and the bars and cabins go
+ * dark with it, a little quicker (PIXEL_FADE_S). Fades already running (a finale, the legato ending) carry
+ * on. */
 function hush(cars: Car[], an: Analysis) {
-  const x = an.loudness, n = an.nFrames, need = Math.round(SILENT_S / an.step), fade = Math.round(0.5 / an.step);
+  const x = an.loudness, n = an.nFrames, need = Math.round(SILENT_S / an.step);
+  const fade = Math.round(LAMP_FADE_S / an.step);
   const lamps: number[] = [];
   for (let ch = 0; ch < C.L_FALCON; ch++) lamps.push(ch);
   const rgb = C.ALL_RGB.flatMap((ch) => [ch, ch + 1, ch + 2]);
@@ -377,7 +380,7 @@ function hush(cars: Car[], an: Analysis) {
           }
           for (const ch of pixels) {
             const v = c.get(f, ch);
-            if (v) c.put(f, ch, Math.trunc(v * clip(1 - (f - from) / (0.3 / an.step), 0, 1)));
+            if (v) c.put(f, ch, Math.trunc(v * clip(1 - (f - from) / (PIXEL_FADE_S / an.step), 0, 1)));
           }
         }
       }

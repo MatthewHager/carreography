@@ -9,8 +9,9 @@
 //              seconds, ranked): a pop song's verse is only a few decibels under its chorus, but it is
 //              the quieter part of the song, and the show should say so
 //   activity   a tenth: the notes and drum hits a second, as a rank within the song
-//   the top    step 4 only in the peak: the loudest twenty seconds of the second half of the song and the
-//              nearly as loud music either side (reserveTop); everywhere else the level stops just under it
+//   the top    step 4 only in the peak: the loudest twenty seconds from a little before the middle of the
+//              song on (PEAK_FROM) and the nearly as loud music either side (reserveTop); everywhere else the
+//              level stops just under it
 //
 // Five steps, each with a pace (mood.ts) and a size:
 //   0  hush     single soft lamps, no pulse, no motors
@@ -75,9 +76,10 @@ export function levelCurve(an: Analysis): Float32Array {
   return reserveTop(an, out);
 }
 
-const PEAK_S = 20;          // the peak is found as the loudest stretch this long in the second half
+const PEAK_S = 20;          // the peak is found as the loudest stretch this long ...
+const PEAK_FROM = 0.45;     // ... starting this far into the song (a climax can start just before halfway)
 
-/** The top step is the peak's alone: the loudest PEAK_S of the song's second half (by the mean level),
+/** The top step is the peak's alone: the loudest PEAK_S starting from PEAK_FROM of the song (by the mean level),
  * stretched both ways while the music stays nearly as loud, and any later stretch as loud (an outro that
  * repeats the last chorus). Everywhere else the level stops just under the top; a peak that falls short of
  * the top is lifted to it. */
@@ -85,7 +87,7 @@ function reserveTop(an: Analysis, out: Float32Array): Float32Array {
   const n = out.length, w = Math.min(n, Math.round(PEAK_S / an.step)), cs = new Float64Array(n + 1);
   for (let i = 0; i < n; i++) cs[i + 1] = cs[i] + out[i];
   const mean = (a: number, b: number) => (cs[b] - cs[a]) / Math.max(1, b - a);
-  let best = Math.min(Math.trunc(0.45 * n), n - w);
+  let best = Math.min(Math.trunc(PEAK_FROM * n), n - w);
   for (let a = best; a + w <= n; a++) if (mean(a, a + w) > mean(best, best + w)) best = a;
   const top = mean(best, best + w), r = Math.round(2 / an.step);
   const near = (i: number) => mean(Math.max(0, i - r), Math.min(n, i + r + 1));      // over four seconds
@@ -114,8 +116,6 @@ export function stepOf(level: number): number {
   while (k < STEPS.length && level >= STEPS[k]) k++;
   return k;
 }
-
-export const stepAt = (an: Analysis, t: number) => stepOf(levelAt(an, t));
 
 /** The mean level over [t0, t1). */
 export function levelOver(an: Analysis, t0: number, t1: number): number {
