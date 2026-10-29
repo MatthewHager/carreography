@@ -6,26 +6,28 @@
 //   calm    a soft tick of the middle car's inner beams on each downbeat, where the beat is very clear
 //   groove  1 and 3 on every car's inner beams, the bars glinting on the 1
 //   drive   every beat on every car's inner beams, the bars on the 1
-//   peak    every beat on every headlight and every bar, the off-beats on the middle car: the whole stage
+//   peak    every beat on both headlights, the off-beats on the middle car: the whole stage
 //
 // The headlights it plays are the beat's (ownership): where the music strikes most beats, the moves leave a
-// car's inner beams to the pulse from a groove up, and both headlights at the peak, so between the hits they
-// stay dark and every beat lands dark
-// to bright; from drive up the sustained lamps also dip just before each (the producer's sidechain). The
-// outer beams are the moves' below the peak, so a figure travelling the stage shows over the thump.
+// car's inner beams to the pulse from a groove up, and both headlights at the peak. Each hit is a bright
+// attack that decays on Tesla's half-second ramp, the way the drum it follows sounds, and those lamps alone
+// go dark for DIP_S before the next, so every beat lands as a thump while the rest of the stage stays lit.
+// The outer beams are the moves' below the peak, and the bars and every other lamp always are, so a figure
+// travelling the stage shows over the thump.
 // A beat the music doesn't strike gets no hit. Where the beat is unclear (an.beatConfidence under CLEAR, and
 // the tracker not keeping steady time either) the layer plays only the downbeats from drive up, and where
 // the music flows (feel.ts) it isn't there.
 //
 // Builds: where the music climbs into its biggest step up, the pulse speeds up and spreads out - half
 // notes, then every beat, then eighths in the last bar - growing from the middle car out to the ends; then a
-// beat of black, and the whole stage hits the landing together (drops). A song gets one drop for every
-// DROP_EVERY_S of its length, the biggest steps up, so a drop stays an event.
+// beat of black, and the whole stage hits the landing together (drops). A song gets at most one drop for
+// every DROP_EVERY_S of its length, the biggest steps up that land from a build or onto a drum kit, so a
+// drop stays an event; that beat of black is the show's only deliberate pull-back.
 
 import type { Analysis } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
-import { flowsAt, steadyAt } from './feel';
+import { flowsAt, kitAt, steadyAt } from './feel';
 import { levelAt, levelOver, STEPS, stepOf } from './level';
 import * as M from './moves';
 import { clip, quantile, searchsorted } from './np';
@@ -35,8 +37,9 @@ const OWNERS = new Set(['cadence', 'motif']);     // phrase shapes whose moves o
 const CLEAR = 0.6, FAINT = 0.25, SURE = 0.9;       // how clear the beat is (an.beatConfidence): a full pulse,
                                                    // downbeats only, a calm tick
 const STRUCK = 1.3;
-const DIP_S = 0.06;                                // the dark before a hit (tidy keeps gaps of three frames)
+const DIP_S = 0.06;                                // the beat's lamps are dark this long before each hit
 const DROP_EVERY_S = 100, DROP_GAP_S = 30, BUILD_S = 4;
+const DROP_MIN = 0.25, DROP_ALONE = 0.45;          // a drop's size (plan): with a build or a kit, or on its own
 const PEAK_BONUS = 0.2;                            // a drop onto the peak (level.ts) counts as this much more
 const MUSIC_LEAD_S = 8;                            // no drop this soon after the music starts: nothing to build
 
@@ -67,9 +70,10 @@ function held(an: Analysis, t0: number, t1: number): number {
 /** The drops: downbeats where the music lands a step higher and stays there - the level held over the four
  * seconds after a step above the two before, into a drive or the peak - none in the first MUSIC_LEAD_S of
  * the music or where it flows or is about to. Each may have a build: the climb into it, where the level has
- * been rising for BUILD_S or more (a crescendo, a riser). Of these the biggest - the jump and the climb into
- * it, and the landing on the song's peak above all - one for every DROP_EVERY_S of the song, at least
- * DROP_GAP_S apart. */
+ * been rising for BUILD_S or more (a crescendo, a riser). A drop's size is the jump, the climb into it, and
+ * PEAK_BONUS for landing on the song's peak; it counts from DROP_MIN where it has a build to land from or
+ * a drum kit to drop, and from DROP_ALONE without (an organ's entrance is no drop). Of these the biggest,
+ * one for every DROP_EVERY_S of the song, at least DROP_GAP_S apart; a song can have none. */
 function plan(an: Analysis) {
   let out = cached.get(an);
   if (out) return out;
@@ -94,7 +98,9 @@ function plan(an: Analysis) {
   });
   const most = Math.max(1, Math.round(an.duration / DROP_EVERY_S));
   const kept: typeof cands = [];
-  for (const c of [...cands].sort((p, q) => q.size - p.size)) {
+  const lands = (c: (typeof cands)[number]) =>
+    c.size >= DROP_MIN && (c.b !== null || kitAt(an, c.d + 2) || c.size >= DROP_ALONE);
+  for (const c of cands.filter(lands).sort((p, q) => q.size - p.size)) {
     if (kept.length < most && kept.every((k) => Math.abs(k.d - c.d) >= DROP_GAP_S)) kept.push(c);
   }
   kept.sort((p, q) => p.d - q.d);
@@ -173,7 +179,7 @@ function beatPlan(an: Analysis): [number, number, string, number][] {
 export function ownership(an: Analysis): Uint8Array {
   const out = new Uint8Array(an.nFrames);
   for (const [t, gap, , own] of beatPlan(an)) {
-    const f = (x: number) => clip(Math.round((x - DIP_S) / an.step), 0, an.nFrames);
+    const f = (x: number) => clip(Math.round(x / an.step) - 1, 0, an.nFrames);     // the lights lead a frame
     if (own) out.fill(own, f(t), f(t + gap));
   }
   return out;
@@ -183,32 +189,27 @@ export function ownership(an: Analysis): Uint8Array {
 export function apply(cars: Car[], an: Analysis): void {
   if (an.beats.length < 4) return;
   const ct = M.centreTruck(cars), mid = ct ?? cars[Math.floor(cars.length / 2)];
-  const inner = (c: Car) => c.inner(), heads = (c: Car) => c.heads();
   for (const [t, gap, kind] of beatPlan(an)) {
     if (!kind) continue;
     const s = levelAt(an, t), step = stepOf(s);
-    // the louder, the longer each hit holds: a tick at a groove, most of the beat at the peak
-    const hold = clip(gap * (0.3 + clip((s - STEPS[2]) / (1 - STEPS[2]), 0, 1) * 0.35), 0.1, 0.4);
-    const lamps = step === 4 ? heads : inner;
-    const hit = (who: Car[], dur: number) => {
-      for (const c of who) {
-        c.set(lamps(c), t - DIP_S, t, 0);
-        c.set(lamps(c), t, t + dur, C.ON);
-      }
+    // the louder, the longer the attack holds before it decays: a tick at a groove, a third of the beat at the
+    // peak
+    const hold = clip(gap * (0.2 + clip((s - STEPS[2]) / (1 - STEPS[2]), 0, 1) * 0.15), 0.1, 0.2);
+    const hit = (c: Car, chs: number[], at: number, dur: number) => {
+      c.light(chs, at, at + dur);
+      c.light(chs, at + dur, at + gap - DIP_S, C.OFF_500);
     };
     if (kind === 'tick') {
       mid.light(mid.inner(), t, t + 0.15, C.ON);
       mid.light(mid.inner(), t + 0.15, t + 0.65, C.OFF_500);
-    } else if (kind === 'big') {
-      hit(cars, hold + 0.04);
-      for (const c of cars) if (c.hasBar) M.barFlash(c, t, Math.min(0.3, gap * 0.6), step === 2 ? 0.5 : 1.0);
-    } else if (kind === 'mid' || step >= 3) {
-      hit(cars, hold);
-      if (step === 4) for (const c of cars) if (c.hasBar) M.barFlash(c, t, Math.min(0.25, gap * 0.5), 0.8);
+      continue;
     }
-    if (step >= 3) duck(cars, t, gap);
+    if (kind === 'big' || kind === 'mid' || step >= 3) {
+      for (const c of cars) hit(c, step === 4 ? c.heads() : c.inner(), t, kind === 'big' ? hold + 0.04 : hold);
+    }
+    if (kind === 'big') for (const c of cars) if (c.hasBar) M.barFlash(c, t, Math.min(0.3, gap * 0.6), 0.5);
     const off = t + gap / 2;
-    if (step === 4 && off > t + hold + 0.04) mid.set(mid.inner(), off, off + Math.min(0.1, gap * 0.25), C.ON);
+    if (step === 4 && off > t + hold + 0.04) hit(mid, mid.inner(), off, Math.min(0.1, gap * 0.25));
   }
   for (const [s0, land] of builds(an)) buildPulse(cars, an, s0, land);
 }
@@ -233,19 +234,6 @@ function buildPulse(cars: Car[], an: Analysis, t0: number, land: number): void {
       for (const c of order.slice(0, reach)) c.set(lamps(c), t, t + hold, C.ON);
     }
   });
-}
-
-/**
- * Sidechain ducking, as producers make a kick cut through sustained pads: the sustained lamps - the side
- * cars' signature and DRL strips, which sit in the headlight housing, and the front bars - go dark for a
- * few frames just before a beat, so the beat lands as a dark-to-bright step.
- */
-function duck(cars: Car[], t: number, gap: number): void {
-  const d = clip(gap * 0.15, 0.06, 0.1);
-  for (const c of cars) {
-    if (c.hasBar) c.set(C.FRONT_BAR, t - d, t, 0);
-    if (!c.isCt) c.set([...c.sig(), ...c.drl()], t - d, t, 0);
-  }
 }
 
 /** Each drop: black for a beat before it, then every lamp of every car on together for a beat. */
