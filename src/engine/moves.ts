@@ -504,14 +504,14 @@ const lrChannel: Move = (cars, an, ph) => {
   });
 };
 
-/** A checkerboard: every other slot on one beat, the others on the next, the truck's bar in blocks. */
+/** A checkerboard: every other car on one beat, the others on the next (a lone car's two halves), the trucks'
+ * bars in blocks flipping with them. */
 const checker: Move = (cars, an, ph) => {
-  const all = slots(cars), beats = grid(an, ph);
+  const u = units(cars), beats = grid(an, ph);
   beats.forEach((b, k) => {
     const s = levelAt(an, b), hold = holdFor(next(beats, k, 0.4) - b);
-    all.forEach(([car, side], j) => {
-      if (j % 2 !== k % 2) return;
-      car.light(half(car, side, s, owned(an, b)), b, b + hold);
+    u.forEach(([car, side], j) => {
+      if (j % 2 === k % 2) car.light(side ? half(car, side, s, owned(an, b)) : whole(car, s, owned(an, b)), b, b + hold);
     });
     for (const car of cars.filter((c) => c.isCt)) {
       const n = frames(car, b, hold);
