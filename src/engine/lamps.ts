@@ -36,7 +36,7 @@ const RAMP_STEP = new Map<number, number>([
   [C.OFF_500, -0.04], [C.OFF_1000, -0.02], [C.OFF_2000, -0.01],
 ]);
 const BAR_ON = 0.35;        // a pixel flash at least this bright switches its bar section on
-const END_LEDS = 15;        // the share of the 60-pixel picture each outer end stands for
+export const END_LEDS = 15;       // the share of the 60-pixel picture each outer end stands for
 
 /** 0..1 brightness of one lamp channel per 20 ms frame, following Tesla's ramp codes. */
 function lampLevel(col: ArrayLike<number>): Float64Array {

@@ -1,50 +1,49 @@
 // Flowing light, for the stretches of a song with no beat to follow (feel.ts): a chorale, a free
-// cadenza, a sung prayer like Ave Maria.
+// cadenza, a sung prayer like Ave Maria, the Toccata's free runs.
 //
-// The rest of the generator finds its timing in beats, drums and note attacks; sustained, rubato music
-// gives it little of either, and the beat-driven moves leave long stretches dark. Here the light follows
-// the music's breath and its melody instead:
+// The rest of the generator finds its timing in beats and drums; music that flows gives it no beat to hit.
+// Here the light follows the music's breath and its melody instead:
 //
-//   bed      lamps join and leave in layers as the music swells and fades, always on 2 s ramps:
-//              0  the truck's bar glows softly (dimmable, so its brightness follows the level)
-//              1  the Ys' signature strips                          from calm up
-//              2  the Ys' DRLs                                      from a groove up
-//              3  every fog lamp                                    from drive up
-//              4  every headlight - the bloom                       at the peak
-//            the steps are the show's level (level.ts), with hysteresis and a minimum dwell so a layer
-//            never flickers
-//   swoop    the melody as one soft light gliding across the stage by pitch (low = crowd's left),
-//            each phrase spread over the whole stage: a bright spot sliding along the truck's bar,
-//            and on the Ys the inner beam on that side fading in and out as the melody passes (a run
-//            sweeps through on half-second ramps, a held note swells over a second) - overlapping,
-//            never a blink. The headlights are kept for the swoop and the bloom, so it always shows
-//   colour   the interiors glow from deep blue toward warm gold as the music swells
+//   breath   how full the music is at each moment: the show's level (level.ts, the song's arc) together with
+//            the loudness against the rest of the flowing music, so the light swells with each sung phrase
+//            and sinks between them as well as growing toward the climax
+//   bed      lamps join and leave in layers as the breath rises and falls, on 2 s ramps, one layer at a
+//            time with a short dwell so none flickers; each car uses lamps that read on it:
+//                          Model Y            2025+ Model Y            Cybertruck
+//              1           signatures         the bar's centre         side markers
+//              2           DRLs               the fender repeaters     frunk light
+//              3           fogs               -                        -
+//              4           outer beams        outer beams              outer beams     (the bloom)
+//            from layer 2 the tail lights glow too
+//   truck    a Cybertruck's bar breathes: all of it glows with the breath (it dims, as no lamp can), brighter
+//            with the voice and the lead (the 600 Hz-4 kHz band), with the melody as a bright spot gliding
+//            along it and every note a comet at its pitch, faint for a quiet accompaniment, bright for a run
+//   swoop    the melody gliding across the stage by pitch (low = crowd's left) on the inner beams (and a
+//            2025+ Model Y's bar ends, the parts of its bar that can show a side), each
+//            phrase spread over the whole stage, smoothed over half a second: an arpeggio's turns cancel
+//            out and the line moves slowly, while a run keeps its direction and sweeps the stage car to
+//            car as fast as it is played. A passing run lights each beam crisply; a held note swells
+//   colour   the interiors glow from deep blue toward warm gold as the breath swells
 //   ending   a slow fade to dark as the music ends (no closing flash), when the song ends flowing
 //
 // Each flowing stretch fades in and out on the same ramps, so the beat sections around it take over
-// without a seam.
-//
-// Car lamps can't hold a dim level - only on or off, with 0.5/1/2 s ramps (Tesla's README) - so
-// loudness becomes how many lamps are lit, plus the parts that really dim: the bar and the interiors.
+// without a seam. Car lamps can't hold a dim level - only on or off, with 0.5/1/2 s ramps (Tesla's README) -
+// so the breath becomes how many lamps are lit, plus the parts that really dim: the bar and the interiors.
 
 import type { Analysis } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
 import type { Feel } from './feel';
+import { END_LEDS } from './lamps';
 import * as M from './moves';
 import { STEPS } from './level';
-import { clip, interp, mean, percentile, runs } from './np';
+import { clip, percentile, runs } from './np';
 
-const RES = 0.25;                                  // seconds per control step
-const HYST = 0.04;                                  // a layer goes out this much below where it came in
-const MIN_DWELL = 2.5;                              // seconds a layer stays once it changes
-
-/** The show's level (level.ts) on a RES grid. */
-function loudness(an: Analysis): Float64Array {
-  const stride = Math.max(1, Math.trunc(RES / an.step)), out: number[] = [];
-  for (let i = 0; i < an.level!.length; i += stride) out.push(an.level![i]);
-  return Float64Array.from(out);
-}
+const RES = 0.25;                                  // seconds per step of the bed
+const HYST = 0.04;                                 // a layer goes out this much below where it came in
+const MIN_DWELL = 1.5;                             // seconds a layer stays once it changes
+const GLIDE_S = 0.5;                               // the melody's smoothing
+const HELD_S = 0.6;                                // a beam lit this long swells in; shorter, a run passing
 
 /** [start, end] of the audible music: the first and last moments louder than 30 dB under its loud end. */
 function musicSpan(an: Analysis): [number, number] {
@@ -59,14 +58,31 @@ function musicSpan(an: Analysis): [number, number] {
   return [first * an.step, (last + 1) * an.step];
 }
 
-/** Layer count (0-4) per RES step: one more for each of the level's steps reached (level.ts), with
+/** Per frame, the breath (see the module notes), 0..1, where `here` is true; 0 elsewhere. */
+function breath(an: Analysis, here: (t: number) => boolean): Float64Array {
+  const n = an.nFrames, x = an.loudness, w = Math.round(0.3 / an.step), cs = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) cs[i + 1] = cs[i] + x[i];
+  const loud = Float64Array.from({ length: n }, (_, i) => {
+    const a = Math.max(0, i - w), b = Math.min(n, i + w + 1);
+    return (cs[b] - cs[a]) / (b - a);
+  });
+  const pool = Float64Array.from(loud.filter((_, i) => here(i * an.step))).sort();
+  const out = new Float64Array(n);
+  if (!pool.length) return out;
+  const lo = percentile(pool, 5), hi = Math.max(percentile(pool, 95), lo + 1e-6);
+  for (let i = 0; i < n; i++) {
+    if (here(i * an.step)) out[i] = 0.5 * an.level![i] + 0.5 * clip((loud[i] - lo) / (hi - lo), 0, 1);
+  }
+  return out;
+}
+
+/** Layer count (0-4) per RES step: one more for each of the level's steps the breath reaches, with
  * hysteresis and a minimum dwell, one layer at a time. */
 function layers(L: ArrayLike<number>): Int32Array {
   const out = new Int32Array(L.length);
   let cur = 0, since = -1e9;
   for (let i = 0; i < L.length; i++) {
-    const v = L[i];
-    const t = i * RES;
+    const v = L[i], t = i * RES;
     let want = cur;
     while (want < 4 && v >= STEPS[want]) want += 1;
     while (want > 0 && v < STEPS[want - 1] - HYST) want -= 1;
@@ -79,19 +95,29 @@ function layers(L: ArrayLike<number>): Int32Array {
   return out;
 }
 
-/** The lamps ramp up (over 2 s, or as `up` says) and stay on from t0 to t1, then fade over 2 s. */
-function glow(car: Car, chs: readonly number[], t0: number, t1: number, up: number = C.ON_2000): void {
+/** The lamps of a car's bed, layer 1 to 4 (see the module notes). */
+function bedLamps(c: Car): number[][] {
+  if (c.isCt) return [c.sig(), c.frunk(), [], c.outer()];
+  if (c.juniper) return [c.fogs(), c.markers(), [], c.outer()];
+  return [c.sig(), c.drl(), c.fogs(), c.outer()];
+}
+
+/** The lamps ramp up (over 2 s, or as `up` says) and stay on from t0 to t1, then fade (over 2 s, or as `down`
+ * says). */
+function glow(car: Car, chs: readonly number[], t0: number, t1: number, up: number = C.ON_2000,
+  down: number = C.OFF_2000): void {
+  const tail = down === C.OFF_2000 ? 2.0 : down === C.OFF_1000 ? 1.0 : 0.5;
   car.light(chs, t0, t1, up);
-  car.light(chs, t1, t1 + 2.0, C.OFF_2000);
+  car.light(chs, t1, t1 + tail, down);
 }
 
 /**
- * Stage position 0-1 (crowd's left to right) of the melody on a RES grid, NaN where no melody
- * sounds: the top notes of the transcription, gliding from one note to the next. Each phrase spreads
- * its own range across the stage, as the moves do, so the melody reaches every car.
+ * Stage position 0-1 (crowd's left to right) of the melody per frame, NaN where no melody sounds: the top
+ * notes of the transcription (the louder two thirds), each phrase spreading its own range across the stage
+ * as the moves do, smoothed over GLIDE_S.
  */
-function melodyPath(an: Analysis, t0: number, t1: number, n: number): Float64Array {
-  const ev = an.events;
+function melodyPath(an: Analysis): Float64Array {
+  const ev = an.events, n = an.nFrames, step = an.step;
   const pos = new Float64Array(n).fill(NaN);
   if (!ev?.t.length) return pos;
   const song = { lo: percentile(ev.top, 5), hi: percentile(ev.top, 95) };
@@ -102,107 +128,104 @@ function melodyPath(an: Analysis, t0: number, t1: number, n: number): Float64Arr
   for (let i = 0; i < ev.t.length; i++) if (ev.amp[i] >= ampCut) kept.push(i);
   kept.forEach((i, k) => {
     const next = k + 1 < kept.length ? ev.t[kept[k + 1]] : ev.t[i] + ev.dur[i];
-    const a = Math.trunc(ev.t[i] / RES);
-    const b = Math.trunc(Math.min(ev.t[i] + Math.max(ev.dur[i], 0.4), next) / RES) + 1;
+    const a = Math.trunc(ev.t[i] / step);
+    const b = Math.trunc(Math.min(ev.t[i] + Math.max(ev.dur[i], 0.4), next) / step) + 1;
     const [lo, hi] = range[i];
-    const p = clip((ev.top[i] - lo) / Math.max(hi - lo, 1), 0, 1);
-    for (let q = a; q < Math.min(b, n); q++) pos[q] = p;
+    pos.fill(clip((ev.top[i] - lo) / Math.max(hi - lo, 1), 0, 1), Math.min(a, n), Math.min(b, n));
   });
-  // glide: smooth across half a second where the melody is continuous
-  const k = 1;
-  const out = Float64Array.from(pos);
-  for (let i = 0; i < n; i++) {
-    const w: number[] = [];
-    for (let j = Math.max(0, i - k); j < Math.min(n, i + k + 1); j++) if (!Number.isNaN(pos[j])) w.push(pos[j]);
-    if (w.length && !Number.isNaN(pos[i])) out[i] = mean(w);
+  const w = Math.round(GLIDE_S / 2 / step), out = new Float64Array(n).fill(NaN);
+  let sum = 0, cnt = 0;
+  for (let i = -w; i < n; i++) {             // a running mean of what sounds over the window
+    const add = i + w, drop = i - w - 1;
+    if (add < n && !Number.isNaN(pos[add])) [sum, cnt] = [sum + pos[add], cnt + 1];
+    if (drop >= 0 && !Number.isNaN(pos[drop])) [sum, cnt] = [sum - pos[drop], cnt - 1];
+    if (i >= 0 && !Number.isNaN(pos[i]) && cnt) out[i] = sum / cnt;
   }
-  const a = Math.trunc(t0 / RES), b = Math.trunc(t1 / RES);
-  out.fill(NaN, 0, Math.min(a, n));
-  out.fill(NaN, Math.min(b, n));
   return out;
 }
 
 /** The lights for the stretches that flow (the motors are scheduled separately, as for any song). Says
  * whether the music ends flowing, in which case this has already faded the show out. */
 export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
-  const ct = M.centreTruck(cars);
+  const ct = M.centreTruck(cars), step = an.step, n = an.nFrames;
   const [start, end] = musicSpan(an);
   const flows = (t: number) => t >= start && t < end && spans.some((s) => s.t0 <= t && t < s.t1);
-  let L = loudness(an);
-  const n = L.length;
-  const tt = new Float64Array(n);
-  for (let i = 0; i < n; i++) tt[i] = i * RES;
-  const audible = Array.from(tt, (t) => t >= start && t < end);
-  const here = Array.from(tt, flows);
-  L = L.map((v, i) => (audible[i] ? v : 0));
-  const lay = layers(L).map((v, i) => (here[i] ? v : -1));
+  const B = breath(an, flows);
 
-  // 1. the bed, layer by layer
-  const groups: [number, (c: Car) => readonly number[]][] = [
-    [1, (c) => (!c.isCt ? c.sig() : [])],
-    [2, (c) => (!c.isCt ? c.drl() : [])],
-    [3, (c) => c.fogs()],
-    [4, (c) => c.heads()],
-  ];
-  for (const [k, group] of groups) {
+  // 1. the bed, layer by layer, and the tail lights from layer 2
+  const stride = Math.max(1, Math.round(RES / step));
+  const coarse = Array.from({ length: Math.ceil(n / stride) }, (_, i) => B[i * stride]);
+  const lay = layers(coarse).map((v, i) => (flows(i * RES) ? v : -1));
+  for (let k = 1; k <= 4; k++) {
     for (const [a, b] of runs(Array.from(lay, (v) => v >= k))) {
       for (const c of cars) {
-        const chs = group(c);
+        const chs = bedLamps(c)[k - 1];
         if (chs.length) glow(c, chs, a * RES, b * RES);
+        if (k === 2 && c.tails().length) glow(c, c.tails(), a * RES, b * RES);
       }
     }
   }
 
-  // the truck's bar, through each flowing stretch: a glow that follows the loudness (it dims), fading in
-  // over 4 s and out over 3 s, with the melody's spot over it
-  const path = melodyPath(an, start, end, n).map((v, i) => (here[i] ? v : NaN));
-  const stage = path.map((v) => v * 2 * cars.length);    // two slots per car, crowd-left to right
-  if (ct !== null) {
-    const k = 2 * cars.indexOf(ct);                        // the truck's two slots: k and k + 1
-    const nLed = C.FRONT_BAR.length;
-    const s = stage.map((v) => (Number.isNaN(v) ? -10 : v));
-    for (const [a, b] of runs(here)) {
-      const t0 = a * RES, t1 = b * RES;
-      const f0 = ct.fr(t0), m = Math.max(0, ct.fr(t1) - f0);
-      const frameT = Float64Array.from({ length: m }, (_, i) => (f0 + i) * ct.step);
-      const level = interp(frameT, tt, L), spot = interp(frameT, tt, s);
-      const rows: Float64Array[] = [];
-      for (let i = 0; i < m; i++) {
-        const fade = clip((frameT[i] - t0) / 4.0, 0, 1) * clip((t1 - frameT[i]) / 3.0, 0, 1);
-        const onTruck = spot[i] >= k - 0.5 && spot[i] <= k + 2.5;
-        const centre = clip((spot[i] - k) / 2, 0, 1) * (nLed - 1);
+  // 2. the swoop: the melody gliding across the stage on the inner beams
+  const path = melodyPath(an).map((v, i) => (flows(i * step) ? v : NaN));
+  for (let slot = 0; slot < 2 * cars.length; slot++) {
+    const car = cars[Math.floor(slot / 2)], side = slot % 2 === 0 ? 'L' : 'R';
+    const slotOf = (v: number) => Math.min(2 * cars.length - 1, Math.floor(v * 2 * cars.length));
+    const on = Array.from(path, (v) => !Number.isNaN(v) && slotOf(v) === slot);
+    for (const [a, b] of runs(on)) {
+      const held = (b - a) * step >= HELD_S;
+      glow(car, car.inner(side), a * step, b * step + (held ? 0.25 : 0.1), held ? C.ON_1000 : C.ON,
+        held ? C.OFF_1000 : C.OFF_500);
+      if (car.juniper) {                       // that end of the bar: lamps.ts lights it from the picture
+        const lo = side === 'L' ? 0 : C.FRONT_BAR.length - END_LEDS, hi = lo + END_LEDS;
+        car.pixels(C.FRONT_BAR, a * step, Array.from({ length: b - a + (held ? 12 : 5) }, () =>
+          Float64Array.from(C.FRONT_BAR, (_, j) => (j >= lo && j < hi ? 1 : 0))));
+      }
+    }
+  }
+
+  // 3. the trucks' bars: the breath, the voice, the melody's spot and every note
+  for (const c of cars.filter((q) => q.isCt)) {
+    const nLed = C.FRONT_BAR.length, k = 2 * cars.indexOf(c);       // the truck's two slots: k and k + 1
+    for (const [a, b] of runs(Array.from({ length: n }, (_, f) => flows(f * step)))) {
+      const t0 = a * step, t1 = b * step, rows: Float64Array[] = [];
+      for (let f = a; f < b; f++) {
+        const t = f * step, fade = clip((t - t0) / 2.0, 0, 1) * clip((t1 - t) / 2.0, 0, 1);
+        const glowAt = fade * (0.08 + 0.6 * B[f] ** 1.5) * (0.6 + 0.4 * an.bands.highMid[f]);
+        const spot = path[f] * 2 * cars.length - k, centre = clip(spot / 2, 0, 1) * (nLed - 1);
+        const onTruck = c === ct && spot >= -0.5 && spot <= 2.5;
         const row = new Float64Array(nLed);
         for (let j = 0; j < nLed; j++) {
           const z = (j - centre) / 6.0;
-          row[j] = Math.max((0.06 + 0.24 * level[i]) * fade, onTruck ? 0.9 * Math.exp(-(z * z)) : 0);
+          row[j] = Math.max(glowAt, onTruck ? 0.9 * fade * Math.exp(-(z * z)) : 0);
         }
         rows.push(row);
       }
-      ct.pixels(C.FRONT_BAR, t0, rows);
+      c.pixels(C.FRONT_BAR, t0, rows);
+    }
+  }
+  const trucks = cars.filter((q) => q.isCt), ev = an.events;
+  const quiet = percentile(ev.amp, 30), loud = Math.max(percentile(ev.amp, 95), quiet + 1e-6);
+  for (const ph of trucks.length ? an.phrases ?? [] : []) {
+    if (!flows(ph.t0)) continue;
+    const [lo, hi] = M.phraseRange(ph);
+    for (let i = ph.a; i < ph.b; i++) {
+      const t = ev.t[i], strength = clip((ev.amp[i] - quiet) / (loud - quiet), 0, 1);
+      const s = 0.25 + 0.75 * strength * Math.max(B[clip(Math.round(t / step), 0, n - 1)], 0.3);
+      const at = clip((ev.top[i] - lo) / Math.max(hi - lo, 1), 0, 1);
+      for (const c of trucks) M.comet(c, t, at, clip(ev.dur[i], 0.15, 0.5) + 0.15, s);
     }
   }
 
-  // 2. the swoop: the melody gliding across the stage
-  for (let slot = 0; slot < 2 * cars.length; slot++) {
-    const car = cars[Math.floor(slot / 2)];
-    const side = slot % 2 === 0 ? 'L' : 'R';
-    if (car === ct) continue;
-    const on = Array.from(stage, (v) => !Number.isNaN(v) && Math.floor(v) === slot);
-    for (const [a, b] of runs(on)) {         // a passing run lights each car briefly, a held note swells
-      glow(car, car.inner(side), a * RES, b * RES + 0.25, (b - a) * RES >= 1 ? C.ON_1000 : C.ON_500);
-    }
-  }
-
-  // 3. colour: the interiors from deep blue toward warm gold as the music swells
+  // 4. colour: the interiors from deep blue toward warm gold as the breath swells
   const cold = [20, 40, 140], warm = [255, 160, 50];
-  for (let i = 0; i < n; i++) {
-    if (!here[i]) continue;
-    const v = L[i];
-    const colour = cold.map((c0, j) => Math.trunc(c0 + (warm[j] - c0) * v));
+  for (let i = 0; i < coarse.length; i++) {
+    if (!flows(i * RES)) continue;
+    const v = coarse[i], colour = cold.map((c0, j) => Math.trunc(c0 + (warm[j] - c0) * v));
     for (const c of cars) c.rgb(i * RES, (i + 1) * RES, colour, 0.3 + 0.7 * v);
   }
 
-  // 4. the ending, when the song ends flowing: everything that's lit fades out slowly as the music ends
+  // 5. the ending, when the song ends flowing: everything that's lit fades out slowly as the music ends
   if (!flows(end - RES)) return false;
   for (const c of cars) {
     c.set(c.everything(), end, an.duration, 0);
