@@ -9,10 +9,10 @@
 //          can be syncopated (little on the beat itself), and an orchestra's tutti hits everywhere but its
 //          tracker hears a firm pulse. A stretch under ISLAND_S between two that agree goes their way,
 //          so the style doesn't flip for a few bars.
-//   kit    A rhythm section, so the drum-kit layer runs (kicks thump the fogs, snares the side cars,
-//          hats tick the markers); elsewhere the gentler percussion layer. A low hit (kick, bass,
-//          timpani) right on at least KICK of the beats, and at least HATS high hits (snare, hats,
-//          cymbals) a beat. An orchestra passage that pounds like that counts too.
+//   kit    A rhythm section, so a passage over sparse notes (a singer) follows the beat rather than the
+//          melody (choreo.ts). A low hit (kick, bass, timpani) right on at least KICK of the beats, and at
+//          least HATS high hits (snare, hats, cymbals) a beat. An orchestra passage that pounds like that
+//          counts too.
 //
 // Measured on the beats as the listening tracked them, before tempo.ts moves them onto what is played. The
 // neural tracker's own beats say best whether there is a pulse: where it hears none its beats wander, while

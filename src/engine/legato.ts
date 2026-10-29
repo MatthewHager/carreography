@@ -6,13 +6,13 @@
 // the music's breath and its melody instead:
 //
 //   bed      lamps join and leave in layers as the music swells and fades, always on 2 s ramps:
-//              0  the truck's bar glows softly (dimmable, so its brightness follows the loudness)
-//              1  the Ys' signature strips              (most of the song)
-//              2  the Ys' DRLs                          (louder than ~40 % of the song)
-//              3  every fog lamp                        (louder than ~70 %)
-//              4  every headlight - the bloom           (the loudest ~10 %: the climax)
-//            thresholds come from the whole song's loudness, with hysteresis and a minimum dwell so
-//            a layer never flickers; the stage is never dark while music plays
+//              0  the truck's bar glows softly (dimmable, so its brightness follows the level)
+//              1  the Ys' signature strips                          from calm up
+//              2  the Ys' DRLs                                      from a groove up
+//              3  every fog lamp                                    from drive up
+//              4  every headlight - the bloom                       at the peak
+//            the steps are the show's level (level.ts), with hysteresis and a minimum dwell so a layer
+//            never flickers
 //   swoop    the melody as one soft light gliding across the stage by pitch (low = crowd's left),
 //            each phrase spread over the whole stage: a bright spot sliding along the truck's bar,
 //            and on the Ys the inner beam on that side fading in and out as the melody passes (a run
@@ -32,45 +32,25 @@ import * as C from './channels';
 import type { Car } from './car';
 import type { Feel } from './feel';
 import * as M from './moves';
-import { argsort, clip, convolveSame, interp, max, mean, percentile, runs } from './np';
+import { STEPS } from './level';
+import { clip, interp, mean, percentile, runs } from './np';
 
 const RES = 0.25;                                  // seconds per control step
-const LAYER_PCT = [12, 40, 70, 90];                 // loudness percentiles at which layers 1-4 come in
-const HYST = 0.04;                                  // ...and go out this much lower
+const HYST = 0.04;                                  // a layer goes out this much below where it came in
 const MIN_DWELL = 2.5;                              // seconds a layer stays once it changes
 
-/**
- * Loudness 0-1 on a RES grid: the intensity curve smoothed over ~3 s, ranked within the song
- * and blended with its level below the song's peak (so a quiet song still breathes).
- */
+/** The show's level (level.ts) on a RES grid. */
 function loudness(an: Analysis): Float64Array {
-  const step = an.step;
-  const k = Math.max(1, Math.trunc(3.0 / step));
-  const sm = convolveSame(an.intensity, new Float64Array(k).fill(1 / k));
-  const db = new Float64Array(sm.length);
-  for (let i = 0; i < db.length; i++) db[i] = 20 * Math.log10(Math.max(sm[i], 1e-4));
-  const dbMax = max(db);
-  const order = argsort(argsort(sm));
-  const d = Math.max(sm.length - 1, 1);
-  const level = new Float64Array(sm.length);
-  for (let i = 0; i < level.length; i++) {
-    const absolute = clip((db[i] - (dbMax - 24)) / 24, 0, 1);
-    level[i] = 0.55 * absolute + 0.45 * (order[i] / d);
-  }
-  const stride = Math.max(1, Math.trunc(RES / step));
-  const out: number[] = [];
-  for (let i = 0; i < level.length; i += stride) out.push(level[i]);
+  const stride = Math.max(1, Math.trunc(RES / an.step)), out: number[] = [];
+  for (let i = 0; i < an.level!.length; i += stride) out.push(an.level![i]);
   return Float64Array.from(out);
 }
 
-/** [start, end] of the audible music: the first and last moments within 30 dB of the peak. */
+/** [start, end] of the audible music: the first and last moments louder than 30 dB under its loud end. */
 function musicSpan(an: Analysis): [number, number] {
-  const db = new Float64Array(an.intensity.length);
-  for (let i = 0; i < db.length; i++) db[i] = 20 * Math.log10(Math.max(an.intensity[i], 1e-4));
-  const lim = max(db) - 30;
   let first = -1, last = -1;
-  for (let i = 0; i < db.length; i++) {
-    if (db[i] > lim) {
+  for (let i = 0; i < an.loudness.length; i++) {
+    if (an.loudness[i] > 0.25) {
       if (first < 0) first = i;
       last = i;
     }
@@ -79,22 +59,17 @@ function musicSpan(an: Analysis): [number, number] {
   return [first * an.step, (last + 1) * an.step];
 }
 
-/**
- * Layer count (0-4) per RES step, with hysteresis and a minimum dwell; the thresholds are
- * percentiles of the song's own loudness, so every song uses its whole range.
- */
-function layers(L: ArrayLike<number>, live: ArrayLike<boolean>): Int32Array {
-  const liveL: number[] = [];
-  for (let i = 0; i < L.length; i++) if (live[i]) liveL.push(L[i]);
-  const up = liveL.length ? LAYER_PCT.map((p) => percentile(liveL, p)) : [0.2, 0.4, 0.6, 0.8];
+/** Layer count (0-4) per RES step: one more for each of the level's steps reached (level.ts), with
+ * hysteresis and a minimum dwell, one layer at a time. */
+function layers(L: ArrayLike<number>): Int32Array {
   const out = new Int32Array(L.length);
   let cur = 0, since = -1e9;
   for (let i = 0; i < L.length; i++) {
     const v = L[i];
     const t = i * RES;
     let want = cur;
-    while (want < 4 && v >= up[want]) want += 1;
-    while (want > 0 && v < up[want - 1] - HYST) want -= 1;
+    while (want < 4 && v >= STEPS[want]) want += 1;
+    while (want > 0 && v < STEPS[want - 1] - HYST) want -= 1;
     if (want !== cur && t - since >= MIN_DWELL) {
       cur = cur + (want > cur ? 1 : -1);       // one layer at a time
       since = t;
@@ -160,7 +135,7 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
   const audible = Array.from(tt, (t) => t >= start && t < end);
   const here = Array.from(tt, flows);
   L = L.map((v, i) => (audible[i] ? v : 0));
-  const lay = layers(L, audible).map((v, i) => (here[i] ? v : -1));
+  const lay = layers(L).map((v, i) => (here[i] ? v : -1));
 
   // 1. the bed, layer by layer
   const groups: [number, (c: Car) => readonly number[]][] = [

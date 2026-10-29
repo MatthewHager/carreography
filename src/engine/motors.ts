@@ -19,13 +19,17 @@
 //   Charge port (3 commands): its Dance is a rainbow light, so it opens for the most exciting ~2
 //     minutes of the song and flashes throughout, closing before the door's own 2-minute auto-close.
 
-import type { Analysis, Phrase, Section } from './analysis';
-import { tierAt } from './arc';
+import type { Analysis, Section } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
-import { BUILDS } from './catalog';
+import { flowsAt } from './feel';
+import { levelAt, levelOver, STEPS } from './level';
 import * as np from './np';
+import { builds, drops } from './pulse';
 import { barLen, beatLen } from './tempo';
+
+const LIVELY = STEPS[1];                // motors move only where the music is at least this lively (a groove)
+const LOUD = STEPS[2];                  // ... and spend the most where it is loud (drive and the peak)
 
 export const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };   // Cybertruck frunk: timed on the truck, Oct 2026
 const LIFTGATE_CLOSE_S = 4.0;
@@ -34,7 +38,7 @@ const WINDOW_BURST_S = 4.5, WINDOW_PEAK_DANCE_S = 10.0;   // window dances: ~3 x
 const LID_DANCE_MIN_S = 4.0, LID_DANCE_MAX_S = 9.0, LID_DANCE_BUDGET_S = 20.0;   // a lid's dance on a peak
 const LID_OPEN_MARGIN_S = 0.8;          // a lid only dances once fully open: land a little early
 const PORT_DANCE_MAX_S = 112.0;         // the port's rainbow, closed before its own 2-minute auto-close
-const STILL_LIVELY_S = 12.0, STILL_CALM_S = 30.0;   // longest stretch with no motor moving (stretched to the mirrors' budget)
+const STILL_LIVELY_S = 12.0, STILL_CALM_S = 30.0;   // longest stretch with no motor moving, loud and in a groove
 const MIRROR_PULSE_CYCLES = 4;          // the steady mirror pulse, leaving commands for the rest of the song
 
 /** (peak_time, build_length, hold_until, score) */
@@ -58,97 +62,60 @@ function anyIn(car: Car, ch: number, f0: number, f1: number): boolean {
   return false;
 }
 
-/** [(start, end)] spans where the liftgate channel already carries commands, with travel. */
-function liftgateWindows(car: Car, an: Analysis): [number, number][] {
-  const idx: number[] = [];
-  for (let f = 0; f < car.nFrames; f++) if (car.get(f, C.LIFTGATE)) idx.push(f);
-  if (!idx.length) return [];
-  const spans: [number, number][] = [];
-  let a = idx[0];
-  const gap = Math.trunc(20.0 / an.step);
-  for (let k = 0; k < idx.length - 1; k++) {
-    const i = idx[k], j = idx[k + 1];
-    if (j - i > gap) {
-      spans.push([a * an.step - 1, i * an.step + 15]);
-      a = j;
-    }
-  }
-  spans.push([a * an.step - 1, idx[idx.length - 1] * an.step + 15]);
-  return spans;
-}
-
-/** (peak_time, build_length, hold_until, score) for the biggest crescendos, the final climax first and
- * then the rest by size.
+/** (peak_time, build_length, hold_until, score) for the biggest moments, the song's peak first and then
+ * the rest by size.
  *
- * A crescendo peak is where a sustained rise in loudness tops out: the end of each detected
- * build, plus every arrival chord. Its build length is how long the loudness had been rising
- * (back to where it was under 55% of the peak). Peaks are ranked by height x length, kept at
- * least `spacing` apart, and the final climax of the piece is always included.
+ * A moment is where the music arrives somewhere loud: the start of the peak (the level's top step), each
+ * build's landing and drop (pulse.ts), and the arrival chords. Its build length is how long the level had
+ * been rising to it (back to where it was under 55 % of it), and it holds while the level stays up, at most
+ * 16 s (the peak: as long as it lasts). Moments are ranked by their level and build, kept at least 24 s apart.
  */
 function crescendos(an: Analysis, lead: number): Crescendo[] {
   const spacing = 24.0;
-  const step = an.step, inten = an.intensity;
+  const step = an.step, lv = an.level!;
   const cands: [number, number | null, number][] = [];
-  // The choreographer's own crescendo phrases are the best source: they end on the peak.
-  for (const ph of an.phrases ?? []) {
-    if (ph.move !== undefined && BUILDS.has(ph.move)) {
-      // The top of the build: the loudest instant in the last 3 s of the phrase.
-      const f0 = Math.trunc(Math.max(ph.t0, ph.t1 - 3.0) / step);
-      const f1 = Math.trunc(Math.min(ph.t1 + 0.3, an.duration) / step);
-      const topT = (f0 + np.argmax(an.loudFast.slice(f0, Math.max(f1, f0 + 1)))) * step;
-      cands.push([topT, Math.max(topT - ph.t0, 1.0), 0.5]);   // bonus: a choreographed build
-    } else if (ph.gesture === 'cadence') {
-      cands.push([ph.t0, null, 0.3]);
-    }
-  }
-  for (const [a, b] of np.runs(an.build.map((v) => v > 0))) {
-    cands.push([(b - 1) * step, (b - a) * step, 0.0]);
-  }
+  let top = -1;
+  for (let f = 0; f < lv.length; f++) if (lv[f] >= STEPS[3]) { top = f; break; }
+  for (const [t0, land] of builds(an)) cands.push([land, land - t0, 0.5]);
+  for (const d of drops(an)) cands.push([d, null, 0.3]);
   const ev = an.events;
-  if (ev) {
-    for (let i = 0; i < ev.t.length; i++) if (ev.arrival[i] === 1) cands.push([ev.t[i], null, 0.2]);
-  }
-  const peaks: [number, number, number, number][] = [];
+  for (let i = 0; i < ev.t.length; i++) if (ev.arrival[i] === 1 && levelAt(an, ev.t[i]) >= LOUD) cands.push([ev.t[i], null, 0.2]);
+  const peaks: Crescendo[] = [];
   for (const [t, blen0, bonus] of cands) {
+    const f = Math.min(Math.trunc(t / step), lv.length - 1);
+    const pk = np.max(lv, f, Math.min(f + 25, lv.length));
     let blen = blen0;
-    const f = Math.min(Math.trunc(t / step), inten.length - 1);
-    const pk = np.max(inten, Math.max(0, f - 5), Math.min(f + 15, inten.length));
     if (blen === null) {
       let g = f;
-      while (g > 0 && inten[g] > 0.55 * pk) g--;
+      while (g > 0 && lv[g] > 0.55 * pk) g--;
       blen = Math.max((f - g) * step, 3.0);
     }
-    // hold while it stays loud, at most 16 s
     let h = f;
-    while (h < inten.length - 1 && inten[h] > 0.6 * pk && (h - f) * step < 16) h++;
+    while (h < lv.length - 1 && lv[h] > 0.8 * pk && (h - f) * step < 16) h++;
     peaks.push([t, np.clip(blen, 1.0, lead), h * step, pk + bonus]);
+  }
+  if (top >= 0) {                                   // the peak: the moment the show was saving its top for
+    let h = top;
+    while (h < lv.length - 1 && lv[h] >= STEPS[3] - 0.1) h++;
+    let g = top;
+    while (g > 0 && lv[g] > 0.55 * lv[top]) g--;
+    peaks.push([onBeat(an, top * step), np.clip((top - g) * step, 1.0, lead), h * step, 3.0]);
   }
   if (!peaks.length) return [];
   peaks.sort((p, q) => p[0] - q[0]);
-  const merged: [number, number, number, number][] = [];
-  for (const p of peaks) {  // within 6 s: one peak, keeping the longer build and the louder top
-    if (merged.length && p[0] - merged[merged.length - 1][0] < 6) {
-      const q = merged[merged.length - 1];
+  const merged: Crescendo[] = [];
+  for (const p of peaks) {  // within 6 s: one moment, keeping the longer build and hold, the higher score
+    const q = merged[merged.length - 1];
+    if (q && p[0] - q[0] < 6) {
       merged[merged.length - 1] = [p[3] >= q[3] ? p[0] : q[0], Math.max(p[1], q[1]), Math.max(p[2], q[2]),
         Math.max(p[3], q[3])];
     } else {
       merged.push(p);
     }
   }
-  // The final climax: the last crescendo in the closing quarter (a piece's last build is its
-  // ending gesture, whatever the meter says), as long as it is not a mere ripple.
-  const top = Math.max(...merged.map((p) => p[3]));
-  const late = merged.filter((p) => p[0] >= 0.75 * an.duration && p[3] >= 0.4 * top);
-  let final: [number, number, number, number] | null = null;
-  for (const p of late) if (final === null || p[0] > final[0]) final = p;
   const ranked: Crescendo[] = [];
-  if (final) ranked.push([final[0], final[1], an.duration, final[3] + 1.0]);
   const byScore = merged.slice().sort((p, q) => q[3] * (0.5 + q[1] / lead) - p[3] * (0.5 + p[1] / lead));
-  for (const p of byScore) {
-    if (ranked.every((q) => Math.abs(p[0] - q[0]) >= spacing)) {
-      ranked.push([p[0], p[1], p[2], p[3]]);
-    }
-  }
+  for (const p of byScore) if (ranked.every((q) => Math.abs(p[0] - q[0]) >= spacing)) ranked.push(p);
   return ranked;
 }
 
@@ -198,14 +165,16 @@ function windows(cars: Car[], an: Analysis): void {
     const burst = beat * Math.max(2, Math.round(WINDOW_BURST_S / beat));      // ~4.5 s, a whole number of beats
     const half = beat * Math.max(1, Math.floor(Math.round(burst / beat) / 2));
     const peakT = peaks.length ? onBeat(an, peaks[0][0]) : null;
-    // wave moments: starts of lively sections, spread over the piece, clear of the peak dance
-    const waveCands = Array.from(new Set(
-      secs.filter((sc) => sc.ceiling >= 2 && 8 < sc.t0 && sc.t0 < end - 20).map((sc) => Math.round(sc.t0 * 10) / 10),
-    )).sort((p, q) => p - q);
+    // wave moments: starts of loud sections, spread over the piece, clear of the peak dance
+    const loud = secs.filter((sc) => levelOver(an, sc.t0, sc.t1) >= LOUD && 8 < sc.t0 && sc.t0 < end - 20
+      && !flowsAt(an, sc.t0));
+    const waveCands = Array.from(new Set(loud.map((sc) => Math.round(sc.t0 * 10) / 10))).sort((p, q) => p - q);
     const waves: number[] = [];
     let last = -1e9;
+    const clear = (t: number) => peakT === null || t + 2 * burst < peakT
+      || t > peakT + WINDOW_PEAK_DANCE_S + burst;
     for (const t of waveCands) {
-      if (t - last >= Math.max(30.0, (end - 20) / 5) && (peakT === null || Math.abs(t - peakT) > 15)) {
+      if (t - last >= Math.max(30.0, (end - 20) / 5) && clear(t)) {
         waves.push(t);
         last = t;
       }
@@ -221,13 +190,11 @@ function windows(cars: Car[], an: Analysis): void {
       for (const w of fronts) c.closure(w, t0, t0 + burst, C.CLOSURE_DANCE);
       for (const w of rears) c.closure(w, t0 + half, t0 + half + burst, C.CLOSURE_DANCE);
     });
-    if (peakT !== null) {
+    if (peakT !== null && !flowsAt(an, peakT)) {
       const span = WINDOW_PEAK_DANCE_S;
       let t0 = peakT + idx * beat;
       if (t0 + span > end - 6) t0 = Math.max(1.0, end - 6 - span);
-      if (waves.every((w0) => Math.abs(t0 - w0) > span + 3 * burst)) {
-        C.WINDOWS.forEach((w, j) => c.closure(w, t0 + 0.3 * j, t0 + 0.3 * j + span, C.CLOSURE_DANCE));
-      }
+      C.WINDOWS.forEach((w, j) => c.closure(w, t0 + 0.3 * j, t0 + 0.3 * j + span, C.CLOSURE_DANCE));
     }
   }
 }
@@ -315,10 +282,12 @@ function lids(cars: Car[], an: Analysis): void {
 
   /** Per car [open at, null, close at, [dance from, dance to]]: every lid opens fully and
    * lands on the peak one beat after its neighbour (left to right, then right to left the
-   * next time), dances through the loud stretch, then closes in the same order. */
+   * next time), dances through the loud stretch (the song's peak through as much of it as the budget
+   * allows), then closes in the same order. */
   const dancePlan = (k: number, peak: number, holdUntil: number): LidPlan => {
     const beat = beatLen(an);
-    const danceLen = np.clip(holdUntil - peak, LID_DANCE_MIN_S, LID_DANCE_MAX_S);
+    const most = k === 0 ? LID_DANCE_BUDGET_S : Math.min(LID_DANCE_MAX_S, LID_DANCE_BUDGET_S - danced);
+    const danceLen = np.clip(holdUntil - peak, LID_DANCE_MIN_S, most);
     const plan: LidPlan = new Map();
     cars.forEach((c, idx) => {
       const lag = beat * (k % 2 ? (n - 1 - idx) : idx);
@@ -334,8 +303,8 @@ function lids(cars: Car[], an: Analysis): void {
     const peak = onBeat(an, cr[0]);
     if (cmdsLeft < 2) break;
     const k = accepted.length;
-    const dancing = cmdsLeft >= 3 && holdUntil - peak >= LID_DANCE_MIN_S
-      && danced + LID_DANCE_MAX_S <= LID_DANCE_BUDGET_S;
+    const dancing = cmdsLeft >= 3 && holdUntil - peak >= LID_DANCE_MIN_S && !flowsAt(an, peak)
+      && danced + LID_DANCE_MIN_S <= LID_DANCE_BUDGET_S;
     const plan = dancing ? dancePlan(k, peak, holdUntil) : lidPlan(k % 3, k, peak, buildLen, holdUntil);
     let ok = true;
     for (const c of cars) {
@@ -364,27 +333,6 @@ function lids(cars: Car[], an: Analysis): void {
       danced += Math.max(...Array.from(plan.values()).map((p) => p[3]![1] - p[3]![0]));
     }
   }
-  for (const c of cars) {
-    const open = LIFTGATE_OPEN_S[c.kind];
-    const idx = cars.indexOf(c);
-    // Any pairs left over become slow "breaths" on long calm phrases: open half way
-    // (7 s), hold, close (4 s), ending with the phrase - each car 2.5 s after the one to
-    // its left, so even the breath rolls across the stage.
-    const busy = liftgateWindows(c, an);
-    const calm = (an.phrases ?? [])
-      .filter((ph: Phrase) => (ph.gesture === 'recitative' || ph.gesture === 'chords') && ph.t1 - ph.t0 >= 12)
-      .sort((p, q) => (q.t1 - q.t0) - (p.t1 - p.t0));
-    for (const ph of calm) {
-      if (used(c, C.LIFTGATE) > C.CLOSURE_LIMITS[C.LIFTGATE] - 2) break;
-      const tOpen = ph.t0 + 0.5 + idx * 2.5;
-      const tClose = ph.t1 - LIFTGATE_CLOSE_S - 0.5;
-      if (tClose - tOpen < 9 || busy.some(([a, b]) => !(tClose + LIFTGATE_CLOSE_S < a || tOpen > b))) continue;
-      c.closure(C.LIFTGATE, tOpen, tOpen + 0.5, C.CLOSURE_OPEN);
-      c.set(C.LIFTGATE, tOpen + open / 2, tOpen + open / 2 + 0.3, C.CLOSURE_STOP);
-      c.closure(C.LIFTGATE, tClose, tClose + 0.5, C.CLOSURE_CLOSE);
-      busy.push([tOpen - 1, tClose + LIFTGATE_CLOSE_S + 1]);
-    }
-  }
 }
 
 /** Mirrors: 20 commands *per mirror*, two mirrors a car, on their own musical clock.
@@ -403,7 +351,7 @@ function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
   // fold on one beat of the cycle, unfold half a cycle later: half a cycle must cover the whole
   // 2 s fold, so slow songs pulse every second (or third) bar rather than half-folding
   const cycle = bar * Math.ceil((2 * MIRROR_S + 0.1) / bar);
-  // 1. The tempo pulse: the longest section with ceiling >= 2 and a usable beat.
+  // 1. The tempo pulse: the longest loud section with a usable beat.
   let pulse: Section | null = null;
   if (an.beatScore >= 2.0) {
     // how evenly the tracked beats fill the section (1 = metronomic)
@@ -413,16 +361,17 @@ function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
       const gaps = np.diff(b);
       return np.clip(1 - np.std(gaps) / Math.max(np.mean(gaps), 1e-6), 0, 1);
     };
-    const cands = secs.filter((sc) => sc.ceiling >= 2 && sc.t1 - sc.t0 >= 6 * cycle + 4 && sc.t0 > 6
+    const loud = (sc: Section) => levelOver(an, sc.t0, sc.t1);
+    const cands = secs.filter((sc) => loud(sc) >= LOUD && sc.t1 - sc.t0 >= 6 * cycle + 4 && sc.t0 > 6
+      && !flowsAt(an, (sc.t0 + sc.t1) / 2)
       && regularity(sc) >= 0.6);
     for (const sc of cands) {
       if (pulse === null) {
         pulse = sc;
         continue;
       }
-      // the highest ceiling, then the most regular beat over the longest time; the first of equals wins
-      const ka = sc.ceiling, kb = pulse.ceiling;
-      if (ka > kb || (ka === kb && regularity(sc) * (sc.t1 - sc.t0) > regularity(pulse) * (pulse.t1 - pulse.t0))) {
+      // the most regular beat over the longest time; the first of equals wins
+      if (regularity(sc) * (sc.t1 - sc.t0) > regularity(pulse) * (pulse.t1 - pulse.t0)) {
         pulse = sc;
       }
     }
@@ -458,19 +407,15 @@ function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
   }
   // 2. Gestures on the biggest landings, spread over the piece.
   const moments: [number, number][] = [];
-  for (const ph of an.phrases ?? []) {
-    if (BUILDS.has(ph.move ?? '')) {
-      moments.push([ph.t1, 3.0]);
-    }
-  }
+  for (const [, land] of builds(an)) moments.push([land, 3.0]);
   const ev = an.events;
   for (let i = 0; i < ev.arrival.length; i++) if (ev.arrival[i] === 1) moments.push([ev.t[i], 2.0]);
   for (const h of an.hits) {
-    if (tierAt(an, h) >= 2) moments.push([h, 1.0]);
+    if (levelAt(an, h) >= LOUD) moments.push([h, 1.0]);
   }
   moments.sort((p, q) => -p[1] - -q[1]);
   const picks: number[] = [];
-  for (const [t] of moments) {
+  for (const [t] of moments.filter(([m]) => !flowsAt(an, m))) {
     if (t < 3 || t > end - 9) continue;
     if (pulseWindow && pulseWindow[0] - 4 < t && t < pulseWindow[1] + 4) continue;
     if (picks.every((q) => Math.abs(t - q) >= Math.max(25.0, (end - 12) / 6))) picks.push(t);
@@ -570,13 +515,13 @@ function free(car: Car, ch: number, t0: number, t1: number): boolean {
 
 
 /** [first, end) frames of each stretch with no motor moving, from 4 s in to 10 s before the end, and
- * whether the music there is lively (mostly tier 2 or more). */
+ * whether the music there is loud (mostly drive or the peak). */
 function stillRuns(mask: ArrayLike<number | boolean>, an: Analysis): [number, number, boolean][] {
   const lo = Math.trunc(4.0 / an.step), hi = Math.trunc((an.duration - 10) / an.step);
   const inv = new Uint8Array(Math.max(0, Math.min(Math.max(hi, lo), mask.length) - lo));
   for (let i = 0; i < inv.length; i++) inv[i] = mask[lo + i] ? 0 : 1;
   return np.runs(inv).map(([a, b]) => {
-    const lively = np.mean(an.tier.slice(a + lo, b + lo).map((v) => (v >= 2 ? 1 : 0))) >= 0.5;
+    const lively = levelOver(an, (a + lo) * an.step, (b + lo) * an.step) >= LOUD;
     return [a + lo, b + lo, lively];
   });
 }
@@ -726,10 +671,11 @@ function mirrorGesture(
 }
 
 
-/** Per frame: is any motor on any car visibly moving (travelling or dancing)? The charge
- * port's dance is a light, not movement, so it doesn't count. */
+/** Per frame: is any motor on any car visibly moving (travelling or dancing), or does the music not want one
+ * (below a groove, or flowing)? The charge port's dance is a light, not movement, so it doesn't count. */
 function motion(cars: Car[], an: Analysis): Uint8Array {
   const mask = new Uint8Array(an.nFrames);
+  for (let f = 0; f < mask.length; f++) if (an.level![f] < LIVELY || flowsAt(an, f * an.step)) mask[f] = 1;
   const spans: [number, number | null][] = [[C.LIFTGATE, null], [C.L_MIRROR, MIRROR_S], [C.R_MIRROR, MIRROR_S]];
   for (const w of C.WINDOWS) spans.push([w, WINDOW_S]);
   for (const c of cars) {
@@ -805,10 +751,10 @@ function fillStill(cars: Car[], an: Analysis, line: Line, spent: Spent, scale = 
  * PORT_DANCE_MAX_S (loud sections count double), starting on a beat; null for a song that never
  * gets lively (Ave Maria). */
 function portWindow(an: Analysis): [number, number] | null {
-  const exc = new Float64Array(an.tier.length);
+  const lv = an.level!, exc = new Float64Array(lv.length);
   let total = 0;
   for (let i = 0; i < exc.length; i++) {
-    exc[i] = (an.tier[i] >= 2 ? 1 : 0) + (an.tier[i] >= 3 ? 1 : 0);
+    exc[i] = (lv[i] >= LOUD ? 1 : 0) + (lv[i] >= STEPS[3] ? 1 : 0);
     total += exc[i];
   }
   if (total === 0) return null;

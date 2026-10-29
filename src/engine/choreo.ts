@@ -1,45 +1,38 @@
-// Coordinated choreography for a line of Teslas (default: Model Y | Cybertruck | Model Y).
+// The show for a line of Teslas, as layers (crowd's left to right, any lineup of one to five cars):
 //
-// The stage is read left to right as "melody slots": the side cars' left and right sides and the
-// Cybertruck's 60-LED front bar (continuous). A note's pitch picks its slot, so runs and scales scrub
-// across the cars. Every light is an instrument; intensity tiers (from the music, biased to build
-// across the piece) gate which instruments play. Closures are planned backward from their travel
-// times so they arrive in position on the musical moment, within Tesla's per-show command limits.
+//   level       how big the show is at each moment, from the music's loudness, its top kept for the peak
+//               (level.ts); every layer sizes itself by it
+//   bed         what is lit steadily: rear lamps, the trucks' bars glowing, the cabins in the harmony's
+//               colour (bed.ts)
+//   moves       the foreground: one move per passage of the music, following its melody or its beat, with
+//               chords, trills, cadences and the Toccata's motif getting their own (moves.ts, catalog.ts)
+//   drums       each drum voice on lamps of its own wherever it plays (drums.ts)
+//   pulse       the beat on the headlights, and the builds that speed up into a drop (pulse.ts)
+//   motors      lids, windows, mirrors, the charge port and a Model X's doors (motors.ts)
+//
+// Where the music has no beat to follow it flows instead (legato.ts). Silence is dark.
 
-import type { Analysis, Events, Phrase, Section } from './analysis';
-import { ceilingAt, tierAt } from './arc';
+import type { Analysis, Phrase } from './analysis';
+import * as BED from './bed';
 import { Car, makeLineup } from './car';
 import * as CAT from './catalog';
-import type { Formation } from './catalog';
 import * as C from './channels';
-import { feel, flowsAt, kitAt } from './feel';
-import { sectionAt } from './form';
+import * as DRUMS from './drums';
+import { clarity, feel, flowsAt, kitAt } from './feel';
 import * as LAMPS from './lamps';
 import * as LEGATO from './legato';
+import { levelAt, levelCurve, levelOver } from './level';
 import * as LY from './lyrics';
 import type { Moment } from './lyrics';
 import * as MD from './mood';
 import * as motors from './motors';
 import * as M from './moves';
-import { clip, corrcoef, interp, linspace, mean, median, runs, searchsorted, slope } from './np';
+import { clip, linspace, median, searchsorted } from './np';
 import * as PULSE from './pulse';
-import { frameSpan, segment } from './phrases';
+import { segment } from './phrases';
 import * as TEMPO from './tempo';
 
-const PURPLE = [110, 0, 200];
-const ORANGE = [255, 70, 0];
-const WHITE = [255, 255, 255];
-
-const key = CAT.formationKey;
-const same = (a: Formation | null | undefined, b: Formation | null | undefined) => !!a && !!b && key(a) === key(b);
-const parts = (f: Formation) => f.slice(1);
-const anyIn = (f: Formation, s: Set<string>) => parts(f).some((m) => s.has(m));
-const allIn = (f: Formation, s: Set<string>) => parts(f).every((m) => s.has(m));
-
-/** The show for a lineup (car letters, crowd-left to right), from the song's analysis. Where the music
- * has a beat to follow, one whole-stage move per phrase (moves.ts) shaped by the form map (form.ts), the
- * beat layer (pulse.ts) and the drums under it; where it has none, flowing light (legato.ts). Section by
- * section, as the music goes (feel.ts). Then the lyric moments, the interiors, the motors and the end. */
+/** The show for a lineup (car letters, crowd-left to right), from the song's analysis. */
 export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   const cars = makeLineup(layout, an.nFrames, an.step);
   const sung = an.lyricLines?.length ? an.lyricLines : null;     // a sung line starts a phrase
@@ -50,22 +43,22 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   // Durations in the moves (a bar, a sixteenth) come from the tempo: make it the tracked beats' own
   // spacing so a bar-long sweep ends on the next downbeat rather than drifting off it.
   if (an.beats.length > 8) an.tempo = 60.0 / median(an.beats.slice(1).map((b, i) => b - an.beats[i]));
+  an.level = levelCurve(an);
   MD.assign(an, phrases);
   for (const ph of phrases) if (flowsAt(an, ph.t0)) ph.move = 'legato';
-  const moving = phrases.filter((ph) => ph.move !== 'legato');
   const said = sung ? LY.moments(sung, an) : [];
   const endsFlowing = flowing.length > 0 && LEGATO.choreograph(cars, an, flowing);
+  BED.apply(cars, an);
   pedal(cars, an);
-  playPhrases(cars, an, moving);
-  darknessGuard(cars, an, moving);
-  drums(cars, an);
-  percussion(cars, an);
-  PULSE.apply(cars, an, phrases);      // the beat layer owns the headlights
+  playPassages(cars, an, phrases.filter((ph) => ph.move !== 'legato'));
+  DRUMS.apply(cars, an);
+  PULSE.apply(cars, an, phrases);
+  PULSE.dropHits(cars, an);
   strikes(cars, an, said);
-  interior(cars, an);
   colours(cars, said);
   motors.choreograph(cars, an);
   if (!endsFlowing) finale(cars, an);      // (music that ends flowing has already faded out)
+  hush(cars, an);
   for (const car of cars) {
     tidy(car);
     if (car.juniper) LAMPS.juniperOutput(car);
@@ -77,448 +70,119 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   return cars;
 }
 
-// ---- The choreographer -------------------------------------------------------------------------
-// A formation says who does what for one phrase: "unison" (one move, every car) or "split" (the two
-// Model Ys do one move while the Cybertruck does another). The chooser matches the formation to the
-// phrase's gesture and intensity, keeps variety (never the same formation twice running, unison and
-// split alternating), and gives repeated material the same formation.
+// ---- Passages ----------------------------------------------------------------------------------
+// One move per passage, so the same music reads as the same idea: Hall of the Mountain King's theme,
+// played eighteen times and growing, keeps its move and grows with the level. A passage runs from one
+// change in the music to the next: a section of the form map that brings back earlier material (it
+// replays that material's moves, so a chorus looks like the chorus), or a new section where the sound
+// changes (a novelty peak). A passage over 40 s is split where its sound changes most.
 
-// Single-note passages strobe: every move here flashes per note or per beat. (Flow moves such as
-// meter, expand_contract and fill_stage are reserved for chords and crescendos.)
-const UNISON_FIGURATION = ['lr_notes', 'rotation', 'mirror', 'keyboard', 'wave', 'converge', 'call_response',
-  'relay', 'pinball', 'syncopate', 'lr_beat', 'march', 'cascade', 'tug_of_war', 'antiphony',
-  'checker', 'beam', 'lr_channel'];
-// Moves where the cars pass something between them (the ones with the most impact).
-const COLLAB = new Set([
-  'wave', 'converge', 'relay', 'pinball', 'syncopate', 'expand_contract', 'fill_stage', 'out_in', 'rotation',
-  'lr_notes', 'lr_beat', 'call_response', 'march', 'cascade', 'tug_of_war', 'bounce_build', 'antiphony', 'motif',
-  'checker', 'beam', 'lr_channel', 'implode', 'fade_cross',
-  ...Object.entries(CAT.UNISON).filter(([, i]) => i.collab).map(([m]) => m),
-]);
-const BEAT_MOVES = new Set(['lr_beat', 'wave', 'converge', 'heartbeat', 'y_ripple_in', 'y_ripple_out',
-  'ct_scan', 'ct_edge_pulse', 'y_turn_ticks', 'pinball', 'syncopate', 'expand_contract',
-  'march', 'cascade', 'tug_of_war', 'bounce_build', 'checker', 'beam', 'lr_channel',
-  'curtain', 'breathe_wash', 'marquee', 'crossing', 'shockwave', 'sparkle', 'sunrise', 'scanner', 'accelerando',
-  'ping_pong', 'metronome', 'stripes', 'flutter']);
-const SPLIT_FIGURATION: [string, string][] = [['y_keyboard', 'ct_comets'], ['y_ripple_in', 'ct_comets'],
-  ['y_keyboard', 'ct_scan'], ['y_turn_ticks', 'ct_comets'], ['y_ripple_out', 'ct_edge_pulse'],
-  ['y_bass_fogs', 'ct_comets'], ['y_wink', 'ct_comets']];
-const CALM = new Set(['keyboard', 'mirror', 'meter', 'pulse', 'y_breathe', 'ct_comets', 'ct_swell', 'ct_meter',
-  'y_keyboard', 'breathe_wash', 'sunrise', 'sparkle', 'beam', 'relay', 'march', 'fade_cross', 'metronome']);
-// Moves that light little of the stage: a full-power section never chooses one.
-const QUIET = new Set(['breathe_wash', 'sunrise', 'sparkle', 'y_turn_ticks', 'y_bass_fogs', 'y_breathe',
-  'ct_swell', 'ct_edge_pulse', 'pulse', 'meter', 'ct_comets', 'ct_meter', 'y_keyboard', 'shimmer', 'mirror']);
-
-function signature(ev: Events, ph: Phrase): Float64Array | null {
-  const p = ev.top.slice(ph.a, ph.b);
-  if (p.length < 4) return null;
-  const x = interp(linspace(0, p.length - 1, 16), p.map((_, i) => i), p);
-  const m = mean(x);
-  return x.map((v) => v - m);
+interface Passage {
+  t0: number;
+  t1: number;
+  letters: string[];    // the form map's letters it covers, the first its own
+  piece: number;        // which piece of its material it is (a long one is split)
 }
 
-/** Candidate formations for a phrase, best first: the gesture's candidates, plus every catalogued
- * move that suits the gesture and the phrase's mood, keeping only those whose mood range includes
- * this phrase's (so a calm verse never gets a strobe, a climax never a breath). */
-function formationsFor(ph: Phrase, an: Analysis): Formation[] {
-  const base = formationsBase(ph, an);
-  const mood = ph.mood;
-  if (mood === undefined || mood === null || ph.gesture === 'motif' || ph.gesture === 'cadence') return base;
-  if (base.length && CAT.BUILDS.has(base[0][1])) return base;          // a crescendo candidate stays first
-  const beatOk = an.beatScore >= 2.0;
-  const extra = CAT.candidates(ph.gesture, mood).filter((c) => !base.some((b) => same(b, c))
-    && (beatOk || !anyIn(c, BEAT_MOVES)));
-  let out = [...base, ...extra].filter((c) => CAT.fits(c, mood));
-  if (ceilingAt(an, ph.t0) >= 3) {
-    const loud = out.filter((c) => !allIn(c, QUIET));
-    out = loud.length ? loud : out;
-  }
-  return out.length ? out : base;
-}
+const CHANGE = 0.6;     // a novelty peak this strong (0..1) at a section's start makes a new passage
+const LONG_S = 40, PIECE_S = 12;
 
-/** Does the phrase's loudness rise (the last quarter 35 % louder than the first)? */
-function louderAtEnd(an: Analysis, ph: Phrase): boolean {
-  const [f0, f1] = frameSpan(an, ph);
-  const e = an.intensity.slice(f0, f1);
-  const n = e.length;
-  // the last quarter is ceil(n / 4) frames, the first floor(n / 4)
-  return n > 25 && mean(e, n - Math.ceil(n / 4)) > mean(e, 0, Math.floor(n / 4)) * 1.35;
-}
-
-/** Candidate formations for a phrase by gesture, best first. */
-function formationsBase(ph: Phrase, an: Analysis): Formation[] {
-  const g = ph.gesture, tier = tierAt(an, ph.t0);
-  const ceiling = ceilingAt(an, ph.t0);
-  const beatOk = an.beatScore >= 2.0;
-  if (g === 'motif') return [['unison', 'motif']];
-  if (g === 'trill') return [['unison', 'shimmer'], ['unison', 'rain']];
-  if (g === 'cadence') return [['unison', 'cadence']];
-  if (g === 'run') return [['unison', 'relay'], ['unison', 'keyboard'], ['split', 'y_keyboard', beatOk ? 'ct_scan' : 'ct_comets']];
-  if (g === 'chords') {
-    // Chords are flows and fills, never strobes: holds, swells and growing fills.
-    const c: Formation[] = [['unison', 'block'], ['split', 'y_chords', 'bar_collide'], ['split', 'y_chords', 'ct_meter'],
-      ['unison', 'meter'], ['unison', 'fade_cross'], ['split', 'y_breathe', 'ct_swell']];
-    if (beatOk && ceiling >= 2) c.splice(1, 0, ['unison', 'expand_contract']);
-    if (ph.t1 - ph.t0 >= 4 && ceiling >= 2) c.splice(2, 0, ['unison', 'fill_stage']);
-    return c;
-  }
-  if (g === 'recitative') {
-    const c: Formation[] = [['unison', 'pulse'], ['split', 'y_wink', 'ct_comets'], ['split', 'y_breathe', 'ct_comets'],
-      ['split', 'y_keyboard', 'ct_swell']];
-    if (kitAt(an, ph.t0) && beatOk && ceiling >= 2) {
-      // sparse singing over a band: the beat carries the stage, not the few transcribed notes
-      return [['unison', 'march'], ['unison', 'lr_channel'], ['unison', 'lr_beat'], ['unison', 'checker'],
-        ['unison', 'beam'], ['unison', 'heartbeat']];
-    }
-    if (ceiling >= 3) {   // big declamatory notes with rests between (a loud ending): hold them, don't whisper
-      return [['unison', 'block'], ['unison', 'heartbeat'], ...(beatOk ? [['unison', 'expand_contract']] : [])];
-    }
-    if (beatOk && tier <= 1 && ph.t1 - ph.t0 >= 6) c.splice(1, 0, ['unison', 'heartbeat']);
-    return c;
-  }
-  // figuration
-  const rising = louderAtEnd(an, ph);
-  let cands: Formation[] = [...UNISON_FIGURATION.map((m) => ['unison', m]), ...SPLIT_FIGURATION.map(([y, c]) => ['split', y, c])];
-  if (rising && ph.t1 - ph.t0 >= 4) cands = [['unison', 'out_in'], ['unison', 'fill_stage'], ...cands];
-  if (!beatOk) cands = cands.filter((c) => !anyIn(c, BEAT_MOVES));
-  if (ceiling <= 1) {   // the arc says: not yet. Only the quiet moves.
-    const calm = cands.filter((c) => allIn(c, CALM));
-    cands = calm.length ? calm : cands.slice(0, 2);
-  } else if (ceiling >= 3) {  // full power: nothing that leaves the Ys dark or lights single lamps
-    const loud = cands.filter((c) => !allIn(c, QUIET));
-    cands = loud.length ? loud : cands;
-  }
-  if (kitAt(an, ph.t0) && beatOk) {      // over a rhythm section the beat-locked moves come first
-    const beatFirst = ['syncopate', 'pinball', 'lr_beat', 'march', 'cascade', 'tug_of_war', 'checker', 'beam', 'lr_channel'];
-    if (ph.density < 3.0) {   // few notes to follow: only the beat-locked moves
-      const locked = cands.filter((c) => beatFirst.includes(c[1]));
-      cands = locked.length ? locked : cands;
-    }
-    cands = sortBy(cands, (c) => (beatFirst.includes(c[1]) ? 0 : ['wave', 'converge'].includes(c[1]) ? 1 : 2));
-  }
-  if (tier <= 1) cands = sortBy(cands, (c) => (allIn(c, CALM) ? 0 : 1));   // calm passages: quieter moves first
-  else cands = sortBy(cands, (c) => (['wave', 'converge', 'lr_notes', 'rotation', 'y_ripple_in'].includes(c[1]) ? 0 : 1));
-  return cands;
-}
-
-/** A stable sort by a numeric key. */
-function sortBy<T>(xs: T[], k: (x: T) => number): T[] {
-  return xs.map((x, i) => [k(x), i, x] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((t) => t[2]);
-}
-
-// When a section comes back louder, its formations come back bigger.
-const ESCALATE = new Map<string, Formation>([
-  [['split', 'y_keyboard', 'ct_meter'], ['unison', 'cascade']],
-  [['split', 'y_keyboard', 'ct_comets'], ['unison', 'converge']],
-  [['split', 'y_breathe', 'ct_comets'], ['split', 'y_ripple_in', 'ct_comets']],
-  [['split', 'y_keyboard', 'ct_scan'], ['unison', 'wave']],
-  [['split', 'y_keyboard', 'ct_swell'], ['split', 'y_ripple_out', 'ct_edge_pulse']],
-  [['unison', 'meter'], ['unison', 'wave']],
-  [['unison', 'mirror'], ['unison', 'lr_notes']],
-  [['unison', 'keyboard'], ['unison', 'rotation']],
-  [['unison', 'pulse'], ['unison', 'heartbeat']],
-  [['unison', 'lr_notes'], ['unison', 'checker']],
-  [['unison', 'rotation'], ['unison', 'wave']],
-  [['split', 'y_ripple_out', 'ct_edge_pulse'], ['unison', 'tug_of_war']],
-  [['split', 'y_bass_fogs', 'ct_comets'], ['unison', 'lr_notes']],
-  [['split', 'y_turn_ticks', 'ct_comets'], ['unison', 'rotation']],
-  [['split', 'y_chords', 'ct_meter'], ['unison', 'block']],
-  [['split', 'y_wink', 'ct_comets'], ['unison', 'pinball']],
-  [['split', 'y_keyboard', 'bar_collide'], ['unison', 'relay']],
-  [['unison', 'pinball'], ['unison', 'syncopate']],
-  [['unison', 'relay'], ['unison', 'wave']],
-].map(([a, b]) => [key(a), b]));
-
-function escalate(f: Formation, steps: number, beatOk: boolean): Formation {
-  for (let s = 0; s < steps; s++) {
-    const g = ESCALATE.get(key(f)) ?? f;
-    if (!beatOk && anyIn(g, BEAT_MOVES)) break;
-    f = g;
-  }
-  return f;
-}
-
-/** One formation per phrase, chosen with the whole piece in view:
- * - a real crescendo gets a build;
- * - a section that repeats earlier material replays that section's formations (callbacks), one
- *   intensity step higher each time (the form map's ceiling escalation);
- * - a figure the song has played before gets the formation it had then;
- * - otherwise each section leans unison or split (alternating per new letter) so contrast happens at
- *   section scale rather than every few seconds, and within that the least used comes first, never
- *   the same twice running. */
-function choosePlan(an: Analysis, phrases: Phrase[]): Formation[] {
-  const ev = an.events;
-  const secs = an.sections ?? [];
-  const plan: Formation[] = [];
-  const seen: [Float64Array | null, Formation][] = [];     // each fresh choice with its melodic shape
-  const sectionPlans = new Map<string, Formation[]>();     // letter -> formations, in phrase order
-  const sectionLean = new Map<string, string>();           // letter -> "unison" | "split"
-  phrases.forEach((ph, phIndex) => {
-    const sec = secs.length ? sectionAt(secs, ph.t0) : null;
-    const letter = sec ? sec.letter : 'A';
-    if (!sectionLean.has(letter)) sectionLean.set(letter, sectionLean.size % 2 ? 'split' : 'unison');
-    let choice = buildFor(an, ph, phrases, plan);
-    const replay = sec !== null && sec.repeatOf >= 0 && sectionPlans.has(letter)
-      && !SELF_PACED.includes(ph.gesture);
-    if (choice === null && replay) {
-      const k = countIf(phrases.slice(0, phIndex), (q) => sectionAt(secs, q.t0) === sec);
-      choice = callback(an, ph, sec, sectionPlans.get(letter)!, k, plan);
-    }
-    if (choice !== null && same(plan[plan.length - 1], choice) && ph.gesture === 'figuration') {
-      const c0 = choice;
-      const alt = formationsFor(ph, an).filter((c) => !same(c, c0) && c[0] === 'unison' && COLLAB.has(c[1]));
-      if (alt.length) choice = alt[0];
-    }
-    if (choice === null) {
-      choice = echo(seen, ev, ph) ?? fresh(an, ph, phrases, plan, sectionLean.get(letter)!);
-      seen.push([signature(ev, ph), choice]);
-    }
-    plan.push(choice);
-    if (sec && sec.repeatOf < 0 && !SELF_PACED.includes(ph.gesture)) {
-      if (!sectionPlans.has(letter)) sectionPlans.set(letter, []);
-      sectionPlans.get(letter)!.push(choice);
-    }
-  });
-  return plan;
-}
-
-const SELF_PACED = ['motif', 'cadence', 'trill'];       // gestures whose formations are never replayed
-
-const countIf = <T>(xs: T[], p: (x: T) => boolean) => xs.reduce((n, x) => n + (p(x) ? 1 : 0), 0);
-
-/** When the last build in the plan so far started (-99 before the first). */
-function lastBuild(plan: Formation[], phrases: Phrase[]): number {
-  const t = plan.flatMap((f, i) => (CAT.BUILDS.has(f[1]) ? [phrases[i].t0] : []));
-  return t.length ? Math.max(...t) : -99;
-}
-
-/** A build, for a phrase that is a real crescendo whatever its section did before: it is where the
- * frunk rises. Two kinds: the loudness rises (band recordings), or the music rises - the line climbs by
- * an octave or more and lands on a held chord (an organ, where the loudness barely moves). */
-function buildFor(an: Analysis, ph: Phrase, phrases: Phrase[], plan: Formation[]): Formation | null {
-  if (ph.gesture !== 'figuration' || ph.b - ph.a < 10) return null;
-  const ev = an.events;
-  const louder = louderAtEnd(an, ph) && ph.t1 - ph.t0 >= 4;
-  const tops = ev.top.slice(ph.a, ph.b);
-  const climb = slope(tops) * tops.length;
-  const lands = ev.dur[ph.b - 1] >= 0.8
-    || (ph.b < ev.t.length && ev.kind[ph.b] >= 2 && ev.t[ph.b] - ph.t1 < 0.6);
-  const musical = climb >= 12 && lands && ph.t1 - ph.t0 >= 3;
-  const nBuilds = countIf(plan, (f) => CAT.BUILDS.has(f[1]));
-  const room = nBuilds < 1 + an.duration / 50.0;       // about one build per 50 s of song at most
-  const spaced = ph.t0 - lastBuild(plan, phrases) >= (musical ? 12 : 20);
-  const crescendo = ph.mood !== 'calm' && room && (louder || musical) && spaced;
-  if (!crescendo) return null;
-  const kinds = ['out_in', 'accelerando', 'fill_stage', 'implode', ...(an.beatScore >= 2.0 ? ['bounce_build'] : [])];
-  if (an.beatScore < 2.0) kinds.splice(kinds.indexOf('accelerando'), 1);     // a strobe-roll on the beat
-  return ['unison', kinds[nBuilds % kinds.length]];
-}
-
-/** The formation this phrase had the k-th time round when its section was first heard, a step bigger for
- * each step the section's ceiling has risen since; null when that no longer suits. */
-function callback(an: Analysis, ph: Phrase, sec: Section, earlier: Formation[], k: number, plan: Formation[])
-  : Formation | null {
-  const secs = an.sections;
-  const beatOk = an.beatScore >= 2.0;
-  const steps = Math.max(0, sec.ceiling - secs[sec.repeatOf].ceiling);
-  let choice = escalate(earlier[k % earlier.length], steps, beatOk);
-  if (CAT.BUILDS.has(choice[1])) return null;          // builds are placed by the crescendo detector only
-  if (sec.ceiling >= 3 && allIn(choice, QUIET)) {      // a climax never replays a quiet move
-    choice = escalate(choice, 1, beatOk);
-    if (allIn(choice, QUIET)) {
-      choice = ['unison', same(plan[plan.length - 1], ['unison', 'lr_notes']) ? 'rotation' : 'lr_notes'];
-    }
-  }
-  // A callback must still suit this moment's mood; and from the third hearing of a section on, it is
-  // varied - a sibling move on the same grid that fits the mood - so the audience recognises the
-  // section without seeing the identical picture.
-  const hearing = countIf(secs.slice(0, secs.indexOf(sec)), (q) => q.letter === sec.letter);
-  const mood = ph.mood ?? 'drive';
-  if (CAT.fits(choice, mood) && hearing < 2) return choice;
-  const grid = CAT.info(choice)?.grid, c0 = choice;
-  const sibs = grid === undefined ? []
-    : sortBy(formationsFor(ph, an).filter((c) => !same(c, c0) && CAT.info(c)?.grid === grid),
-      (c) => countIf(plan, (h) => same(h, c)));
-  if (sibs.length) return sibs[0];
-  return CAT.fits(choice, mood) ? choice : null;
-}
-
-/** For a figuration phrase with the melodic shape of an earlier one, that phrase's formation, if it
- * suits this phrase's mood: the audience sees the figure come back. */
-function echo(seen: [Float64Array | null, Formation][], ev: Events, ph: Phrase): Formation | null {
-  const sig = signature(ev, ph);
-  if (sig === null || ph.gesture !== 'figuration') return null;
-  for (const [s2, f2] of seen) {
-    if (s2 !== null && s2.length === sig.length) {
-      const c = corrcoef(sig, s2);
-      if (Number.isFinite(c) && c >= 0.9 && CAT.fits(f2, ph.mood ?? 'drive')) return f2;
-    }
-  }
-  return null;
-}
-
-/** The best formation for a phrase that has no callback or echo: not one of the last two, not over its
- * share of the song, the section's lean first, then the least used; a build at most every 20 s; and in
- * lively sections enough moves that pass something between the cars. */
-function fresh(an: Analysis, ph: Phrase, phrases: Phrase[], plan: Formation[], lean: string): Formation {
-  const cands = formationsFor(ph, an);
-  const recent = plan.slice(-2);
-  const used = new Map<string, number>();
-  for (const h of plan) used.set(key(h), (used.get(key(h)) ?? 0) + 1);
-  const cap = Math.max(2, Math.trunc(0.07 * phrases.length));      // no move dominates the song
-  const u = (c: Formation) => used.get(key(c)) ?? 0;
-  const isRecent = (c: Formation) => recent.some((r) => same(r, c));
-  let ordered = cands.map((c, i) => [i, c] as const).sort((x, y) => {
-    const kx = [+isRecent(x[1]), +(u(x[1]) >= cap), +(x[1][0] !== lean), u(x[1]), x[0]];
-    const ky = [+isRecent(y[1]), +(u(y[1]) >= cap), +(y[1][0] !== lean), u(y[1]), y[0]];
-    for (let i = 0; i < kx.length; i++) if (kx[i] !== ky[i]) return kx[i] - ky[i];
-    return 0;
-  });
-  // a crescendo build is a big gesture: at most one every 20 s
-  const last = lastBuild(plan, phrases);
-  const spaced = ordered.filter(([, c]) => !(CAT.BUILDS.has(c[1]) && ph.t0 - last < 20));
-  ordered = spaced.length ? spaced : ordered;
-  let choice = ordered[0][1];
-  // Collaboration quota: in lively sections, at least 60% of phrases must be moves where the cars pass
-  // something between them - they carry the show.
-  if (ceilingAt(an, ph.t0) >= 2) {
-    const recentLively = plan.filter((_, i) => ceilingAt(an, phrases[i].t0) >= 2).slice(-9);
-    const collab = countIf(recentLively, (h) => h[0] === 'unison' && COLLAB.has(h[1]));
-    const share = collab / Math.max(1, recentLively.length);
-    if (share < 0.6 && !(choice[0] === 'unison' && COLLAB.has(choice[1]))) {
-      const alt = ordered.map(([, c]) => c).filter((c) => c[0] === 'unison' && COLLAB.has(c[1]) && !isRecent(c));
-      if (alt.length) choice = alt[0];
-    }
-  }
-  // A real crescendo always gets the build (it is also where the frunk rises).
-  if (same(cands[0], ['unison', 'out_in']) && ph.t0 - last >= 20) choice = cands[0];
-  return choice;
-}
-
-/** No lively phrase may play out mostly dark. A note-driven move over a thin transcription (a soft
- * sung tail, a hummed chorus) can leave the stage black for seconds; when fewer than an eighth of a
- * lively phrase's frames light anything (a beat-strobe move like pinball sits near a fifth), a beat
- * march (or a pulse without a beat) is laid over it so the stage keeps moving. */
-function darknessGuard(cars: Car[], an: Analysis, phrases: Phrase[]) {
-  // Only the note-following moves can fail this way; the beat strobes (pinball, syncopate,
-  // bounce_build, lr_beat...) are sparse on purpose and are left alone.
-  const noteDriven = new Set(['wave', 'converge', 'lr_notes', 'keyboard', 'rotation', 'mirror', 'relay', 'meter', 'pulse',
-    'block', 'shimmer', 'rain', 'heartbeat', 'expand_contract', 'fade_cross', 'y_keyboard | ct_comets',
-    'y_keyboard | ct_scan', 'y_keyboard | ct_meter', 'y_ripple_in | ct_comets', 'y_breathe | ct_comets']);
-  for (const ph of phrases.slice(1)) {      // the first phrase is the opening statement: its silences are the point
-    if (ceilingAt(an, ph.t0) < 2 || ph.t1 - ph.t0 < 3.0 || !noteDriven.has(ph.move!)) continue;
-    const f0 = Math.trunc(ph.t0 / an.step), f1 = Math.trunc(ph.t1 / an.step);
-    const shares = cars.map((c) => {
-      const end = Math.min(f1, c.nFrames);
-      let n = 0;
-      for (let f = f0; f < end; f++) {
-        for (let ch = 0; ch < 30; ch++) {
-          if (c.get(f, ch) > 0) {
-            n++;
-            break;
-          }
-        }
-      }
-      return n / (end - f0);
-    });
-    const lit = mean(shares);
-    if (lit >= 0.12) continue;
-    const extra = ph.mood === 'calm' ? 'breathe_wash' : an.beatScore >= 2.0 ? 'march' : 'pulse';
-    M.UNISON[extra](cars, an, ph);
-    ph.move += '+' + extra;
-  }
-}
-
-const BIG = new Set(['wave', 'converge', 'out_in', 'cadence', 'heartbeat', 'call_response', 'lr_beat', 'relay', 'pinball',
-  'syncopate', 'expand_contract', 'fill_stage', 'march', 'cascade', 'tug_of_war', 'bounce_build',
-  'checker', 'beam', 'lr_channel', 'implode', 'curtain', 'marquee', 'crossing', 'shockwave', 'scanner',
-  'accelerando']);
-const SOFT: Record<string, [number, number, number]> = { calm: [C.ON_500, C.OFF_1000, 1.0], groove: [C.ON, C.OFF_500, 0.5] };
-
-/** Every phrase's formation, with what joins them: a breath of black before a big move, the bar passing
- * the baton when unison turns to split or back, a release or a landing after each build, and the
- * arrival chords as punctuation. */
-function playPhrases(cars: Car[], an: Analysis, phrases: Phrase[]) {
-  const plan = choosePlan(an, phrases);
-  const ct = M.centreTruck(cars);
-  let nHits = 0;
-  phrases.forEach((ph, k) => {
-    const f = plan[k], prev = k ? phrases[k - 1] : null;
-    ph.move = f[0] === 'unison' ? f[1] : `${f[1]} | ${f[2]}`;
-    // A breath before a big move: everything dark for a quarter second, so it lands.
-    if (f[0] === 'unison' && BIG.has(f[1]) && ph.t0 - (prev ? prev.t1 : -9.0) < 0.6 && ph.t0 > 0.5) {
-      for (const c of cars) {
-        c.set(c.everything(), ph.t0 - 0.25, ph.t0 - 0.02, 0);
-        c.set(C.FRONT_BAR, ph.t0 - 0.25, ph.t0 - 0.02, 0);
-      }
-    }
-    // A handoff when the formation kind changes: the truck's bar passes the baton.
-    if (prev && plan[k - 1][0] !== f[0] && ct !== null && ceilingAt(an, ph.t0) >= 1) {
-      M.barFlash(ct, ph.t0 - 0.02, 0.18, 0.6);
-    }
-    const play = prev && CAT.BUILDS.has(prev.move ?? '') ? afterBuild(cars, an, ph, prev) : ph;
-    playFormation(cars, an, ph, play, f);
-    nHits = arrivals(cars, an, ph, nHits);
-  });
-}
-
-/** Release or drop after a build: when the music falls back, the stage tears down over two bars from
- * the first downbeat and the phrase's own move starts after it (the part of the phrase that is left is
- * returned); when it stays up, a shockwave marks the landing. */
-function afterBuild(cars: Car[], an: Analysis, ph: Phrase, build: Phrase): Phrase {
-  const downs = an.downbeats.filter((d) => d >= ph.t0 - 0.05 && d < ph.t1);
-  const d0 = downs.length ? downs[0] : ph.t0;
-  if (!(ph.energy! < build.energy! - 0.12 || (ph.mood === 'calm' && build.mood !== 'calm'))) {
-    M.shockwave(cars, an, { t0: d0, t1: d0 + 0.5, mood: 'drive' });
-    return ph;
-  }
-  const span = Math.min(2 * TEMPO.barLen(an), 0.6 * (ph.t1 - d0));
-  if (span < 1.0) return ph;
-  M.teardown(cars, d0, span);
-  ph.move = 'teardown → ' + ph.move;
-  const t0 = d0 + span;
-  return { ...ph, t0, a: searchsorted(an.events.t, t0) };
-}
-
-/** The phrase's formation over `play` (the phrase, or what a teardown left of it). A calm passage
- * follows fewer notes (mood.thinned) and its long lights glow on ramps (Car.soft); beat moves keep to
- * the mood's pace. */
-function playFormation(cars: Car[], an: Analysis, ph: Phrase, play: Phrase, f: Formation) {
-  const ys = M.sides(cars), ct = M.centreTruck(cars);
-  const info = CAT.info(f);
-  const saved = an.events;
-  an.pace = ph.mood === 'calm' || ph.mood === 'groove' ? ph.pace : null;
-  if (info != null && info.grid === 'note' && ph.mood === 'calm' && !['run', 'motif'].includes(ph.gesture)
-    && play.b - play.a >= 3) {
-    [an.events, play] = MD.thinned(an, play);
-  }
-  for (const c of cars) c.soft = info == null || !['build', 'self'].includes(info.grid) ? SOFT[ph.mood!] ?? null : null;
-  if ((play.t1 - play.t0 >= 0.5 && play.b > play.a) || play === ph) {
-    if (f[0] === 'unison') {
-      M.UNISON[f[1]](cars, an, play);
+function passages(an: Analysis): Passage[] {
+  const secs = an.sections?.length ? an.sections : [{ t0: 0, t1: an.duration, letter: 'A' }];
+  const peaks = an.noveltyPeaks;
+  const changes = (t: number) => peaks.some(([p, v]) => v >= CHANGE && Math.abs(p - t) <= 2);
+  const out: Passage[] = [];
+  const seen = new Set<string>();
+  for (const s of secs) {
+    const last = out[out.length - 1];
+    if (last && !seen.has(s.letter) && !changes(s.t0) && flowsAt(an, s.t0) === flowsAt(an, last.t0)) {
+      last.t1 = s.t1;                                       // the same music carries on
+      last.letters.push(s.letter);
     } else {
-      M.SIDE[f[1]](ys, an, play);
-      if (ct !== null) M.CENTRE[f[2]](ct, an, play);        // no Cybertruck: every car plays the side cars' part
+      out.push({ t0: s.t0, t1: s.t1, letters: [s.letter], piece: 0 });
     }
+    seen.add(s.letter);
   }
-  an.events = saved;
-  an.pace = null;
-  for (const c of cars) c.soft = null;
+  // long passages split where the sound changes most
+  const split = (p: Passage): Passage[] => {
+    if (p.t1 - p.t0 <= LONG_S) return [p];
+    const inner = peaks.filter(([t, v]) => v >= 0.5 && t > p.t0 + PIECE_S && t < p.t1 - PIECE_S);
+    if (!inner.length) return [p];
+    const [cut] = inner.reduce((a, b) => (b[1] > a[1] ? b : a));
+    return [...split({ ...p, t1: cut }), ...split({ ...p, t0: cut })];
+  };
+  return out.flatMap((p) => split(p).map((q, k) => ({ ...q, piece: k })));
 }
 
-/** The phrase's arrival chords, punctuation whatever the formation: in lively music the whole stage
- * hits (every other short one a lightning strike), a calm arrival glows, and where the arc says stay
- * modest the headlights flash. `nHits` counts the stage hits so far; the new count is returned. */
-function arrivals(cars: Car[], an: Analysis, ph: Phrase, nHits: number): number {
+/** Does the passage call for a move that follows the melody (notes enough to follow) rather than the
+ * beat (a clear beat under sparse notes: a singer over a band)? Either will do in between: then the one
+ * the previous passage didn't take, for contrast. */
+function family(an: Analysis, p: Passage, before: 'note' | 'beat' | null): 'note' | 'beat' {
   const ev = an.events;
+  const notes = ev.t.filter((t) => t >= p.t0 && t < p.t1).length / Math.max(p.t1 - p.t0, 1);
+  const clear = clarity(an, p.t0, p.t1, 0);
+  if (clear < 2.0 || notes >= 5.5) return 'note';
+  if (notes < 2.0 || (kitAt(an, (p.t0 + p.t1) / 2) && notes < 3.5)) return 'beat';
+  return before === 'note' ? 'beat' : 'note';
+}
+
+/** Every passage's move, and every phrase's: a phrase whose shape asks for its own move (chords, a trill,
+ * a cadence, the motif) plays that; the rest play their passage's. A beat move plays across its whole
+ * passage, rests included; a note move plays each phrase's notes. */
+function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
+  const used = new Map<string, number>();
+  const byLetter = new Map<string, string[]>();
+  let prev: string | null = null, prevFamily: 'note' | 'beat' | null = null;
+  const ps = passages(an).filter((p) => !flowsAt(an, (p.t0 + p.t1) / 2));
+  for (const p of ps) {
+    let move = byLetter.get(p.letters[0])?.[p.piece];
+    if (move === undefined) {
+      const fam = family(an, p, prevFamily);
+      const pool = fam === 'note' ? CAT.NOTE_MOVES : CAT.BEAT_MOVES;
+      const fresh = pool.filter((m) => m !== prev);
+      move = fresh.reduce((best, m) => ((used.get(m) ?? 0) < (used.get(best) ?? 0) ? m : best), fresh[0]);
+    }
+    for (const letter of p.letters) {                       // a letter heard again replays this
+      if (!byLetter.has(letter)) byLetter.set(letter, []);
+      byLetter.get(letter)![p.piece] ??= move;
+    }
+    used.set(move, (used.get(move) ?? 0) + 1);
+    prev = move;
+    prevFamily = CAT.NOTE_MOVES.includes(move) ? 'note' : 'beat';
+    const own = phrases.filter((ph) => ph.t0 >= p.t0 - 0.01 && ph.t0 < p.t1);
+    for (const ph of own) ph.move = CAT.FOR_GESTURE[ph.gesture] ?? move;
+    if (prevFamily === 'beat') {
+      // the beat move across the passage, around the phrases that play their own
+      let t = p.t0;
+      for (const ph of [...own.filter((q) => q.move !== move), { t0: p.t1, t1: p.t1 } as Phrase]) {
+        if (ph.t0 - t >= 1.0) M.MOVES[move](cars, an, stretch(an, t, ph.t0));
+        t = Math.max(t, ph.t1);
+      }
+    }
+    for (const ph of own) if (ph.move !== move || prevFamily === 'note') M.MOVES[ph.move!](cars, an, ph);
+    for (const ph of own) arrivals(cars, an, ph);
+  }
+}
+
+/** A stretch of a passage as a phrase, for a beat move. */
+function stretch(an: Analysis, t0: number, t1: number): Phrase {
+  const a = searchsorted(an.events.t, t0), b = searchsorted(an.events.t, t1);
+  return { a, b, t0, t1, gesture: 'figuration', density: 0, up: 0.5, lo: an.pitchLo, hi: an.pitchHi, index: 0,
+    level: levelOver(an, t0, t1) };
+}
+
+/** The phrase's arrival chords, punctuation whatever the move: in lively music the whole stage hits (every
+ * other short one a lightning strike), a calm arrival glows, and in between the headlights flash. */
+function arrivals(cars: Car[], an: Analysis, ph: Phrase) {
+  const ev = an.events;
+  let n = 0;
   for (let i = ph.a; i < ph.b; i++) {
-    if (!(ev.arrival[i] && ph.move !== 'cadence')) continue;
-    const t = ev.t[i];
-    if (ceilingAt(an, t) >= 2 && ph.mood !== 'calm') {
-      nHits++;
-      if (nHits % 2 === 0 && ev.dur[i] < 0.8) M.lightning(cars, t);
+    if (!ev.arrival[i] || ph.move === 'cadence') continue;
+    const t = ev.t[i], s = levelAt(an, t);
+    if (s >= 0.6) {
+      if (n++ % 2 === 1 && ev.dur[i] < 0.8) M.lightning(cars, t);
       else M.allOn(cars, t, clip(ev.dur[i], 0.3, 1.2));
-    } else if (ph.mood === 'calm') {
+    } else if (s < 0.4) {
       for (const c of cars) {
         c.light(c.inner(), t, t + 0.8, C.ON_500);
         c.light(c.inner(), t + 0.8, t + 1.8, C.OFF_1000);
@@ -527,11 +191,29 @@ function arrivals(cars: Car[], an: Analysis, ph: Phrase, nHits: number): number 
       for (const c of cars) c.flash(c.heads(), t, 0.15);
     }
   }
-  return nHits;
 }
 
-/** A moment moved onto the music's grid: onto the beat when it is within a quarter beat of one (a line's
- * strongest attack can read a little late), else onto the nearest eighth. */
+/** Long low notes in quiet music: the middle car's inner beams swell slowly and release, so the pedal reads
+ * as weight underneath. */
+function pedal(cars: Car[], an: Analysis) {
+  const ev = an.events;
+  const trucks = cars.filter((c) => c.isCt);
+  const anchor = trucks.length ? trucks : [cars[Math.floor(cars.length / 2)]];
+  for (let i = 0; i < ev.t.length; i++) {
+    const t = ev.t[i];
+    if (ev.low[i] <= 45 && ev.dur[i] >= 0.8 && levelAt(an, t) < 0.6 && !flowsAt(an, t)) {
+      const d = Math.min(ev.dur[i], 2.5);
+      for (const c of anchor) {
+        c.light(c.inner(), t, t + d, C.ON_2000);
+        c.light(c.inner(), t + d, t + d + 2.1, C.OFF_2000);
+      }
+    }
+  }
+}
+
+// ---- Lyrics ------------------------------------------------------------------------------------
+
+/** A moment moved onto the music's grid: onto the beat within a quarter beat of one, else the nearest eighth. */
 function onGrid(an: Analysis, t: number): number {
   const b = an.beats;
   if (b.length < 2) return t;
@@ -570,59 +252,83 @@ function colours(cars: Car[], said: Moment[]) {
   }
 }
 
-/** Where a rhythm section plays (feel.ts), the kit is the rhythm: kicks (strong low onsets) thump the
- * fogs, snares (strong high onsets) flash the side cars' accents, hats (weak high onsets) tick every
- * car's markers - all gated by the section's ceiling and the mood, so quiet sections stay quiet. */
-function drums(cars: Car[], an: Analysis) {
-  const ys = M.sides(cars);
-  for (const [t, strength] of an.bass) {
-    if (!kitAt(an, t)) continue;
-    const mood = MD.moodAt(an, t);
-    if (ceilingAt(an, t) < 1 || strength < 0.25 || mood === 'calm' || (mood === 'groove' && strength < 0.5)) continue;
-    for (const c of cars) if (!c.isCt) c.flash(c.fogs(), t, 0.08 + 0.06 * strength);
-  }
-  for (const [t, strength] of an.highs) {
-    if (!kitAt(an, t)) continue;
-    const ceiling = ceilingAt(an, t);
-    const mood = MD.moodAt(an, t);
-    if (ceiling < 1 || mood === 'calm') continue;
-    if (mood === 'groove' && strength < 0.6) continue;     // groove: the snare only, no hats
-    if (strength >= 0.5) for (const c of ys) c.flash(c.accents(), t, 0.08);
-    else if (ceiling >= 2) for (const c of cars) c.flash(c.markers(), t, 0.06);
-  }
+// ---- The end and the frames --------------------------------------------------------------------
+
+/** The music's last strong beat: the last beat in the final 12 s whose attack is at least 60 % of the
+ * strongest there. */
+function finalBeat(an: Analysis, end: number): number | null {
+  const env = an.pulseEnv;
+  const b = an.beats.filter((x) => x > end - 12 && x < end - 0.6);
+  if (!env || !b.length) return null;
+  const hop = an.pulseHop;
+  const strength = b.map((x) => {
+    const i = clip(Math.round(x / hop), 1, env.length - 2);
+    return Math.max(env[i - 1], env[i], env[i + 1]);
+  });
+  const threshold = 0.6 * Math.max(...strength);
+  const strong = b.filter((_, k) => strength[k] >= threshold);
+  return strong.length ? strong[strong.length - 1] : null;
 }
 
-/** Where the music beats without a rhythm section (an orchestra, an organ): timpani and low-brass hits
- * (low onsets) thump the headlights in lively sections; cymbal and string attacks (high onsets) tick the
- * markers at full power. */
-function percussion(cars: Car[], an: Analysis) {
-  const here = (t: number) => !flowsAt(an, t) && !kitAt(an, t);
-  for (const [t, strength] of an.bass) {
-    const mood = MD.moodAt(an, t);
-    if (here(t) && ceilingAt(an, t) >= 2 && strength >= 0.5 && (mood === 'drive' || mood === 'frenzy')) {
-      for (const c of cars) c.flash(c.heads(), t, 0.1 + 0.08 * strength);
+/** The ending: everything on at the last strong hit, then a 2 s fade to dark, the bars with it. */
+function finale(cars: Car[], an: Analysis) {
+  const end = an.duration;
+  const late = an.hits.filter((h) => h < end - 1.5);
+  let t = late.length && late[late.length - 1] > end - 12 ? late[late.length - 1] : Math.max(end - 3.0, 0);
+  const last = finalBeat(an, end);
+  if (last !== null && last > t) t = last;
+  const fadeEnd = Math.min(end - 0.1, t + 2.5);
+  const bars: number[] = [];
+  for (let ch = C.FRONT_BAR[0]; ch <= C.REAR_BAR[C.REAR_BAR.length - 1]; ch++) bars.push(ch);
+  for (const c of cars) {
+    for (const ch of c.everything()) {
+      c.set(ch, t, t + 0.3, C.ON);
+      c.set(ch, t + 0.3, fadeEnd, C.OFF_2000);
+    }
+    c.set(bars, t, fadeEnd, 0);
+    c.set(bars, fadeEnd, an.duration, 0);
+    if (c.isCt) {
+      const n = c.fr(fadeEnd) - c.fr(t);
+      const env = Array.from(linspace(1.15, 0, n), (v) => clip(v, 0, 1));
+      c.pixels(C.FRONT_BAR, t, env.map((v) => new Array(C.FRONT_BAR.length).fill(v)));
+      c.pixels(C.REAR_BAR, t, env.map((v) => new Array(C.REAR_BAR.length).fill(v)));
     }
   }
-  for (const [t, strength] of an.highs) {
-    if (!here(t) || ceilingAt(an, t) < 3 || strength < 0.6) continue;
-    for (const c of cars) c.flash(c.markers(), t, 0.06);
-  }
 }
 
-/** Long low notes: the centre car's inner beams swell slowly (2 s ramp) and release, so the pedal reads
- * as weight underneath without parking the headlights on. */
-function pedal(cars: Car[], an: Analysis) {
-  const ev = an.events;
-  const trucks = cars.filter((c) => c.isCt);
-  const anchor = trucks.length ? trucks : [cars[Math.floor(cars.length / 2)]];
-  for (let i = 0; i < ev.t.length; i++) {
-    if (ev.low[i] <= 45 && ev.dur[i] >= 0.8 && ceilingAt(an, ev.t[i]) <= 1 && !flowsAt(an, ev.t[i])) {
-      const t = ev.t[i], d = Math.min(ev.dur[i], 2.5);
-      for (const c of anchor) {
-        c.light(c.inner(), t, t + d, C.ON_2000);
-        c.light(c.inner(), t + d, t + d + 2.1, C.OFF_2000);
+const SILENT = 0.06, SILENT_S = 0.4;     // the loudness (an.loudness) of silence, and how long it must last
+
+/** Silence is dark: wherever the music stops for SILENT_S or more, every lamp that is still on fades out
+ * over half a second from the moment the sound stopped, and the bars and cabins go dark with it. Fades
+ * already running (a finale, the legato ending) carry on. */
+function hush(cars: Car[], an: Analysis) {
+  const x = an.loudness, n = an.nFrames, need = Math.round(SILENT_S / an.step), fade = Math.round(0.5 / an.step);
+  const lamps: number[] = [];
+  for (let ch = 0; ch < C.L_FALCON; ch++) lamps.push(ch);
+  const pixels = [...C.FRONT_BAR, ...C.REAR_BAR, ...C.OFFROAD_BAR, ...C.ALL_RGB.flatMap((ch) => [ch, ch + 1, ch + 2])];
+  for (let a = 0; a < n;) {
+    if (x[a] >= SILENT) {
+      a++;
+      continue;
+    }
+    let b = a;
+    while (b < n && x[b] < SILENT) b++;
+    if (b - a >= need) {
+      const from = a + 2, to = b - 1;                    // a frame's grace either side: the lights lead by one
+      for (const c of cars) {
+        for (let f = from; f < to; f++) {
+          for (const ch of lamps) {
+            const v = c.get(f, ch);
+            if (v >= 128) c.put(f, ch, f - from < fade ? C.OFF_500 : 0);
+          }
+          for (const ch of pixels) {
+            const v = c.get(f, ch);
+            if (v) c.put(f, ch, Math.trunc(v * clip(1 - (f - from) / (0.3 / an.step), 0, 1)));
+          }
+        }
       }
     }
+    a = b;
   }
 }
 
@@ -659,79 +365,5 @@ function tidy(car: Car) {
       if (s1 - e0 < minOff) for (let f = s1; f < Math.min(n, e0 + minOff); f++) col[f] = 0;
     }
     for (let f = 0; f < n; f++) car.put(f, ch, col[f]);
-  }
-}
-
-/** The cabins glow with the intensity tier, purple to orange, flash on the beats and the accents when
- * the music is lively, and warm through each crescendo (where the music flows, legato.ts colours them). */
-function interior(cars: Car[], an: Analysis) {
-  const base: Record<number, [number[], number]> = { 0: [PURPLE, 0.3], 1: [PURPLE, 0.6], 2: [ORANGE, 0.6], 3: [ORANGE, 1.0] };
-  const tiers = an.tier;
-  const beating = (t: number) => !flowsAt(an, t);
-  let i = 0;
-  while (i < an.nFrames) {
-    let j = i;
-    const on = beating(i * an.step);
-    while (j < an.nFrames && tiers[j] === tiers[i] && beating(j * an.step) === on) j++;
-    const [color, scale] = base[Math.trunc(tiers[i])];
-    if (on) for (const c of cars) c.rgb(i * an.step, j * an.step, color, scale);
-    i = j;
-  }
-  for (const bt of an.beats) {
-    if (tierAt(an, bt) < 2 || !beating(bt)) continue;
-    for (const c of cars) c.rgb(bt, bt + 0.1, tierAt(an, bt) === 3 ? ORANGE : PURPLE, 1.0);
-  }
-  for (const h of an.hits) {
-    if (tierAt(an, h) >= 1 && beating(h)) for (const c of cars) c.rgb(h, h + 0.12, WHITE);
-  }
-  for (const [a, b] of runs(an.build.map((x, f) => x > 0 && beating(f * an.step)))) {
-    for (let k = 0; k < b - a; k += 5) {
-      const p = an.build[a + k];
-      const col = [0, 1, 2].map((q) => Math.trunc(PURPLE[q] + (ORANGE[q] - PURPLE[q]) * p));
-      for (const c of cars) c.rgb((a + k) * an.step, (a + k + 5) * an.step, col, 0.5 + 0.5 * p);
-    }
-  }
-}
-
-/** The music's last strong beat: the last beat in the final 12 s whose attack is at least 60 % of the
- * strongest there (a song that grooves to the end lands its finale on its final hit, not on the last
- * accent the accent detector happened to catch). */
-function finalBeat(an: Analysis, end: number): number | null {
-  const env = an.pulseEnv;
-  const b = an.beats.filter((x) => x > end - 12 && x < end - 0.6);
-  if (!env || !b.length) return null;
-  const hop = an.pulseHop ?? 512 / 22050;
-  const strength = b.map((x) => {
-    const i = clip(Math.round(x / hop), 1, env.length - 2);
-    return Math.max(env[i - 1], env[i], env[i + 1]);
-  });
-  const threshold = 0.6 * Math.max(...strength);
-  const strong = b.filter((_, k) => strength[k] >= threshold);
-  return strong.length ? strong[strong.length - 1] : null;
-}
-
-/** The ending: everything on at the last strong hit, then a 2 s fade to dark (the truck's bars fade
- * with it). */
-function finale(cars: Car[], an: Analysis) {
-  const end = an.duration;
-  const late = an.hits.filter((h) => h < end - 1.5);
-  let t = late.length && late[late.length - 1] > end - 12 ? late[late.length - 1] : Math.max(end - 3.0, 0);
-  const last = finalBeat(an, end);
-  if (last !== null && last > t) t = last;
-  const fadeEnd = Math.min(end - 0.1, t + 2.5);
-  const bars: number[] = [];
-  for (let ch = C.FRONT_BAR[0]; ch <= C.REAR_BAR[C.REAR_BAR.length - 1]; ch++) bars.push(ch);
-  for (const c of cars) {
-    for (const ch of c.everything()) {
-      c.set(ch, t, t + 0.3, C.ON);
-      c.set(ch, t + 0.3, fadeEnd, C.OFF_2000);
-    }
-    c.set(bars, t, fadeEnd, 0);
-    if (c.isCt) {
-      const n = c.fr(fadeEnd) - c.fr(t);
-      const env = Array.from(linspace(1.15, 0, n), (v) => clip(v, 0, 1));
-      c.pixels(C.FRONT_BAR, t, env.map((v) => new Array(C.FRONT_BAR.length).fill(v)));
-      c.pixels(C.REAR_BAR, t, env.map((v) => new Array(C.REAR_BAR.length).fill(v)));
-    }
   }
 }

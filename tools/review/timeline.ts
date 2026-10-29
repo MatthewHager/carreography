@@ -3,6 +3,7 @@
 // loudness, beats, bass and treble hits, notes). One picture per stretch of the song, and an overview.
 
 import type { Analysis } from '@/engine/analysis';
+import { stepOf } from '@/engine/level';
 import { dim, mix, Picture, type Rgb } from './image';
 import type { CarView, Row } from './stage';
 
@@ -21,7 +22,7 @@ const BG: Rgb = [14, 14, 18], ROW_BG: Rgb = [24, 24, 30], DANCING: Rgb = [255, 6
 const MOODS: Record<string, Rgb> = {
   calm: [40, 60, 115], groove: [35, 100, 60], drive: [140, 95, 20], frenzy: [150, 35, 35],
 };
-const TIERS: Rgb[] = [[70, 90, 140], [40, 160, 150], [230, 150, 40], [235, 60, 50]];
+const STEP_COLORS: Rgb[] = [[60, 70, 110], [70, 90, 140], [40, 160, 150], [230, 150, 40], [235, 60, 50]];
 const SECTION_COLORS: Rgb[] = [[70, 70, 120], [110, 70, 50], [50, 100, 90], [110, 60, 110], [90, 100, 40],
   [60, 90, 130], [120, 80, 80], [70, 110, 60]];
 
@@ -32,6 +33,15 @@ interface Band {
 }
 
 const clock = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+
+/** The mean of a per-frame curve over [t0, t1) seconds. */
+export function meanOf(c: ArrayLike<number> | undefined, t0: number, t1: number): number {
+  if (!c?.length) return 0;
+  const a = Math.min(Math.trunc(t0 / STEP), c.length - 1), b = Math.min(Math.max(a + 1, Math.trunc(t1 / STEP)), c.length);
+  let m = 0;
+  for (let i = a; i < b; i++) m += c[i];
+  return m / (b - a);
+}
 
 /** Beats a minute, from the tracked beats' mean spacing. */
 export function bpm(beats: number[]): number {
@@ -88,10 +98,10 @@ export function drawTimeline(r: Review, t0: number, t1: number, pxPerS: number):
     pic.rect(a, y, 1, PITCH, [0, 0, 0]);
     pic.text(a + 3, y + 1, text, WHITE, b - a - 4);
   };
-  bands.push({ h: PITCH + 2, label: 'section, ceiling', draw: (y) => {
+  bands.push({ h: PITCH + 2, label: 'section, level', draw: (y) => {
     for (const s of sec) {
       const c = SECTION_COLORS[s.letter.charCodeAt(0) % SECTION_COLORS.length];
-      if (s.t1 > t0 && s.t0 < t1) span(y, s.t0, s.t1, c, `${s.letter} ceil ${s.ceiling}`);
+      if (s.t1 > t0 && s.t0 < t1) span(y, s.t0, s.t1, c, `${s.letter} ${meanOf(an.level, s.t0, s.t1).toFixed(2)}`);
     }
   } });
   const phrases = (an.phrases ?? []).filter((p) => p.t1 > t0 && p.t0 < t1);
@@ -143,13 +153,13 @@ export function drawTimeline(r: Review, t0: number, t1: number, pxPerS: number):
 
   // --- the music ---
   bands.push({ h: 6, draw: (y) => pic.rect(0, y + 2, W, 1, [60, 60, 70]) });
-  bands.push({ h: 40, label: 'loudness (tier colour)', draw: (y) => {
+  bands.push({ h: 40, label: 'loudness, level', draw: (y) => {
     lane(y, 39);
     for (let x = 0; x < plotW; x++) {
-      const v = colMax(an.intensity, x), tier = Math.round(colMax(an.tier, x));
+      const v = colMax(an.loudness, x), lv = an.level ? colMax(an.level, x) : 0;
       const hh = Math.round(v * 38);
-      pic.rect(GUTTER + x, y + 39 - hh, 1, hh, TIERS[Math.max(0, Math.min(3, tier))]);
-      pic.set(GUTTER + x, y + 39 - Math.round(colMax(an.loudFast, x) * 38), [235, 235, 235]);
+      pic.rect(GUTTER + x, y + 39 - hh, 1, hh, STEP_COLORS[stepOf(lv)]);
+      if (an.level) pic.set(GUTTER + x, y + 39 - Math.round(lv * 38), [235, 235, 235]);
     }
     for (const t of an.hits.filter(inView)) pic.rect(X(t), y, 1, 5, WHITE);
   } });
@@ -162,7 +172,6 @@ export function drawTimeline(r: Review, t0: number, t1: number, pxPerS: number):
       }
     } });
   strip('build (crescendo)', an.build, [255, 220, 60]);
-  strip('energy (mood)', an.energy, [90, 230, 120]);
   bands.push({ h: 12, label: 'beats, downbeats', draw: (y) => {
     lane(y, 11);
     for (const t of beats) pic.rect(X(t), y + 5, 1, 6, FAINT);
@@ -172,8 +181,9 @@ export function drawTimeline(r: Review, t0: number, t1: number, pxPerS: number):
     lane(y, PITCH - 1);
     for (const [t, v] of rows) if (inView(t)) pic.rect(X(t), y, Math.max(1, pxPerS * 0.04), PITCH - 1, dim(c, v));
   } });
-  ticks('bass hits', an.bass, [255, 110, 50]);
-  ticks('treble hits', an.highs, [80, 200, 255]);
+  ticks('kick', an.kick, [255, 110, 50]);
+  ticks('snare, clap, snap', an.snare, [255, 200, 60]);
+  ticks('hats', an.hats, [80, 200, 255]);
 
   // the piano roll: every transcribed note, the melody the moves follow as red dots
   const notes = r.notes.filter((n) => n[1] > t0 && n[0] < t1);

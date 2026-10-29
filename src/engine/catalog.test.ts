@@ -4,7 +4,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { markdown, SPLIT, UNISON } from './catalog';
+import { BEAT_MOVES, FOR_GESTURE, markdown, MOVES, NOTE_MOVES } from './catalog';
 import * as M from './moves';
 
 /** The top of this checkout: the nearest folder up that holds .git. */
@@ -13,9 +13,8 @@ const top = (dir: string): string =>
 
 describe('the move catalogue', () => {
   it('lists exactly the moves there are', () => {
-    expect(Object.keys(UNISON).sort()).toEqual(Object.keys(M.UNISON).sort());
-    expect([...new Set(SPLIT.map(([y]) => y))].sort()).toEqual(Object.keys(M.SIDE).sort());
-    expect([...new Set(SPLIT.map(([, c]) => c))].sort()).toEqual(Object.keys(M.CENTRE).sort());
+    expect(Object.keys(MOVES).sort()).toEqual(Object.keys(M.MOVES).sort());
+    for (const m of [...NOTE_MOVES, ...BEAT_MOVES, ...Object.values(FOR_GESTURE)]) expect(MOVES).toHaveProperty(m);
   });
 
   it('is what MOVES.md says', () => {

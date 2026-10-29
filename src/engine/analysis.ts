@@ -30,8 +30,8 @@ export interface Section {
   beats: number[];
 }
 
-/** A phrase: the unit a move is chosen for (phrases.ts), events [a, b). The choreographer adds its
- * mood, energy and pace (mood.ts) and the move it plays. */
+/** A phrase: the unit a move plays over (phrases.ts), events [a, b). The choreographer adds its level
+ * and mood (mood.ts) and the move it plays. */
 export interface Phrase {
   a: number;
   b: number;
@@ -43,10 +43,9 @@ export interface Phrase {
   lo: number;           // the melody's lowest and highest pitch
   hi: number;
   index: number;        // the phrase's number among those with its gesture
+  level?: number;
   mood?: string;
   move?: string;
-  pace?: number;
-  energy?: number;
 }
 
 /** One sung line of the lyrics, timed by line only (LRCLIB): when it starts and stops, and what it says. */
@@ -107,6 +106,5 @@ export interface Analysis {
   lyricLines?: LyricLine[] | null;                   // LRCLIB's lines, lined up with this recording
   // set while choreographing
   phrases?: Phrase[];
-  pace?: number | null;  // the current phrase's seconds between hits, for the beat moves (mood.ts)
-  energy?: Float64Array; // per frame 0..1 (mood.energyCurve)
+  level?: Float32Array;  // per frame 0..1: how big the show is (level.ts)
 }

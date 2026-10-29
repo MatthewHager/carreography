@@ -3,7 +3,7 @@
 
 import * as C from '@/engine/channels';
 import { CLOSURE_CLOSE, CLOSURE_DANCE, CLOSURE_LIMITS, CLOSURE_OPEN, CLOSURE_STOP, N_CHANNELS } from '@/engine/channels';
-import { bpm, type Review } from './timeline';
+import { bpm, meanOf, type Review } from './timeline';
 
 const STEP = 0.02;
 const NEAR = 3;                 // frames (60 ms) either side of a beat or a note that count as "on" it
@@ -59,9 +59,9 @@ export function summarize(r: Review, frames: Uint8Array[]): string {
 
   const line = (label: string, f0: number, f1: number) => {
     const span = Math.max(1, f1 - f0), secs = span * STEP;
-    const loud = an.intensity.slice(f0, f1).reduce((a, b) => a + b, 0) / span;
+    const loud = meanOf(an.loudness, f0 * STEP, f1 * STEP), level = meanOf(an.level, f0 * STEP, f1 * STEP);
     const bps = an.beats.filter((t) => t >= f0 * STEP && t < f1 * STEP).length / secs;
-    out.push(`${label}  music: loudness ${loud.toFixed(2)}, ${bps.toFixed(1)} beats/s`);
+    out.push(`${label}  music: loudness ${loud.toFixed(2)}, level ${level.toFixed(2)}, ${bps.toFixed(1)} beats/s`);
     r.cars.forEach((car, i) => {
       const s = stats[i];
       let lit = 0, mass = 0, on = 0, beat = 0, note = 0;
@@ -84,11 +84,11 @@ export function summarize(r: Review, frames: Uint8Array[]): string {
 
   // does the light follow the song's arc? the music's loudness against each car's light, 10 s at a time
   out.push('');
-  out.push('ARC (every 10 s: loudness, then each car\'s light and flashes/s)');
+  out.push('ARC (every 10 s: loudness and the show\'s level, then each car\'s light and flashes/s)');
   const W = 10 / STEP;
   for (let f0 = 0; f0 < n; f0 += W) {
     const f1 = Math.min(n, f0 + W), span = f1 - f0;
-    const loud = an.intensity.slice(f0, f1).reduce((a, b) => a + b, 0) / span;
+    const loud = meanOf(an.loudness, f0 * STEP, f1 * STEP), level = meanOf(an.level, f0 * STEP, f1 * STEP);
     const cars = stats.map((s) => {
       let mass = 0, on = 0;
       for (let f = f0; f < f1; f++) {
@@ -97,13 +97,13 @@ export function summarize(r: Review, frames: Uint8Array[]): string {
       }
       return `${(mass / span).toFixed(2)} ${(on / (span * STEP)).toFixed(1).padStart(4)}/s`;
     });
-    out.push(`    ${clock(f0 * STEP)}  loudness ${loud.toFixed(2)}  |  ${cars.join('  |  ')}`);
+    out.push(`    ${clock(f0 * STEP)}  loudness ${loud.toFixed(2)} level ${level.toFixed(2)}  |  ${cars.join('  |  ')}`);
   }
 
   for (const s of an.sections ?? []) {
     out.push('');
     out.push(`SECTION ${s.letter} (${s.nth ? `heard ${s.nth + 1}x` : 'first'})  ${clock(s.t0)}-${clock(s.t1)}  `
-      + `ceiling ${s.ceiling}  energy ${s.energy.toFixed(2)}`);
+      + `level ${meanOf(an.level, s.t0, s.t1).toFixed(2)}`);
     const phrases = (an.phrases ?? []).filter((p) => p.t0 >= s.t0 - 1e-6 && p.t0 < s.t1);
     for (const p of phrases) {
       out.push(`    ${clock(p.t0)}  ${(p.t1 - p.t0).toFixed(1).padStart(4)} s  ${(p.mood ?? '').padEnd(6)} `

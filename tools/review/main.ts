@@ -159,8 +159,8 @@ export async function main(argv: string[]): Promise<number> {
     title, lineup, duration: an.duration, tempo: an.tempo, beatScore: an.beatScore,
     sections: an.sections, phrases: an.phrases, beats: an.beats,
     downbeats: an.downbeats, hits: an.hits, bass: an.bass, highs: an.highs, lyricLines: an.lyricLines ?? null,
-    curves: { hz: 10, intensity: tenth(an.intensity), tier: tenth(an.tier), build: tenth(an.build),
-      loudFast: tenth(an.loudFast), energy: tenth(an.energy) },
+    curves: { hz: 10, loudness: tenth(an.loudness), level: tenth(an.level), build: tenth(an.build) },
+    drums: { kick: an.kick, snare: an.snare, hats: an.hats },
   }, null, 1));
 
   const from = Math.max(0, Number(o.from ?? 0)), to = Math.min(an.duration, Number(o.to ?? an.duration));
