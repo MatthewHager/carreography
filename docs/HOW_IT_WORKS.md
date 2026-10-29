@@ -112,12 +112,12 @@ The show is made in layers, each sized by one **level**:
    the peak is every lamp.
 2. **Where it flows** (`feel.ts`). A section with no steady beat to follow (the neural tracker's beats
    wander there, and the music doesn't hit on them) gets the **legato** style (`legato.ts`). Its breath
-   (half each phrase's swell, half the loudness against the twelve seconds around it) rises with each sung
-   phrase and falls after it: lamps that read on each car join and leave in layers on 2 s ramps (a 2025+
-   Model Y's fender repeaters and bar centre, a Cybertruck's side markers and frunk light, the tails, the
-   outer beams at the top), as many as the level allows (one when calm, four at the peak), so the stage
-   inhales and exhales with the singer and still grows to the climax; a Cybertruck's whole bar glows with
-   the breath and with the voice, the melody's spot glides along the bar
+   (mostly each phrase's swell, and the loudness against the twelve seconds around it) rises with each
+   sung phrase and falls after it: lamps that read on each car join one at a time on 2 s ramps and leave
+   together (a 2025+ Model Y's fender repeaters and bar centre, a Cybertruck's side markers, the tails, the
+   outer beams at the top), as many as the level allows (one when calm, all four well into drive), so the
+   stage inhales and exhales with the singer and still grows to the climax; a Cybertruck's whole bar glows
+   with the breath, the song's arc and the voice, the melody's spot glides along the bar
    and every note is a comet on it, the melody sweeps the inner beams car to car and a 2025+ Model Y's bar
    end, centre, end (smoothed over half a second, so an arpeggio drifts while a run sweeps the stage as
    fast as it is played), the interiors warm
