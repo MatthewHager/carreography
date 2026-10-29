@@ -1,6 +1,6 @@
 // The test songs (songs.ts), for the tests. What the two listening models heard in each is kept as a
 // fixture (fixtures.test.ts), so the tests need no models: the song is made again and the rest of the
-// listening (analyze()) runs here. A fresh copy each time, since choreographing writes into its analysis.
+// listening (analyze()) runs here. A fresh copy each time, so no test sees what another changed.
 
 import type { Analysis } from '../analysis';
 import { STEP_MS } from '../channels';

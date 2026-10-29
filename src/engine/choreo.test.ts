@@ -2,7 +2,7 @@
 // show hears from the music alone where to flow and where a rhythm section plays.
 
 import { describe, expect, it } from 'vitest';
-import { choreograph } from './choreo';
+import { choreograph, makeShow } from './choreo';
 import { feel } from './feel';
 import { FIXTURES, fixture } from './fixtures';
 
@@ -17,6 +17,12 @@ describe('the same input gives the same show', () => {
       expect(show(song, 'YCY')).toEqual(first);
     });
   }
+
+  it('choreographing one analysis again, for another lineup and back, gives the same bytes', () => {
+    const an = fixture('groove'), first = choreograph(an, 'YCY').map((c) => c.frames);
+    choreograph(an, 'SXC');
+    expect(choreograph(an, 'YCY').map((c) => c.frames)).toEqual(first);
+  });
 });
 
 describe('the music says where to flow and where the drums play', () => {
@@ -36,9 +42,7 @@ describe('the music says where to flow and where the drums play', () => {
   });
 
   it('every phrase of a flowing song is legato, and none of a groove', () => {
-    const chorale = fixture('chorale'), groove = fixture('groove');
-    choreograph(chorale, 'YCY');
-    choreograph(groove, 'YCY');
+    const chorale = makeShow(fixture('chorale'), 'YCY').an, groove = makeShow(fixture('groove'), 'YCY').an;
     expect(chorale.phrases!.every((ph) => ph.move === 'legato')).toBe(true);
     expect(groove.phrases!.some((ph) => ph.move === 'legato')).toBe(false);
   });

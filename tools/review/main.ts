@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { STEP_MS } from '@/engine/channels';
-import { choreograph } from '@/engine/choreo';
+import { makeShow } from '@/engine/choreo';
 import { builds, drops } from '@/engine/pulse';
 import { place, vocalCurve } from '@/engine/listen/align';
 import { analyze } from '@/engine/listen/audio';
@@ -133,19 +133,19 @@ export async function main(argv: string[]): Promise<number> {
   // as pipeline.ts and show.worker.ts do: mixed down first, then to 22050 Hz
   const y = monoAt22050([mixdown(channels)], sampleRate);
   const heard = await listen(y, path.join(outRoot, '.listen'), !!o.fresh);     // shared, whatever --out says
-  const an = analyze(y, { stepMs: STEP_MS, notes: heard.notes, neuralBeats: heard.beats });
+  const listened = analyze(y, { stepMs: STEP_MS, notes: heard.notes, neuralBeats: heard.beats });
   if (o.lyrics) {
     const tags = readTags(new Uint8Array(bytes), path.basename(song));
     const found = await lookup(tags, channels[0].length / sampleRate).catch(() => null);
     const vocals = channels.length > 1 ? vocalCurve(channels[0], channels[1], sampleRate) : null;
-    const placed = found?.status === 'found' ? place(found.candidates, vocals, an.duration) : null;
-    an.lyricLines = placed?.lines ?? null;
+    const placed = found?.status === 'found' ? place(found.candidates, vocals, listened.duration) : null;
+    listened.lyricLines = placed?.lines ?? null;
     const report = placed?.report;
     const got = report ? `${report.lines} lines, offset ${report.offset ?? '-'} s` : found?.status ?? 'failed';
     console.log(`Lyrics: ${got}`);
   }
   const t = Date.now();
-  const cars = choreograph(an, lineup);
+  const { cars, an } = makeShow(listened, lineup);     // the analysis as the show used it
   console.log(`Choreographed in ${Date.now() - t} ms`);
 
   mkdirSync(path.join(out, 'show'), { recursive: true });
@@ -160,7 +160,8 @@ export async function main(argv: string[]): Promise<number> {
   writeFileSync(path.join(out, 'show.json'), JSON.stringify({
     title, lineup, duration: an.duration, tempo: an.tempo, beatScore: an.beatScore,
     sections: an.sections, phrases: an.phrases, beats: an.beats,
-    downbeats: an.downbeats, hits: an.hits, builds: builds(an), drops: drops(an), lyricLines: an.lyricLines ?? null,
+    downbeats: an.downbeats, hits: an.hits, builds: builds(an), drops: drops(an),
+    lyricLines: an.lyricLines ?? null,
     curves: { hz: 10, loudness: tenth(an.loudness), level: tenth(an.level) },
     drums: { kick: an.kick, snare: an.snare, hats: an.hats },
   }, null, 1));

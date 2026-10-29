@@ -31,8 +31,17 @@ import * as PULSE from './pulse';
 import { segment } from './phrases';
 import * as TEMPO from './tempo';
 
-/** The show for a lineup (car letters, crowd-left to right), from the song's analysis. */
-export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
+/** The show for a lineup (car letters, crowd-left to right), from the song's analysis (which it leaves as
+ * it was heard, so the same analysis can be choreographed again, for another lineup, to the same bytes). */
+export function choreograph(heard: Analysis, layout = 'YCY'): Car[] {
+  return makeShow(heard, layout).cars;
+}
+
+/** The show, and the analysis it was made from: a copy of what was heard, with the beats moved onto what
+ * is played, the level, the phrases and their moves, and the headlights the beat owns (the review draws
+ * these). */
+export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: Analysis } {
+  const an = structuredClone(heard);
   const cars = makeLineup(layout, an.nFrames, an.step);
   const sung = an.lyricLines?.length ? an.lyricLines : null;     // a sung line starts a phrase
   const phrases = segment(an.events, sung ? sung.map((l) => l.t) : null);
@@ -68,7 +77,7 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
       for (let ch = C.FRONT_BAR[0]; ch < C.N_CHANNELS; ch++) car.put(f, ch, 0);
     }
   }
-  return cars;
+  return { cars, an };
 }
 
 // ---- Passages ----------------------------------------------------------------------------------
