@@ -520,10 +520,13 @@ const beam: Move = (cars, an, ph) => {
   });
 };
 
-/** Every beat the light runs in from both ends of the stage, car by car (half by half for one or two cars),
- * and meets in the middle on the "and". */
+/** What a ring of light passes through: the cars, or for one or two cars their halves. */
+const ringsOf = (cars: Car[]): [Car, LR | null][] => (cars.length > 2 ? units(cars) : slots(cars));
+
+/** Every beat the light runs in from both ends of the stage, car by car, and meets in the middle on the
+ * "and". */
 const converge: Move = (cars, an, ph) => {
-  const all = cars.length > 2 ? units(cars) : slots(cars), n = all.length, rings = Math.ceil(n / 2);
+  const all = ringsOf(cars), n = all.length, rings = Math.ceil(n / 2);
   const beats = grid(an, ph);
   beats.forEach((b, k) => {
     const s = levelAt(an, b), half8 = beatAt(an, b) / 2, end = b + holdFor(next(beats, k, 2 * half8) - b, s);
@@ -538,16 +541,16 @@ const converge: Move = (cars, an, ph) => {
   });
 };
 
-/** On the beat (at the level's pace) a ring of light leaves the middle of the stage and travels out through
- * every car to both ends. */
+/** On the beat (at the level's pace) a ring of light leaves the middle of the stage and travels out car by
+ * car to both ends. */
 const shockwave: Move = (cars, an, ph) => {
-  const all = slots(cars), n = all.length, rings = n / 2, beats = grid(an, ph);
+  const all = ringsOf(cars), n = all.length, rings = Math.ceil(n / 2), beats = grid(an, ph);
   beats.forEach((d, k) => {
     const s = Math.max(levelAt(an, d), GROOVE), step = beatAt(an, d) / 8;
     const end = d + holdFor(next(beats, k, 0.5) - d, s);
-    for (let r = 0; r < rings; r++) {                              // r = 0: the middle pair
+    for (let r = 0; r < rings; r++) {                              // r = 0: the middle
       const t = d + r * step;
-      for (const j of new Set([rings - 1 - r, rings + r])) ring(all[j], t, Math.max(end, t + 0.14), s);
+      for (const j of new Set([rings - 1 - r, n - rings + r])) ring(all[j], t, Math.max(end, t + 0.14), s);
     }
     for (const car of cars.filter((c) => c.isCt)) {
       const m = frames(car, d, 0.45);
