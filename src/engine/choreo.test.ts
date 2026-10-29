@@ -2,6 +2,7 @@
 // show hears from the music alone where to flow and where a rhythm section plays.
 
 import { describe, expect, it } from 'vitest';
+import { FLOW_MOVES } from './catalog';
 import { choreograph, makeShow } from './choreo';
 import { feel } from './feel';
 import { FIXTURES, fixture } from './fixtures';
@@ -41,9 +42,9 @@ describe('the music says where to flow and where the drums play', () => {
     expect(sections.find((f) => f.t0 <= 50 && 50 < f.t1)?.flow).toBe(false);       // the march
   });
 
-  it('every phrase of a flowing song is legato, and none of a groove', () => {
+  it('every phrase of a flowing song plays a flowing move, and none of a groove', () => {
     const chorale = makeShow(fixture('chorale'), 'YCY').an, groove = makeShow(fixture('groove'), 'YCY').an;
-    expect(chorale.phrases!.every((ph) => ph.move === 'legato')).toBe(true);
-    expect(groove.phrases!.some((ph) => ph.move === 'legato')).toBe(false);
+    expect(chorale.phrases!.every((ph) => FLOW_MOVES.includes(ph.move!))).toBe(true);
+    expect(groove.phrases!.some((ph) => FLOW_MOVES.includes(ph.move!))).toBe(false);
   });
 });

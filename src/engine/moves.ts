@@ -14,7 +14,7 @@ import type { Analysis, Phrase } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
 import { CALM, DRIVE, GROOVE, levelAt, levelOver, PEAK, stepOf } from './level';
-import { arange, clip, cumsum, diff, linspace, quantiles, searchsorted, sum } from './np';
+import { arange, clip, cumsum, diff, linspace, quantiles, runs, searchsorted, sum } from './np';
 import { beatLen } from './tempo';
 
 const ON_500 = C.ON_500, OFF_500 = C.OFF_500, OFF_1000 = C.OFF_1000;
@@ -662,6 +662,99 @@ function ring([car, side]: [Car, LR], t: number, end: number, s: number, own: nu
   car.light(chs, end, end + 0.5, OFF_500);
 }
 
+// --- flowing moves ---------------------------------------------------------------------------------
+// With no beat to follow, the light glides with the melody instead of hitting.
+
+const GLIDE_S = 0.5, SPREAD_S = 3;     // the melody's place is smoothed over this, then spread over this
+const paths = new WeakMap<Analysis, Float64Array>();
+
+/** Per frame, the melody's place on the stage, 0..1 (NaN where none sounds): the louder two thirds of the
+ * notes, each placed by the range around it (localRanges), smoothed over GLIDE_S, so an arpeggio's turns
+ * cancel out and the line drifts while a run keeps its way, then spread over the stage again by its own
+ * range within SPREAD_S, so a quiet fugue entry still passes from end to end. */
+function melodyPath(an: Analysis): Float64Array {
+  let out = paths.get(an);
+  if (out) return out;
+  const ev = an.events, n = an.nFrames, step = an.step, pos = new Float64Array(n).fill(NaN);
+  const range: [number, number][] = [];
+  for (const ph of an.phrases ?? []) range.splice(ph.a, ph.b - ph.a, ...localRanges(an, ph));
+  const cut = ev.amp.length ? quantiles(ev.amp, [0.35])[0] : 0;
+  const kept = ev.t.flatMap((_, i) => (ev.amp[i] >= cut && range[i] ? [i] : []));
+  kept.forEach((i, k) => {
+    const end = Math.min(ev.t[i] + Math.max(ev.dur[i], 0.4), ev.t[kept[k + 1]] ?? Infinity);
+    pos.fill(posOf(ev.top[i], ...range[i]), Math.min(n, Math.trunc(ev.t[i] / step)),
+      Math.min(n, Math.trunc(end / step) + 1));
+  });
+  const w = Math.round(GLIDE_S / 2 / step), mean = new Float64Array(n).fill(NaN);
+  let sum = 0, cnt = 0;
+  for (let i = -w; i < n; i++) {             // a running mean of what sounds over the window
+    const add = i + w, drop = i - w - 1;
+    if (add < n && !Number.isNaN(pos[add])) [sum, cnt] = [sum + pos[add], cnt + 1];
+    if (drop >= 0 && !Number.isNaN(pos[drop])) [sum, cnt] = [sum - pos[drop], cnt - 1];
+    if (i >= 0 && !Number.isNaN(pos[i]) && cnt) mean[i] = sum / cnt;
+  }
+  const r = Math.round(SPREAD_S / step), stride = 5;
+  out = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < n; i += stride) {
+    let lo = Infinity, hi = -Infinity;
+    for (let j = Math.max(0, i - r); j < Math.min(n, i + r); j += stride) {
+      if (!Number.isNaN(mean[j])) [lo, hi] = [Math.min(lo, mean[j]), Math.max(hi, mean[j])];
+    }
+    for (let f = i; f < Math.min(n, i + stride); f++) {
+      if (!Number.isNaN(mean[f])) out[f] = hi - lo > 0.1 ? (mean[f] - lo) / (hi - lo) : mean[f];
+    }
+  }
+  paths.set(an, out);
+  return out;
+}
+
+/** The melody gliding across the stage on the inner beams, lit at each of `places(p)` for its place p (0..1):
+ * a beam it passes lights crisply, one it rests on swells in and out; a 2025+ Model Y's bar takes it end,
+ * centre, end, a truck's bar as a bright spot where it sits, with every note a comet on it. */
+const flowing = (places: (p: number) => number[]): Move => (cars, an, ph) => {
+  const path = melodyPath(an), step = an.step, a = Math.trunc(ph.t0 / step);
+  const b = Math.min(path.length, Math.trunc(ph.t1 / step));
+  const lit = new Map<string, Uint8Array>();          // per car and inner beam or bar section, the frames lit
+  const spot = new Map<Car, Rows>();
+  const mark = (key: string, f: number) => {
+    if (!lit.has(key)) lit.set(key, new Uint8Array(b - a));
+    lit.get(key)![f - a] = 1;
+  };
+  for (let f = a; f < b; f++) {
+    if (Number.isNaN(path[f])) continue;
+    for (const q of places(path[f])) {
+      const [car, side, w] = slotAt(cars, q), k = cars.indexOf(car);
+      mark(`${k} ${side}`, f);
+      if (car.juniper) mark(`${k} ${Math.min(2, Math.floor(w * 3))}`, f);
+      if (!car.isCt) continue;
+      if (!spot.has(car)) spot.set(car, rows(b - a, () => 0));
+      const row = spot.get(car)![f - a];
+      for (let j = 0; j < BAR; j++) row[j] = Math.max(row[j], 0.9 * Math.exp(-(((j - w * (BAR - 1)) / 6) ** 2)));
+    }
+  }
+  for (const [key, on] of lit) {
+    const [k, part] = key.split(' '), car = cars[Number(k)];
+    for (const [f0, f1] of runs(on)) {
+      const t0 = (a + f0) * step, held = (f1 - f0) * step >= HELD_NOTE_S, t1 = (a + f1) * step + (held ? 0.25 : 0.1);
+      if (part === 'L' || part === 'R') {
+        car.light(car.inner(part), t0, t1, held ? C.ON_1000 : C.ON);
+        car.light(car.inner(part), t1, t1 + (held ? 1 : 0.5), held ? OFF_1000 : OFF_500);
+      } else {
+        const [lo, hi] = [[0, 0.25], [0.25, 0.75], [0.75, 1]][Number(part)];
+        barSpan(car, t0, t1 - t0, lo, hi);
+      }
+    }
+  }
+  for (const [car, r] of spot) car.pixels(C.FRONT_BAR, ph.t0, r);
+  barMelody(cars, an, ph);
+};
+
+/** The melody gliding across the stage by pitch, low on the crowd's left. */
+const glide = flowing((p) => [p]);
+
+/** The melody as the distance from the middle: low notes at the centre, high ones at both ends at once. */
+const bloom = flowing((p) => [0.5 - p / 2, 0.5 + p / 2]);
+
 // --- hits ------------------------------------------------------------------------------------------
 
 /** Every lamp of every car on at t for `hold`, then a half-second fade. */
@@ -677,24 +770,20 @@ export function allOn(cars: Car[], t: number, hold: number) {
   }
 }
 
-/** Three stage-wide strobes, 60 ms on and 70 ms off, then black. */
+/** Three stage-wide strobes, 100 ms on and 80 ms off, then black for a quarter of a second. */
 export function lightning(cars: Car[], t: number) {
-  for (let k = 0; k < 3; k++) {
-    const t0 = t + k * 0.13;
-    for (const c of cars) {
-      c.set(c.everything(), t0 - 0.01, t0, 0);
-      c.light(c.everything(), t0, t0 + 0.06);
-      if (c.isCt) barFlash(c, t0, 0.07, 1.0);
-    }
-  }
   for (const c of cars) {
-    c.set(c.everything(), t + 0.39, t + 0.64, 0);
-    c.set(C.FRONT_BAR, t + 0.39, t + 0.64, 0);
+    for (let k = 0; k < 3; k++) {
+      const t0 = t + k * 0.18;
+      c.light(c.everything(), t0, t0 + 0.1);
+      if (c.isCt) barFlash(c, t0, 0.1, 1.0);
+      c.set([...c.everything(), ...C.FRONT_BAR], t0 + 0.1, t0 + (k < 2 ? 0.18 : 0.45), 0);
+    }
   }
 }
 
 /** Every move by its catalogue name (catalog.ts). */
 export const MOVES: Record<string, Move> = {
   keyboard, relay, mirror, lr_notes: lrNotes, antiphony, block, shimmer, motif, cadence, swell,
-  march, lr_channel: lrChannel, checker, tug_of_war: tugOfWar, beam, converge, shockwave,
+  march, lr_channel: lrChannel, checker, tug_of_war: tugOfWar, beam, converge, shockwave, glide, bloom,
 };

@@ -38,6 +38,7 @@ const STRUCK = 1.3;
 export interface Feel {
   t0: number;
   t1: number;
+  letter: string;       // the form map's letter: the same material is the same letter
   flow: boolean;
   kit: boolean;
   steady: boolean;
@@ -91,12 +92,12 @@ const read = new WeakMap<Analysis, Feel[]>();
 export function feel(an: Analysis, phrases?: Phrase[]): Feel[] {
   let out = read.get(an);
   if (out && !phrases) return out;
-  const spans = an.sections?.length ? an.sections.map((s) => [s.t0, s.t1]) : [[0, an.duration]];
-  out = spans.map(([t0, t1]) => {
+  const spans = an.sections?.length ? an.sections : [{ t0: 0, t1: an.duration, letter: 'A' }];
+  out = spans.map(({ t0, t1, letter }) => {
     const beats = an.beats.filter((b) => b >= t0 && b < t1);
     const heard = an.heardBeats ? an.heardBeats.filter((b) => b >= t0 && b < t1) : beats;
     const steady = steadiness(heard, STEADY_TOL) >= STEADY;
-    return { t0, t1, flow: !steady && clarity(an, t0, t1, 0) < FLOW_CLARITY, kit: false, steady };
+    return { t0, t1, letter, flow: !steady && clarity(an, t0, t1, 0) < FLOW_CLARITY, kit: false, steady };
   });
   // a short stretch between two that agree goes their way: the style doesn't flip for a few bars (judged on
   // the stretches as heard, so one flip doesn't lead to the next)

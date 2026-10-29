@@ -22,3 +22,5 @@ What each move looks like, when the choreographer plays it, and what it locks to
 | converge | on the beat the light runs in from both ends and meets in the middle on the "and" | a figure that follows its beat | beat |
 | beam | a searchlight two slots wide sweeps the stage over each bar, and back the next | a figure that follows its beat | bar |
 | shockwave | on the beat a ring of light leaves the middle and runs out to both ends, the stage held lit until the next | a figure that follows its beat | beat |
+| glide | the melody glides across the inner beams by pitch, low on the crowd's left, a spot along the bar; a beam it rests on swells in | a figure where the music flows | note |
+| bloom | the melody glides out from the middle as it rises, on the inner beams at both ends at once, two spots along the bar | a figure where the music flows | note |

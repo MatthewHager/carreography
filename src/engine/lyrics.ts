@@ -3,6 +3,11 @@
 // lightning, a word sung twice in a line pings across the cars.
 
 import type { Analysis, LyricLine } from './analysis';
+import type { Car } from './car';
+import * as C from './channels';
+import { flowsAt } from './feel';
+import * as M from './moves';
+import { clip, searchsorted } from './np';
 
 /** A picture a line calls for: interior colours from t0 to t1, a lightning strike at t0, or a ping of
  * one car's front at t0 (the k-th word of a chant lands on car k, round the lineup). */
@@ -84,4 +89,41 @@ export function moments(lines: LyricLine[], an: Analysis): Moment[] {
     }
   }
   return out.sort((x, y) => x.t0 - y.t0);
+}
+
+/** A moment moved onto the music's grid: onto the beat within a quarter beat of one, else the nearest
+ * eighth. */
+export function onGrid(an: Analysis, t: number): number {
+  const b = an.beats;
+  if (b.length < 2) return t;
+  const i = clip(searchsorted(b, t), 1, b.length - 1);
+  const near = t - b[i - 1] <= b[i] - t ? b[i - 1] : b[i];
+  if (Math.abs(near - t) <= 0.25 * M.beatAt(an, t)) return near;
+  return M.snap(an, t, 2);
+}
+
+/** The moments on the stage: a line's colour in every cabin while it is sung; its lightning strike or chant
+ * pings on the music's grid, where the music has a beat (a chant's words one car's whole front each, across
+ * the lineup). */
+export function apply(cars: Car[], an: Analysis, said: Moment[]) {
+  for (const m of said) {
+    if (m.do === 'color') {
+      const a = cars[0].fr(m.t0), b = cars[0].fr(m.t1);
+      for (const car of cars) {
+        for (const base of C.ALL_RGB) {
+          for (let i = 0; i < 3; i++) for (let f = a; f < b; f++) car.put(f, base + i, Math.trunc(m.color![i]));
+        }
+      }
+      continue;
+    }
+    if (flowsAt(an, m.t0)) continue;
+    const t = onGrid(an, m.t0);
+    if (m.do === 'lightning') {
+      M.lightning(cars, t);
+    } else {
+      const car = cars[m.car! % cars.length];
+      car.light([...car.sig(), ...car.drl(), ...car.heads()], t, t + 0.22);
+      if (car.isCt) M.barFlash(car, t, 0.3, 1.0);
+    }
+  }
 }

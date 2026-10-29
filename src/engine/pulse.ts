@@ -187,6 +187,7 @@ export function apply(cars: Car[], an: Analysis): void {
     }
   }
   for (const [s0, land] of builds(an)) buildPulse(cars, an, s0, land);
+  dropHits(cars, an);
 }
 
 /** The pulse through a build: half notes, then every beat, then eighths in the last bar - the middle car
@@ -212,7 +213,7 @@ function buildPulse(cars: Car[], an: Analysis, t0: number, land: number): void {
 }
 
 /** Each drop: black for a beat before it, then every lamp of every car on together for a beat. */
-export function dropHits(cars: Car[], an: Analysis): void {
+function dropHits(cars: Car[], an: Analysis): void {
   for (const d of drops(an)) {
     const beat = M.beatAt(an, d), gap = clip(beat, 0.25, 0.6);
     for (const c of cars) {

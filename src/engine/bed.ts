@@ -2,31 +2,30 @@
 // stage carries the song's arc while the moves, the beat and the drums play on top.
 //
 //   rear       the tail lights from groove up, the number plates, rear fogs and a truck's bed lights from
-//              drive up; a truck's rear bar (its tail light) pumps with the bass, a level meter, brighter as
-//              the level rises
-//   front bar  a truck's front bar glows under the comets wherever the music plays (BAR_GLOW: from a sixth at a
-//              hush, so the centrepiece is there in the dark, to two fifths at the peak), breathing with the
-//              voice and the lead (the 600 Hz-4 kHz band)
+//              drive up; a truck's rear bar (its tail light) pumps with the bass, brighter as the level rises
+//   front bar  a truck's front bar glows under the comets wherever the music plays, brighter with the level
+//              (and, where the music flows, with its breath), breathing with the voice and the lead (the
+//              600 Hz-4 kHz band), so the centrepiece is there even in a pianissimo
 //   cabins     the interiors take the harmony's colour, bar by bar (the pitch class leading the bar, round
 //              the circle of fifths, so related keys sit near each other), else the sound's own (purple when
 //              dull, amber when bright), brighter as the level rises; a white flash on each big accent from a
-//              groove up, and on each downbeat from drive up
-//
-// Where the music flows (feel.ts) the legato style has its own bed.
+//              groove up, and on each downbeat from drive up, where there is a beat
+//   breath     where the music flows (feel.ts) the front lamps the moves leave free come in by the breath:
+//              one layer at a time as a phrase swells, all leaving together as it ends (below)
 
 import type { Analysis } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
 import { flowsAt } from './feel';
-import { CALM, DRIVE, GROOVE } from './level';
+import { CALM, DRIVE, GROOVE, musicSpan, PEAK } from './level';
 import { clip, runs } from './np';
 
 const DWELL_S = 4.0;          // a lamp of the bed stays at least this long once it changes
-const BAR_GLOW = [0.15, 0.4]; // a truck's front bar's glow at a hush (seen in the dark) and at the top
 const METER = 0.7;            // the rear bar's level meter at the top, so a kick's flash still stands out
 const DULL = [110, 0, 200], BRIGHT = [255, 140, 20];
 
-/** Per frame, whether the level is at `at` or above, held for DWELL_S so a lamp never flickers. */
+/** Per frame, whether the level is at `at` or above where the music beats, held for DWELL_S so a lamp never
+ * flickers. */
 function above(an: Analysis, at: number): boolean[] {
   const lv = an.level!, dwell = Math.round(DWELL_S / an.step), out: boolean[] = [];
   let on = false, since = -dwell;
@@ -38,14 +37,6 @@ function above(an: Analysis, at: number): boolean[] {
   return out;
 }
 
-/** A colour for pitch class `pc` (0 C .. 11 B): its place on the circle of fifths as a hue. */
-function hueOf(pc: number): number[] {
-  const h = (((pc * 7) % 12) / 12) * 6, x = 1 - Math.abs((h % 2) - 1);
-  const [r, g, b] = h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x]
-    : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1] : [1, 0, x];
-  return [r * 255, g * 255, b * 255];
-}
-
 export function apply(cars: Car[], an: Analysis): void {
   const lv = an.level!, step = an.step;
   const lit: [number, (c: Car) => number[]][] = [
@@ -55,21 +46,30 @@ export function apply(cars: Car[], an: Analysis): void {
   for (const [at, chs] of lit) {
     for (const [a, b] of runs(above(an, at))) for (const c of cars) c.light(chs(c), a * step, b * step);
   }
-  const glow = (f: number, from: number, top: number) => clip((lv[f] - from) / (1 - from), 0, 1) * top;
+  const B = breath(an);
   const { low, highMid } = an.bands;
   for (const c of cars.filter((q) => q.isCt)) {
     const front: Float64Array[] = [], rear: Float64Array[] = [];
     for (let f = 0; f < an.nFrames; f++) {
-      const on = !flowsAt(an, f * step);
-      const lead = (BAR_GLOW[0] + (BAR_GLOW[1] - BAR_GLOW[0]) * lv[f]) * (0.6 + 0.4 * highMid[f]);
-      front.push(new Float64Array(C.FRONT_BAR.length).fill(on ? lead : 0));
-      const meter = on ? glow(f, CALM, METER) * (0.3 + 0.7 * low[f]) : 0;
+      const flows = !Number.isNaN(B[f]), x = flows ? (lv[f] + B[f]) / 2 : lv[f];
+      const glow = (0.12 + 0.45 * x ** 1.5) * (0.6 + 0.4 * highMid[f]);
+      front.push(new Float64Array(C.FRONT_BAR.length).fill(glow));
+      const meter = flows ? 0 : clip((lv[f] - CALM) / (1 - CALM), 0, 1) * METER * (0.3 + 0.7 * low[f]);
       rear.push(new Float64Array(C.REAR_BAR.length).fill(meter));
     }
     c.pixels(C.FRONT_BAR, 0, front);
     c.pixels(C.REAR_BAR, 0, rear);
   }
   cabins(cars, an);
+  breathe(cars, an, B);
+}
+
+/** A colour for pitch class `pc` (0 C .. 11 B): its place on the circle of fifths as a hue. */
+function hueOf(pc: number): number[] {
+  const h = (((pc * 7) % 12) / 12) * 6, x = 1 - Math.abs((h % 2) - 1);
+  const [r, g, b] = h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x]
+    : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1] : [1, 0, x];
+  return [r * 255, g * 255, b * 255];
 }
 
 /** The spans the cabins hold one colour over: bar to bar (downbeat to downbeat), or two seconds at a time
@@ -86,10 +86,7 @@ function bars(an: Analysis): [number, number][] {
   return edges.slice(1).map((e, i) => [edges[i], e]);
 }
 
-/** The interiors: the bar's harmony as a colour (the pitch class that leads most of the bar, held through
- * it so the colour changes as the chords do), toward the sound's own colour where the harmony is unclear
- * (purple when it is dull, amber when it is bright), brighter as the level rises; a white flash on each big
- * accent from a groove up and on each downbeat from drive up. */
+/** The interiors (see the module notes). */
 function cabins(cars: Car[], an: Analysis): void {
   const lv = an.level!, step = an.step, votes = new Float64Array(12);
   for (const [t0, t1] of bars(an)) {
@@ -100,7 +97,6 @@ function cabins(cars: Car[], an: Analysis): void {
     for (let k = 1; k < 12; k++) if (votes[k] > votes[pc]) pc = k;
     const sure = clip(votes[pc] / Math.max(1, b - a), 0, 1);
     for (let f = a; f < b; f += 5) {
-      if (flowsAt(an, f * step)) continue;
       const s = lv[f], base = DULL.map((d, i) => d + (BRIGHT[i] - d) * an.brightness[f]);
       const colour = hueOf(pc).map((h, i) => h * sure + base[i] * (1 - sure));
       for (const c of cars) c.rgb(f * step, Math.min(f + 5, b) * step, colour, 0.1 + 0.9 * s * s);
@@ -112,5 +108,96 @@ function cabins(cars: Car[], an: Analysis): void {
   }
   for (const h of an.hits) {
     if (loud(h) >= GROOVE && !flowsAt(an, h)) for (const c of cars) c.rgb(h, h + 0.12, [255, 255, 255]);
+  }
+}
+
+// ---- The breath ---------------------------------------------------------------------------------
+// Music that flows gives no beat to hit, so the stage breathes with it instead. The breath is mostly the
+// swell of each phrase (rising from its start, falling into its end) and partly its loudness against the
+// BREATH_S either side; between phrases (a laugh, a drum, a held sound) the loudness alone. Lamps join in
+// layers as it rises and leave together as it falls; how many layers a phrase can reach grows with the
+// level (one when calm, four well into drive, at the peak a fifth: every headlight, the whole stage open
+// for the climax). The lamps that can ramp do so over 2 s; the fogs, markers and tails switch. Car lamps
+// can't hold a dim level, so the breath is how many are lit:
+//                Model Y       2025+ Model Y            Cybertruck
+//     1          signatures    the bar's outer ends     -
+//     2          DRLs          the fender repeaters     side markers         and the tails (a truck's rear bar)
+//     3          fogs          the bar's centre         -
+//     4          outer beams   outer beams              outer beams
+//     5          headlights    headlights               headlights
+
+const RES = 0.25;            // seconds per step of the layers
+const HYST = 0.2;            // a layer goes out this far (in layers) below its way in
+const MIN_DWELL = 0.75;      // seconds a layer stays once it changes
+const BREATH_S = 6;
+const FULL = DRIVE + 0.1;    // the level from which a phrase can reach every layer
+const TAIL_BAR = 0.6;        // a truck's rear bar at the tails' layer: red, not a flash
+
+/** Per frame, the breath 0..1 where the music flows, NaN where it doesn't (see above). */
+function breath(an: Analysis): Float64Array {
+  const n = an.nFrames, x = an.loudness, w = Math.round(0.3 / an.step), cs = new Float64Array(n + 1);
+  const [start, end] = musicSpan(an);
+  const flows = (f: number) => f * an.step >= start && f * an.step < end && flowsAt(an, f * an.step);
+  for (let i = 0; i < n; i++) cs[i + 1] = cs[i] + x[i];
+  const loud = (i: number) => (cs[Math.min(n, i + w + 1)] - cs[Math.max(0, i - w)])
+    / (Math.min(n, i + w + 1) - Math.max(0, i - w));
+  const swell = new Float64Array(n).fill(NaN);
+  for (const ph of an.phrases ?? []) {
+    const a = Math.trunc(ph.t0 / an.step), b = Math.min(n, Math.trunc(ph.t1 / an.step));
+    for (let f = a; f < b; f++) swell[f] = Math.sin((Math.PI * (f - a)) / Math.max(1, b - a)) ** 1.2;
+  }
+  const out = new Float64Array(n).fill(NaN), reach = Math.round(BREATH_S / an.step), stride = 5;
+  for (let i = 0; i < n; i += stride) {
+    if (!flows(i)) continue;
+    let lo = Infinity, hi = -Infinity;
+    for (let j = Math.max(0, i - reach); j < Math.min(n, i + reach); j += stride) {
+      if (flows(j)) [lo, hi] = [Math.min(lo, loud(j)), Math.max(hi, loud(j))];
+    }
+    for (let f = i; f < Math.min(n, i + stride); f++) {
+      const rel = clip((loud(f) - lo) / Math.max(hi - lo, 0.1), 0, 1);
+      out[f] = Number.isNaN(swell[f]) ? rel : 0.6 * swell[f] + 0.4 * rel;
+    }
+  }
+  return out;
+}
+
+/** A car's breathing lamps, layer 1 to 5 (see above). */
+function layerLamps(c: Car): number[][] {
+  if (c.isCt) return [[], c.sig(), [], c.outer(), c.heads()];
+  if (c.juniper) return [c.drl(), c.markers(), c.fogs(), c.outer(), c.heads()];
+  return [c.sig(), c.drl(), c.fogs(), c.outer(), c.heads()];
+}
+
+/** The front lamps breathing where the music flows: per RES step, as many of the layers the level allows
+ * as the breath fills, coming in one at a time and going out together, none changing within MIN_DWELL. The
+ * louder the song is there, the sooner each phrase fills its layers. */
+function breathe(cars: Car[], an: Analysis, B: Float64Array): void {
+  const stride = Math.max(1, Math.round(RES / an.step)), res = stride * an.step, lv = an.level!;
+  const steps = Math.ceil(an.nFrames / stride);
+  let cur = 0, since = -1e9;
+  const lay = Int8Array.from({ length: steps }, (_, i) => {
+    const v = B[i * stride], s = lv[i * stride];
+    if (Number.isNaN(v)) return (cur = 0) - 1;
+    const loud = clip((s - CALM) / (FULL - CALM), 0, 1.4);
+    const cap = clip(1 + 3 * loud, 1, 4) + (s >= PEAK ? 1 : 0), fill = v ** (1.6 - loud) * (cap + 1);
+    let want = cur;
+    while (want < Math.floor(cap) && fill >= want + 1) want += 1;
+    while (want > 0 && (fill < want - HYST || want > cap)) want -= 1;
+    if (want !== cur && i * res - since >= MIN_DWELL) [cur, since] = [want > cur ? cur + 1 : want, i * res];
+    return cur;
+  });
+  for (let k = 1; k <= 5; k++) {
+    for (const [a, b] of runs(Array.from(lay, (v) => v >= k))) {
+      for (const c of cars) {
+        const chs = [...layerLamps(c)[k - 1], ...(k === 2 ? c.tails() : [])];
+        c.light(chs, a * res, b * res, C.ON_2000);
+        c.light(chs, b * res, b * res + 2, C.OFF_2000);
+        if (k === 2 && c.isCt) {
+          const n = c.fr(b * res + 2) - c.fr(a * res), up = Math.round(2 / c.step), hold = c.fr(b * res) - c.fr(a * res);
+          c.pixels(C.REAR_BAR, a * res, Array.from({ length: n }, (_, f) => new Float64Array(C.REAR_BAR.length)
+            .fill(TAIL_BAR * Math.min(1, f / up, f < hold ? 1 : 1 - (f - hold) / up))));
+        }
+      }
+    }
   }
 }

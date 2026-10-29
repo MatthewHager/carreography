@@ -48,14 +48,20 @@ export const MOVES: Record<string, Move> = {
   beam: mv('a searchlight two slots wide sweeps the stage over each bar, and back the next', 'bar'),
   shockwave: mv('on the beat a ring of light leaves the middle and runs out to both ends, the stage held lit '
     + 'until the next', 'beat'),
+  glide: mv("the melody glides across the inner beams by pitch, low on the crowd's left, a spot along the bar; "
+    + 'a beam it rests on swells in', 'note'),
+  bloom: mv('the melody glides out from the middle as it rises, on the inner beams at both ends at once, two '
+    + 'spots along the bar', 'note'),
 };
 
 /** A figure of a passage plays one move: one that follows the melody, or one that follows the beat (choreo.ts
  * chooses which, and the least used of the pool). */
 export const NOTE_MOVES = ['keyboard', 'mirror', 'antiphony', 'relay', 'lr_notes'];
 export const BEAT_MOVES = ['march', 'lr_channel', 'checker', 'beam', 'converge', 'tug_of_war', 'shockwave'];
-/** ... or the swell of a chord held with no beat to follow. */
+/** ... or the swell of a chord held with no beat to follow ... */
 export const HELD_MOVES = ['swell'];
+/** ... or, where the music flows, one that glides with the melody. */
+export const FLOW_MOVES = ['glide', 'bloom'];
 
 /** The move a phrase's shape asks for whatever its passage plays. */
 export const FOR_GESTURE: Record<string, string> = { chords: 'block', cadence: 'cadence', trill: 'shimmer',
@@ -88,5 +94,6 @@ function plays(name: string): string {
   if (NOTE_MOVES.includes(name)) return 'a figure that follows its melody';
   if (BEAT_MOVES.includes(name)) return 'a figure that follows its beat';
   if (HELD_MOVES.includes(name)) return 'a chord held with no beat to follow';
+  if (FLOW_MOVES.includes(name)) return 'a figure where the music flows';
   return '';
 }
