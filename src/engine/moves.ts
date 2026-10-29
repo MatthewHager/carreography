@@ -98,10 +98,10 @@ export const owned = (an: Analysis, t: number) =>
 /** What one hit lights of a car's half at level s: a single lamp at a hush, then the signature and DRL, from
  * a groove the inner headlight too, from drive the outer one as well, leaving the headlights the beat layer
  * owns (`own`, as owned() says) to the beat. A truck's half is its side marker and headlights (its bar is
- * drawn separately); below the peak a 2025+ Model Y's is its bar's end on that side (its DRL: the signature
- * would light the bar's centre too, leaving no half dark). */
+ * drawn separately). A 2025+ Model Y's is its bar's end and centre, but from a groove to the peak only the
+ * end, so the busy figures keep its two halves apart. */
 export function half(car: Car, side: LR, s: number, own = 0): number[] {
-  const out = car.juniper && s < PEAK ? car.drl(side)
+  const out = car.juniper ? (s >= GROOVE && s < PEAK ? car.drl(side) : car.accents(side))
     : car.isCt || s < CALM ? car.sig(side) : car.accents(side);
   if (s >= GROOVE) out.push(...car.inner(side));
   if (s >= DRIVE) out.push(...car.outer(side));
@@ -112,7 +112,9 @@ export function half(car: Car, side: LR, s: number, own = 0): number[] {
 const free = (car: Car, chs: number[], own: number) =>
   chs.filter((ch) => !(own & 1 && car.inner().includes(ch)) && !(own & 2 && car.outer().includes(ch)));
 
-const whole = (car: Car, s: number, own = 0) => [...half(car, 'L', s, own), ...half(car, 'R', s, own)];
+/** Both halves of a car: a 2025+ Model Y's whole bar. */
+const whole = (car: Car, s: number, own = 0) =>
+  [...half(car, 'L', s, own), ...half(car, 'R', s, own), ...(car.juniper ? car.sig() : [])];
 
 const HELD_NOTE_S = 0.6, SWELL_MAX_S = 2.5;     // a note this long is held: it swells, for up to this long
 
@@ -503,18 +505,26 @@ const cadence: Move = (cars, an, ph) => {
   for (let i = ph.a; i < ph.b; i++) allOn(cars, ev.t[i], clip(ev.dur[i], 0.3, 1.5));
 };
 
+const ON_GRID_S = 0.05;     // a note this close to an eighth of the beat map is on it
+
 /** The melody along every truck's bar: a comet at each note's pitch, faint when the music is quiet, so the
  * truck carries the tune under whatever the move does (a beat move, or a note move whose notes are on other
- * cars). */
-export const barMelody: Move = (cars, an, ph) => {
+ * cars). Under a beat move only the notes on the eighths, one an eighth, so the bar keeps the figure's time. */
+export function barMelody(cars: Car[], an: Analysis, ph: Phrase, eighths = false) {
   const trucks = cars.filter((c) => c.isCt), ev = an.events;
   if (!trucks.length) return;
-  const ranges = localRanges(an, ph);
+  const ranges = localRanges(an, ph), g = subGrid(an, 2);
+  let last = -1;
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], s = levelAt(an, t), at = posOf(ev.top[i], ...ranges[i - ph.a]);
+    if (eighths) {
+      const k = clip(searchsorted(g, t), 1, g.length - 1), j = t - g[k - 1] <= g[k] - t ? k - 1 : k;
+      if (Math.abs(g[j] - t) > ON_GRID_S || j === last) continue;
+      last = j;
+    }
     for (const c of trucks) comet(c, t, at, ev.dur[i], s, 0.6 + 0.4 * s);
   }
-};
+}
 
 // --- beat moves ------------------------------------------------------------------------------------
 // Locked to the beat map: every beat from the middle level up, every second or fourth when calm (the

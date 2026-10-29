@@ -255,7 +255,7 @@ function playPassages(cars: Car[], an: Analysis) {
           for (const q of [...around, { t0: g1, t1: g1 }]) {
             if (q.t0 - a >= 1.0) {
               M.MOVES[move](cars, an, stretch(an, a, q.t0));
-              if (prevFamily === 'beat') M.barMelody(cars, an, stretch(an, a, q.t0));
+              if (prevFamily === 'beat') M.barMelody(cars, an, stretch(an, a, q.t0), true);
             }
             a = Math.max(a, q.t1);
           }
