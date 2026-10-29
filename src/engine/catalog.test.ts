@@ -14,7 +14,8 @@ const top = (dir: string): string =>
 describe('the move catalogue', () => {
   it('lists exactly the moves there are', () => {
     expect(Object.keys(MOVES).sort()).toEqual(Object.keys(M.MOVES).sort());
-    for (const m of [...NOTE_MOVES, ...BEAT_MOVES, ...Object.values(FOR_GESTURE)]) expect(MOVES).toHaveProperty(m);
+    const chosen = [...NOTE_MOVES, ...BEAT_MOVES, ...Object.values(FOR_GESTURE)];
+    for (const m of chosen) expect(MOVES).toHaveProperty(m);
   });
 
   it('is what MOVES.md says', () => {

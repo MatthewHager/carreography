@@ -41,7 +41,7 @@ import { stepOf } from './level';
 import { clip, percentile, runs } from './np';
 
 const RES = 0.25;                                  // seconds per step of the bed
-const HYST = 0.2;                                  // a layer goes out this far (in layers) below where it came in
+const HYST = 0.2;                                  // a layer goes out this far (in layers) below its way in
 const MIN_DWELL = 0.75;                            // seconds a layer stays once it changes
 const BREATH_S = 6;                                // the breath is the loudness against this much either side
 const GLIDE_S = 0.5;                               // the melody's smoothing
@@ -214,7 +214,8 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
       for (let f = a; f < b; f++) {
         const t = f * step, fade = clip((t - t0) / 2.0, 0, 1) * clip((t1 - t) / 2.0, 0, 1);
         const glowAt = fade * (0.08 + 0.6 * B[f] ** 1.5) * (0.6 + 0.4 * an.bands.highMid[f]);
-        const p = at[f], onTruck = c === ct && p !== null && p[0] === c, centre = onTruck ? p[2] * (nLed - 1) : 0;
+        const p = at[f], onTruck = c === ct && p !== null && p[0] === c;
+        const centre = onTruck ? p[2] * (nLed - 1) : 0;
         const row = new Float64Array(nLed);
         for (let j = 0; j < nLed; j++) {
           const z = (j - centre) / 6.0;
@@ -231,7 +232,8 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
     if (!flows(ph.t0)) continue;
     const ranges = M.localRanges(an, ph);
     for (let i = ph.a; i < ph.b; i++) {
-      const t = ev.t[i], strength = clip((ev.amp[i] - quiet) / (loud - quiet), 0, 1), [lo, hi] = ranges[i - ph.a];
+      const t = ev.t[i], [lo, hi] = ranges[i - ph.a];
+      const strength = clip((ev.amp[i] - quiet) / (loud - quiet), 0, 1);
       const s = 0.25 + 0.75 * strength * Math.max(B[clip(Math.round(t / step), 0, n - 1)], 0.3);
       const pos = clip((ev.top[i] - lo) / Math.max(hi - lo, 1), 0, 1);
       for (const c of trucks) M.comet(c, t, pos, clip(ev.dur[i], 0.15, 0.5) + 0.15, s);

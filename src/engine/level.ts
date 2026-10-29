@@ -82,10 +82,10 @@ export function levelCurve(an: Analysis): Float32Array {
 const PEAK_S = 20;          // the peak is found as the loudest stretch this long ...
 const PEAK_FROM = 0.45;     // ... starting this far into the song (a climax can start just before halfway)
 
-/** The top step is the peak's alone: the loudest PEAK_S starting from PEAK_FROM of the song (by the mean level),
- * stretched both ways while the music stays nearly as loud, and any later stretch as loud (an outro that
- * repeats the last chorus). Everywhere else the level stops just under the top; a peak that falls short of
- * the top is lifted to it. */
+/** The top step is the peak's alone: the loudest PEAK_S starting from PEAK_FROM of the song (by the mean
+ * level), stretched both ways while the music stays nearly as loud, and any later stretch as loud (an outro
+ * that repeats the last chorus). Everywhere else the level stops just under the top; a peak that falls short
+ * of the top is lifted to it. */
 function reserveTop(an: Analysis, out: Float32Array): Float32Array {
   const n = out.length, w = Math.min(n, Math.round(PEAK_S / an.step)), cs = new Float64Array(n + 1);
   for (let i = 0; i < n; i++) cs[i + 1] = cs[i] + out[i];
@@ -123,7 +123,8 @@ export function stepOf(level: number): number {
 /** The mean level over [t0, t1). */
 export function levelOver(an: Analysis, t0: number, t1: number): number {
   const lv = an.level!;
-  const a = clip(Math.trunc(t0 / an.step), 0, lv.length - 1), b = clip(Math.trunc(t1 / an.step), a + 1, lv.length);
+  const a = clip(Math.trunc(t0 / an.step), 0, lv.length - 1);
+  const b = clip(Math.trunc(t1 / an.step), a + 1, lv.length);
   let m = 0;
   for (let i = a; i < b; i++) m += lv[i];
   return m / (b - a);

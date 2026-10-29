@@ -221,7 +221,8 @@ function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
 const TAIL_S = 3;          // how far past its stretch a move's fades can reach
 
 /** `draw` over [a, b] on the blank `scratch` cars, laid over the cars except within the phrases `cut`. */
-function drawAround(cars: Car[], scratch: Car[], cut: Phrase[], a: number, b: number, draw: (on: Car[]) => void) {
+function drawAround(cars: Car[], scratch: Car[], cut: Phrase[], a: number, b: number,
+  draw: (on: Car[]) => void) {
   if (!cut.some((q) => q.t1 > a && q.t0 < b + TAIL_S)) return draw(cars);
   draw(scratch);
   const c0 = cars[0], f0 = c0.fr(a - 1), f1 = c0.fr(b + TAIL_S), N = C.N_CHANNELS;
@@ -300,7 +301,8 @@ function accents(cars: Car[], an: Analysis, phrases: Phrase[], said: Moment[]) {
       const t = ev.t[i];
       if (!ev.arrival[i]) continue;
       arrivals.push(i);
-      if (lively(t) && (lift(t) >= LIFT || jump(t) >= BLAST)) cands.push([t, strength(t), clip(ev.dur[i], 0.3, 1.2)]);
+      if (!lively(t) || (lift(t) < LIFT && jump(t) < BLAST)) continue;
+      cands.push([t, strength(t), clip(ev.dur[i], 0.3, 1.2)]);
     }
   }
   let most = Math.round(an.duration / ACCENT_EVERY_S);
@@ -348,7 +350,8 @@ function pedal(cars: Car[], an: Analysis) {
 
 // ---- Lyrics ------------------------------------------------------------------------------------
 
-/** A moment moved onto the music's grid: onto the beat within a quarter beat of one, else the nearest eighth. */
+/** A moment moved onto the music's grid: onto the beat within a quarter beat of one, else the nearest
+ * eighth. */
 function onGrid(an: Analysis, t: number): number {
   const b = an.beats;
   if (b.length < 2) return t;

@@ -213,7 +213,8 @@ export class Car {
   }
 
   everything() {
-    return [...this.heads(), ...this.accents(), ...this.turns(), ...this.markers(), ...this.fogs(), ...this.rear()];
+    return [...this.heads(), ...this.accents(), ...this.turns(), ...this.markers(), ...this.fogs(),
+      ...this.rear()];
   }
 
   /** One channel's column, frame by frame (a copy). */
@@ -226,5 +227,6 @@ export class Car {
 
 /** One Car per letter, crowd-left to right (vehicles.ts). */
 export function makeLineup(layout: string, nFrames: number, step: number): Car[] {
-  return lineupCars(layout).map(([name, v], i) => new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon));
+  return lineupCars(layout).map(([name, v], i) =>
+    new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon));
 }

@@ -60,7 +60,8 @@ export function apply(cars: Car[], an: Analysis): void {
       const on = !flowsAt(an, f * step);
       const lead = (glow(f, CALM, 0.35) + glow(f, PEAK, 0.2)) * (0.5 + 0.5 * highMid[f]);
       front.push(new Float64Array(C.FRONT_BAR.length).fill(on ? lead : 0));
-      rear.push(new Float64Array(C.REAR_BAR.length).fill(on ? glow(f, CALM, 0.7) * (0.3 + 0.7 * low[f]) : 0));
+      const meter = on ? glow(f, CALM, 0.7) * (0.3 + 0.7 * low[f]) : 0;
+      rear.push(new Float64Array(C.REAR_BAR.length).fill(meter));
     }
     c.pixels(C.FRONT_BAR, 0, front);
     c.pixels(C.REAR_BAR, 0, rear);

@@ -33,7 +33,8 @@ export const MOVES: Record<string, Move> = {
   block: mv('chords as blocks of light from their lowest note to their highest, held with the chord; a big '
     + 'chord fills the stage', 'note'),
   shimmer: mv('a trill flickers between the two halves of a car, and across every car when loud', 'self'),
-  motif: mv('the signature motif: an ornament on the middle car, a sweep across, a hold where it lands', 'self'),
+  motif: mv('the signature motif: an ornament on the middle car, a sweep across, a hold where it lands',
+    'self'),
   cadence: mv('a big closing chord: the whole stage on for the chord', 'self'),
   march: mv('one light marches car to car on the beat, left, centre, right, centre', 'beat'),
   lr_channel: mv('left channel, right channel: the whole left half of the stage on one beat, the right on the '
@@ -69,7 +70,9 @@ export function markdown(): string {
     '| move | what you see | plays | locks to |',
     '|---|---|---|---|',
   ];
-  for (const [name, m] of Object.entries(MOVES)) rows.push(`| ${name} | ${m.what} | ${plays(name)} | ${m.grid} |`);
+  for (const [name, m] of Object.entries(MOVES)) {
+    rows.push(`| ${name} | ${m.what} | ${plays(name)} | ${m.grid} |`);
+  }
   return rows.join('\n') + '\n';
 }
 
