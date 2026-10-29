@@ -12,7 +12,8 @@
 // A voice keeps time where its hits land on the beat or halfway between (within GRID_S) and come often: at
 // least NEED hits a beat over the four seconds around (a kick every two or three beats, a snare every three
 // or four, a hat nearly every beat), so a stray detection lights nothing, and neither does an organ's or a
-// piano's attack, which the listening may hear as a kick but which falls anywhere. Quiet music gets short,
+// piano's attack, which the listening may hear as a kick but which falls anywhere. A hit that keeps time
+// lights on the beat or half beat it keeps, so it lands with everything else on it. Quiet music gets short,
 // small hits.
 
 import type { Analysis } from './analysis';
@@ -28,34 +29,36 @@ const MIN_STRENGTH = 0.2;
 const NEED = { kick: 0.4, snare: 0.3, hats: 0.9 };
 const HEARD = 0.1;              // below this level the music is barely there: no drums
 
-/** Whether t lands on a beat or halfway between two (`beats` sorted). */
-function onBeatOrHalf(beats: number[], t: number): boolean {
+/** The beat, or the point halfway between two, that t lands on (`beats` sorted), or NaN. */
+function gridAt(beats: number[], t: number): number {
   const i = searchsorted(beats, t);
   for (const k of [i - 1, i]) {
     if (k < 0 || k >= beats.length) continue;
-    if (Math.abs(beats[k] - t) <= GRID_S) return true;
-    const next = beats[k + 1];
-    if (next !== undefined && Math.abs((beats[k] + next) / 2 - t) <= GRID_S) return true;
+    if (Math.abs(beats[k] - t) <= GRID_S) return beats[k];
+    const half = (beats[k] + beats[k + 1]) / 2;
+    if (Math.abs(half - t) <= GRID_S) return half;
   }
-  return false;
+  return NaN;
 }
 
-/** Per hit of `hits`, whether it keeps time: on the grid, and with at least `need` such hits of MIN_STRENGTH
- * a beat around it. */
-function keepsTime(an: Analysis, hits: number[][], need: number): boolean[] {
-  const beats = an.beats, on = hits.map(([t, s]) => s >= MIN_STRENGTH && onBeatOrHalf(beats, t));
-  const strong = hits.filter((_, i) => on[i]).map(([t]) => t);
+/** Per hit of `hits`, where it keeps time (the beat or half it lands on: gridAt), or NaN where it doesn't:
+ * off the grid, or with fewer than `need` such hits of MIN_STRENGTH a beat around it. */
+function keepsTime(an: Analysis, hits: number[][], need: number): number[] {
+  const beats = an.beats, at = hits.map(([t, s]) => (s >= MIN_STRENGTH ? gridAt(beats, t) : NaN));
+  const strong = hits.filter((_, i) => !Number.isNaN(at[i])).map(([t]) => t);
   const count = (a: number[], t0: number, t1: number) => searchsorted(a, t1) - searchsorted(a, t0);
-  return hits.map(([t], i) => on[i]
-    && count(strong, t - REACH_S, t + REACH_S) / Math.max(2, count(beats, t - REACH_S, t + REACH_S)) >= need);
+  return hits.map(([t], i) =>
+    (count(strong, t - REACH_S, t + REACH_S) / Math.max(2, count(beats, t - REACH_S, t + REACH_S)) >= need
+      ? at[i] : NaN));
 }
 
 /** The drum layer (after the moves, before the beat layer). */
 export function apply(cars: Car[], an: Analysis): void {
   const play = (hits: number[][], need: number, fn: (t: number, strength: number, s: number) => void) => {
     const keeps = keepsTime(an, hits, need);
-    hits.forEach(([t, strength], i) => {
-      if (!keeps[i] || flowsAt(an, t)) return;
+    hits.forEach(([, strength], i) => {
+      const t = keeps[i];
+      if (Number.isNaN(t) || flowsAt(an, t)) return;
       const s = levelAt(an, t);
       if (s >= HEARD) fn(t, strength, s);
     });
