@@ -73,6 +73,7 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
   for (const car of cars) {
     tidy(car, an);
     if (car.juniper) LAMPS.juniperOutput(car);
+    steady(car, an);
     for (let f = Math.max(0, car.nFrames - 3); f < car.nFrames; f++) {
       for (let ch = 0; ch < C.L_FALCON; ch++) car.put(f, ch, 0);
       for (let ch = C.FRONT_BAR[0]; ch < C.N_CHANNELS; ch++) car.put(f, ch, 0);
@@ -533,7 +534,7 @@ function onRuns(col: Uint8Array): [number[], number[]] {
 }
 
 const MERGE_S = 0.25;     // below drive, a lamp dark for less than this between two longer lightings flickers
-const MIN_ON = 5, MIN_OFF = 3;     // frames: a flash shorter than 100 ms doesn't read; a gap under 60 ms neither
+const MIN_ON = 5, MIN_OFF = 3;     // frames: a flash under 100 ms doesn't read, nor a gap under 60 ms
 
 /** On-off lamps, so that rapid notes read as separate flashes and calm music doesn't flicker: flashes shorter
  * than MIN_ON get stretched; below drive a lamp that goes dark for less than MERGE_S, and for less time than
@@ -554,10 +555,68 @@ function tidy(car: Car, an: Analysis) {
     [starts, ends] = onRuns(col);
     for (let k = 0; k < ends.length - 1; k++) {
       const e0 = ends[k], s1 = starts[k + 1], gap = s1 - e0;
-      const held = gap < merge && gap < e0 - starts[k] && gap < ends[k + 1] - s1 && lv[clip(e0, 0, n - 1)] < DRIVE;
+      const held = gap < merge && gap < e0 - starts[k] && gap < ends[k + 1] - s1
+        && lv[clip(e0, 0, n - 1)] < DRIVE;
       if (held) col.fill(col[e0 - 1], e0, s1);
       else if (gap < MIN_OFF) for (let f = s1; f < Math.min(n, e0 + MIN_OFF); f++) col[f] = 0;
     }
     for (let f = 0; f < n; f++) car.put(f, ch, col[f]);
   }
+}
+
+const MAX_RATE = 5;        // lightings a second a car can make before it reads as blinking rather than playing
+const ON_GRID_S = 0.06;    // a lighting this close to a beat or a note is on it
+const FAST = new Set(['run_up', 'run_down', 'zigzag', 'trill']);     // textures that play faster than that
+
+/** A car lights a lamp at most MAX_RATE times a second: past that, only a lighting on a beat, or on a note
+ * of a run, a zigzag or a trill, keeps its flash; any other (a hat, the next note of a busy accompaniment, a
+ * ring of a figure between the beats) joins the lighting before it on its lamp, or is left out where there
+ * is none within a second, so the car holds light instead of blinking. A truck's bar counts as a lamp lit
+ * when over half of it is: past the rate, a flash of it stays under half. */
+function steady(car: Car, an: Analysis) {
+  const n = car.nFrames, near = Math.round(ON_GRID_S / an.step), second = Math.round(1 / an.step);
+  const onGrid = new Uint8Array(n), ev = an.events;
+  for (const t of [...an.beats, ...ev.t.filter((_, i) => FAST.has(ev.phrase[i]))]) {
+    const f = car.fr(t);
+    onGrid.fill(1, Math.max(0, f - near), Math.min(n, f + near + 1));
+  }
+  const cols: Uint8Array[] = [];
+  for (let ch = C.L_OUTER_MAIN; ch <= C.LICENSE_PLATE; ch++) cols.push(car.column(ch));
+  const lastLit = new Int32Array(cols.length).fill(-n);
+  const kept: number[] = [];
+  const N = C.N_CHANNELS, bar = C.FRONT_BAR, F = car.frames;
+  const barMean = (f: number) => {
+    let m = 0;
+    for (const ch of bar) m += F[f * N + ch];
+    return car.isCt ? m / bar.length / 255 : 0;
+  };
+  for (let f = 1, was = barMean(0); f < n; f++) {
+    const rising = cols.flatMap((col, k) => (col[f] >= 128 && col[f - 1] < 128 ? [k] : []));
+    const mean = barMean(f), barRises = mean >= 0.5 && was < 0.5;
+    was = mean;
+    if (rising.length || barRises) {
+      while (kept.length && kept[0] <= f - second) kept.shift();
+      if (kept.length < MAX_RATE || onGrid[f]) {
+        kept.push(f);
+      } else {
+        let top = 0, end = f;
+        for (; barRises && end < n && barMean(end) >= 0.5; end++) top = Math.max(top, barMean(end));
+        for (let g = f; g < end; g++) {
+          for (const ch of bar) F[g * N + ch] = Math.trunc((F[g * N + ch] * 0.45) / top);      // under half
+        }
+        if (barRises) was = barMean(f);
+        for (const k of rising) {
+          const col = cols[k], p = lastLit[k];
+          if (f - p <= second) col.fill(col[p], p + 1, f);
+          else for (let g = f; g < n && col[g] >= 128; g++) col[g] = 0;
+        }
+      }
+    }
+    cols.forEach((col, k) => {
+      if (col[f] >= 128) lastLit[k] = f;
+    });
+  }
+  cols.forEach((col, k) => {
+    for (let f = 0; f < n; f++) car.put(f, C.L_OUTER_MAIN + k, col[f]);
+  });
 }
