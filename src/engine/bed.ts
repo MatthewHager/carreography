@@ -2,12 +2,14 @@
 // stage carries the song's arc while the moves, the beat and the drums play on top.
 //
 //   rear       the tail lights from groove up, the number plates, rear fogs and a truck's bed lights from
-//              drive up; a truck's rear bar pumps with the bass, a level meter, brighter as the level rises
+//              drive up; a truck's rear bar (its tail light) pumps with the bass, a level meter, brighter as
+//              the level rises
 //   front bar  a truck's front bar glows under the comets, from a groove up, to nearly half at the peak,
 //              breathing with the voice and the lead (the 600 Hz-4 kHz band)
 //   cabins     the interiors take the harmony's colour, bar by bar (the pitch class leading the bar, round
 //              the circle of fifths, so related keys sit near each other), else the sound's own (purple when
-//              dull, amber when bright), brighter as the level rises; from drive up a flash on the downbeats
+//              dull, amber when bright), brighter as the level rises; a white flash on each big accent from a
+//              groove up, and on each downbeat from drive up
 //
 // Where the music flows (feel.ts) the legato style has its own bed.
 
@@ -34,7 +36,7 @@ function above(an: Analysis, at: number): boolean[] {
 }
 
 /** A colour for pitch class `pc` (0 C .. 11 B): its place on the circle of fifths as a hue. */
-export function hueOf(pc: number): number[] {
+function hueOf(pc: number): number[] {
   const h = (((pc * 7) % 12) / 12) * 6, x = 1 - Math.abs((h % 2) - 1);
   const [r, g, b] = h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x]
     : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1] : [1, 0, x];
@@ -44,7 +46,7 @@ export function hueOf(pc: number): number[] {
 export function apply(cars: Car[], an: Analysis): void {
   const lv = an.level!, step = an.step;
   const lit: [number, (c: Car) => number[]][] = [
-    [STEPS[1], () => [C.L_TAIL, C.R_TAIL]],
+    [STEPS[1], (c) => c.tails()],
     [STEPS[2], (c) => [C.LICENSE_PLATE, c.isCt ? C.REVERSE : C.REAR_FOG]],
   ];
   for (const [at, chs] of lit) {
@@ -82,8 +84,8 @@ function bars(an: Analysis): [number, number][] {
 
 /** The interiors: the bar's harmony as a colour (the pitch class that leads most of the bar, held through
  * it so the colour changes as the chords do), toward the sound's own colour where the harmony is unclear
- * (purple when it is dull, amber when it is bright), brighter as the level rises; from drive up a white
- * flash on each downbeat and big accent. */
+ * (purple when it is dull, amber when it is bright), brighter as the level rises; a white flash on each big
+ * accent from a groove up and on each downbeat from drive up. */
 function cabins(cars: Car[], an: Analysis): void {
   const lv = an.level!, step = an.step, votes = new Float64Array(12);
   for (const [t0, t1] of bars(an)) {

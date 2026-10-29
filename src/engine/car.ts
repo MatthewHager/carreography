@@ -199,6 +199,21 @@ export class Car {
     return [C.L_FRONT_FOG, C.R_FRONT_FOG];
   }
 
+  /** A Cybertruck's frunk light, low in the nose (a Model Y's aux park lamps are among its markers). */
+  frunk() {
+    return this.isCt ? [C.L_AUX_PARK] : [];
+  }
+
+  /** The red tail lights. A Cybertruck's channels there are white reverse lights: its tail is the rear bar. */
+  tails() {
+    return this.isCt ? [] : [C.L_TAIL, C.R_TAIL];
+  }
+
+  /** The rear turn signals (a Cybertruck has none of its own: its front turn channels light the corners). */
+  rearTurns() {
+    return this.isCt ? [] : [C.L_REAR_TURN, C.R_REAR_TURN];
+  }
+
   rear() {
     const chs = [C.BRAKE, C.L_TAIL, C.R_TAIL, C.LICENSE_PLATE];
     return [...chs, ...(this.isCt ? [C.L_SIDE_REPEATER, C.R_SIDE_REPEATER] : [C.REAR_FOG])];
