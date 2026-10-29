@@ -6,9 +6,9 @@
 //   calm    a soft tick of the middle car's inner beams on each downbeat, where the beat is very clear
 //   groove  1 and 3 on every car's inner beams, the bars glinting on the 1
 //   drive   every beat on every car's inner beams, the bars on the 1
-//   peak    every beat on the outer beams (a lone car's whole front), every lamp of every car on the 1,
-//           the bars full white, and the off-beats sweeping the stage car by car on the amber turns; the
-//           moves light whole halves over it, so the climax travels the stage as it thumps
+//   peak    every beat on every car's headlights (all that drive has, and more), every lamp of every car
+//           on the 1, the bars full white, and the off-beats sweeping the stage car by car on the amber
+//           turns; the moves light whole halves over it, so the climax travels the stage as it thumps
 //
 // Each hit is a bright attack that decays on the shortest of Tesla's ramps (0.5, 1 or 2 s) that lasts until
 // the next hit, the way the drum it follows sounds, so every beat lands as a thump from a glow, never from
@@ -169,8 +169,7 @@ export function apply(cars: Car[], an: Analysis): void {
     if (kind === 'tick') hit(mid, mid.inner(), ATTACK_S[0]);
     if (kind !== 'big' && kind !== 'beat') continue;
     for (const c of cars) {
-      // a lone car has no stage for a figure to travel: its climax thumps its whole front
-      hit(c, peak ? (cars.length > 1 ? c.outer() : c.heads()) : c.inner(), kind === 'big' ? hold * 1.25 : hold);
+      hit(c, peak ? c.heads() : c.inner(), kind === 'big' ? hold * 1.25 : hold);
       if (kind === 'big' && peak) hit(c, c.everything(), hold);
       if (kind === 'big' && c.isCt) M.barFlash(c, t, Math.min(0.3, end - t), peak ? 1.0 : 0.5);
       if (kind === 'big') c.light(c.bar(), t, t + 0.1);
