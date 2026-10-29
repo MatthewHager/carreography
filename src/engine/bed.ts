@@ -4,8 +4,9 @@
 //   rear       the tail lights from groove up, the number plates, rear fogs and a truck's bed lights from
 //              drive up; a truck's rear bar (its tail light) pumps with the bass, a level meter, brighter as
 //              the level rises
-//   front bar  a truck's front bar glows under the comets, from calm up, to over a third at the peak,
-//              breathing with the voice and the lead (the 600 Hz-4 kHz band)
+//   front bar  a truck's front bar glows under the comets wherever the music plays (BAR_GLOW: from a tenth at a
+//              hush, so the centrepiece is there in the dark, to two fifths at the peak), breathing with the
+//              voice and the lead (the 600 Hz-4 kHz band)
 //   cabins     the interiors take the harmony's colour, bar by bar (the pitch class leading the bar, round
 //              the circle of fifths, so related keys sit near each other), else the sound's own (purple when
 //              dull, amber when bright), brighter as the level rises; a white flash on each big accent from a
@@ -17,10 +18,12 @@ import type { Analysis } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
 import { flowsAt } from './feel';
-import { CALM, DRIVE, GROOVE, PEAK } from './level';
+import { CALM, DRIVE, GROOVE } from './level';
 import { clip, runs } from './np';
 
 const DWELL_S = 4.0;          // a lamp of the bed stays at least this long once it changes
+const BAR_GLOW = [0.1, 0.4];  // a truck's front bar's glow at a hush and at the top, under the comets
+const METER = 0.7;            // the rear bar's level meter at the top, so a kick's flash still stands out
 const DULL = [110, 0, 200], BRIGHT = [255, 140, 20];
 
 /** Per frame, whether the level is at `at` or above, held for DWELL_S so a lamp never flickers. */
@@ -58,9 +61,9 @@ export function apply(cars: Car[], an: Analysis): void {
     const front: Float64Array[] = [], rear: Float64Array[] = [];
     for (let f = 0; f < an.nFrames; f++) {
       const on = !flowsAt(an, f * step);
-      const lead = (glow(f, CALM, 0.35) + glow(f, PEAK, 0.2)) * (0.5 + 0.5 * highMid[f]);
+      const lead = (BAR_GLOW[0] + (BAR_GLOW[1] - BAR_GLOW[0]) * lv[f]) * (0.6 + 0.4 * highMid[f]);
       front.push(new Float64Array(C.FRONT_BAR.length).fill(on ? lead : 0));
-      const meter = on ? glow(f, CALM, 0.7) * (0.3 + 0.7 * low[f]) : 0;
+      const meter = on ? glow(f, CALM, METER) * (0.3 + 0.7 * low[f]) : 0;
       rear.push(new Float64Array(C.REAR_BAR.length).fill(meter));
     }
     c.pixels(C.FRONT_BAR, 0, front);

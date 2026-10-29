@@ -120,14 +120,17 @@ const free = (car: Car, chs: number[], own: number) =>
 
 const whole = (car: Car, s: number, own = 0) => [...half(car, 'L', s, own), ...half(car, 'R', s, own)];
 
+const HELD_NOTE_S = 0.6, SWELL_MAX_S = 2.5;     // a note this long is held: it swells, for up to this long
+
 /** One note's light, shaped like its sound (Tesla's ramps are the envelopes). Calm: a short note flashes
- * and fades over half a second, a pluck; a long note swells in and fades over a second, a pad. From a
+ * and fades over half a second, a pluck; a held note swells in, holds as long as it sounds (up to
+ * SWELL_MAX_S) and fades over a second, a pad. From a
  * groove up, every note is struck and held for its length, at least most of the way to the next one, so the
  * light moves from lamp to lamp rather than blinking. */
 export function note(car: Car, chs: number[], t: number, dur: number, s: number, next = Infinity) {
   if (s < GROOVE) {
-    if (dur >= 0.6) {
-      const end = Math.min(t + Math.min(dur, 2.0), next);
+    if (dur >= HELD_NOTE_S) {
+      const end = t + Math.min(dur, SWELL_MAX_S);
       car.light(chs, t, end, ON_500);
       car.light(chs, end, end + 1.0, OFF_1000);
     } else {
@@ -157,14 +160,16 @@ function rows(n: number, fn: (f: number, k: number) => number, w = BAR): Rows {
 
 const frames = (car: Car, t: number, dur: number) => Math.max(2, car.fr(t + dur) - car.fr(t));
 
-/** A comet at `pos` (0..1 along the bar) fading over `dur`: wider and brighter as the level rises (times
- * `gain`). */
-export function comet(car: Car, t: number, pos: number, dur: number, s: number, gain = 1) {
+/** A note as a comet at `pos` (0..1 along the bar), wider and brighter as the level rises (times `gain`): a
+ * short note plucks and fades, a held one swells in over a third of its length and fades through the rest. */
+export function comet(car: Car, t: number, pos: number, noteDur: number, s: number, gain = 1) {
+  const held = noteDur >= HELD_NOTE_S;
+  const dur = held ? Math.min(noteDur, SWELL_MAX_S) : clip(noteDur, 0.15, 0.5) + 0.15;
   const width = 3 + 8 * s, amp = (0.55 + 0.45 * s) * gain, n = frames(car, t, dur);
-  const fade = linspace(1, 0, n);
+  const env = (f: number) => (held ? Math.min(1, (3 * f) / n) * (1 - f / n) ** 0.5 : (1 - f / n) ** 1.5);
   car.pixels(C.FRONT_BAR, t, rows(n, (f, k) => {
     const x = (k - pos * (BAR - 1)) / width;
-    return amp * fade[f] ** 1.5 * Math.exp(-(x * x));
+    return amp * env(f) * Math.exp(-(x * x));
   }));
 }
 
@@ -379,7 +384,7 @@ const mirror: Move = (cars, an, ph) => {
       if (!car.isCt || s >= GROOVE) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
     }
     if (ct !== null) {
-      for (const at of [0.5 - 0.45 * p, 0.5 + 0.45 * p]) comet(ct, t, at, clip(ev.dur[i], 0.15, 0.5) + 0.15, s);
+      for (const at of [0.5 - 0.45 * p, 0.5 + 0.45 * p]) comet(ct, t, at, ev.dur[i], s);
     }
   }
 };
@@ -517,7 +522,7 @@ export const barMelody: Move = (cars, an, ph) => {
   const ranges = localRanges(an, ph);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], s = levelAt(an, t), at = posOf(ev.top[i], ...ranges[i - ph.a]);
-    for (const c of trucks) comet(c, t, at, clip(ev.dur[i], 0.15, 0.5) + 0.15, s, 0.4 + 0.5 * s);
+    for (const c of trucks) comet(c, t, at, ev.dur[i], s, 0.6 + 0.4 * s);
   }
 };
 
