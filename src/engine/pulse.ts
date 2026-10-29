@@ -62,7 +62,8 @@ function plan(an: Analysis) {
   const jump = (d: number) => levelOver(an, d + 0.1, d + 1.5) - levelOver(an, d - 2, d - 0.1);
   const cands = an.downbeats.filter((d) => {
     const before = stepOf(levelOver(an, d - 2, d - 0.1)), after = stepOf(levelOver(an, d + 0.1, d + 4));
-    return d > 2 && after >= 3 && after > before && jump(d) >= 0.08 && !flowsAt(an, d) && !flowsAt(an, d + 4);
+    return d > 2 && after >= 3 && after > before && jump(d) >= 0.08
+      && [0, 2, 4, 6].every((k) => !flowsAt(an, d + k));
   });
   const drops: number[] = [];
   for (const d of cands) {
