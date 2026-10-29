@@ -93,7 +93,7 @@ describe('a figure plays the family of moves the music asks for', () => {
     expect(family(an, 2, 18, 2, null)).toBe('flow');
   });
 
-  it('no figure at the peak plays a sparse move, however little it has been used or whatever came before', () => {
+  it('no figure at the peak plays a sparse move, however little used or replayed', () => {
     const an = stretch({ level: 0.9, notes: 3, kit: true });
     for (const sparse of SPARSE_MOVES) {
       const used = new Map(BEAT_MOVES.map((m): [string, number] => [m, m === sparse ? 0 : 5]));

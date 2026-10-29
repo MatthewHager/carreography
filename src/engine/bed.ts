@@ -93,7 +93,8 @@ function bars(an: Analysis): [number, number][] {
 
 /** The interiors (see the module notes). */
 function cabins(cars: Car[], an: Analysis, B: Float64Array, said: Moment[]): void {
-  const lv = an.level!, step = an.step, votes = new Float64Array(12), sung = said.filter((m) => m.do === 'color');
+  const lv = an.level!, step = an.step, votes = new Float64Array(12);
+  const sung = said.filter((m) => m.do === 'color');
   for (const [t0, t1] of bars(an)) {
     const a = Math.trunc(t0 / step), b = Math.min(an.nFrames, Math.trunc(t1 / step));
     votes.fill(0);

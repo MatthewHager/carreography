@@ -271,8 +271,8 @@ export class Car {
   /** The lamps that show a place w across the car (0 its crowd-left end, 1 its right), each lit on its own:
    * the inner beam on that side, and on a 2025+ Model Y the third of its bar there. */
   at(w: number): number[][] {
-    const beam = this.inner(w < 0.5 ? 'L' : 'R');
-    return this.juniper ? [beam, [this.drl('L'), CENTRE, this.drl('R')][Math.min(2, Math.floor(w * 3))]] : [beam];
+    const beam = this.inner(w < 0.5 ? 'L' : 'R'), third = Math.min(2, Math.floor(w * 3));
+    return this.juniper ? [beam, [this.drl('L'), CENTRE, this.drl('R')][third]] : [beam];
   }
 
   /** The front lamps that breathe with flowing music, a layer at a time (bed.ts): from the smallest that reads

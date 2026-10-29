@@ -17,7 +17,6 @@ import { DRIVE, GROOVE, levelAt, PEAK, stepOf } from './level';
 import { arange, clip, cumsum, linspace, quantiles, runs, searchsorted, sum } from './np';
 import { barPositions, beatAt, eighthAt, snap } from './tempo';
 
-const ON_500 = C.ON_500, OFF_500 = C.OFF_500, OFF_1000 = C.OFF_1000;
 const BAR = C.FRONT_BAR.length;   // 60 LEDs
 
 type LR = 'L' | 'R';
@@ -102,12 +101,12 @@ export function note(car: Car, chs: number[], t: number, dur: number, s: number,
   if (s < GROOVE) {
     if (dur >= HELD_NOTE_S) {
       const end = t + Math.min(dur, SWELL_MAX_S);
-      car.light(chs, t, end, ON_500);
-      car.light(chs, end, end + 1.0, OFF_1000);
+      car.light(chs, t, end, C.ON_500);
+      car.light(chs, end, end + 1.0, C.OFF_1000);
     } else {
       const end = t + clip(dur, 0.1, 0.2);
       car.light(chs, t, end);
-      car.light(chs, end, end + 0.5, OFF_500);
+      car.light(chs, end, end + 0.5, C.OFF_500);
     }
     return;
   }
@@ -368,7 +367,7 @@ const motif: Move = (cars, an, ph) => {
   });
   const t = ev.t[landI], hold = clip(ev.dur[landI], 0.4, 3.0), s = Math.max(PEAK, levelAt(an, t));
   landCar.light(landCar.half(landSide, s), t, t + hold);
-  landCar.light(landCar.half(landSide, s), t + hold, t + hold + 0.8, OFF_500);
+  landCar.light(landCar.half(landSide, s), t + hold, t + hold + 0.8, C.OFF_500);
   if (landCar.isCt) barSpan(landCar, t, hold + 0.5, ...barHalf(landSide));
   for (const c of cars) c.rgb(t, t + hold, [255, 255, 255], 0.6);
 };
@@ -395,7 +394,7 @@ const swell: Move = (cars, an, ph) => {
       if (t0 >= t1) continue;
       const s = levelAt(an, t0), chs = s >= PEAK ? c.everything() : c.whole(s);
       c.light(chs, t0, t1, k ? C.ON_1000 : C.ON_2000);
-      c.light(chs, t1, t1 + (last ? 2.0 : 0.5), last ? C.OFF_2000 : OFF_500);
+      c.light(chs, t1, t1 + (last ? 2.0 : 0.5), last ? C.OFF_2000 : C.OFF_500);
       if (!c.isCt) continue;
       const f0 = Math.trunc(t0 / an.step), n = frames(c, t0, t1 - t0), up = (k ? 1.0 : 2.0) / an.step;
       barFill(c, t0, t1 - t0, Array.from({ length: n }, (_, f) => Math.min(1, f / up) * lv[f0 + f]));
@@ -453,7 +452,7 @@ const march: Move = (cars, an, ph) => {
     const [car, side] = seq[k % seq.length], s = levelAt(an, b);
     const hold = holdFor(next(beats, k, 0.5) - b, s, 0.9);
     unitHit(car, side, b, hold, s);
-    car.light(side ? car.half(side, s) : car.whole(s), b + hold, b + hold + 0.5, OFF_500);
+    car.light(side ? car.half(side, s) : car.whole(s), b + hold, b + hold + 0.5, C.OFF_500);
   });
 };
 
@@ -564,7 +563,7 @@ const shockwave: Move = (cars, an, ph) => {
 function ring([car, side]: [Car, LR | null], t: number, end: number, s: number) {
   const chs = side ? car.half(side, s) : car.whole(s);
   car.light(chs, t, end);
-  if (s >= PEAK) car.light(chs, end, end + 0.5, OFF_500);
+  if (s >= PEAK) car.light(chs, end, end + 0.5, C.OFF_500);
 }
 
 // --- flowing moves ---------------------------------------------------------------------------------
@@ -644,7 +643,7 @@ const flowing = (places: (p: number) => number[]): Move => (cars, an, ph) => {
       const held = (f1 - f0) * step >= HELD_NOTE_S, t0 = (a + f0) * step;
       const t1 = (a + f1) * step + (held ? 0.25 : 0.1);
       car.light(chs, t0, t1, held ? C.ON_1000 : C.ON);
-      car.light(chs, t1, t1 + (held ? 1 : 0.5), held ? OFF_1000 : OFF_500);
+      car.light(chs, t1, t1 + (held ? 1 : 0.5), held ? C.OFF_1000 : C.OFF_500);
     }
   }
   for (const [car, r] of spot) car.pixels(C.FRONT_BAR, ph.t0, r);
@@ -663,7 +662,7 @@ const bloom = flowing((p) => [0.5 - p / 2, 0.5 + p / 2]);
 export function allOn(cars: Car[], t: number, hold: number) {
   for (const c of cars) {
     c.lightOver(c.everything(), t, t + hold);
-    c.lightOver(c.everything(), t + hold, t + hold + 0.6, OFF_500);
+    c.lightOver(c.everything(), t + hold, t + hold + 0.6, C.OFF_500);
     if (c.isCt) {
       const n = frames(c, t, hold + 0.4), fade = linspace(1.6, 0, n).map((v) => clip(v, 0, 1));
       c.pixels(C.FRONT_BAR, t, rows(n, (f) => fade[f]));

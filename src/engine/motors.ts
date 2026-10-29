@@ -86,7 +86,8 @@ class Plan {
   cmd(c: Car, ch: number, t0: number, t1: number, cmd: number, busy = t1 - t0): boolean {
     if (!c.closure(ch, t0, t1, cmd)) return false;
     this.moving.fill(1, c.fr(t0), c.fr(t0 + busy));
-    if (cmd === C.CLOSURE_DANCE) this.danced.set(`${c.x} ${ch}`, Math.max(t1, this.danced.get(`${c.x} ${ch}`) ?? 0));
+    const key = `${c.x} ${ch}`;
+    if (cmd === C.CLOSURE_DANCE) this.danced.set(key, Math.max(t1, this.danced.get(key) ?? 0));
     return true;
   }
 }
