@@ -4,10 +4,10 @@
 // up, hold back and breathe, and its beats drift off what is actually played. Here each tracked beat
 // is pulled onto the strongest played onset near it (a note, a chord, a bass attack), beats with
 // nothing played near them are re-spaced between their anchored neighbours so the tempo changes
-// smoothly, and the result is the grid every move quantizes to (moves.subGrid / snap).
+// smoothly, and the result is the grid every move quantizes to (snap, eighthAt).
 
 import type { Analysis } from './analysis';
-import { argmax, argsort, clip, mean, median, searchsorted } from './np';
+import { arange, argmax, argsort, clip, diff, mean, median, searchsorted } from './np';
 
 /** The piece's nominal beat, in seconds (never slower than 40 BPM). */
 export const beatLen = (an: Analysis) => 60.0 / Math.max(an.tempo, 40);
@@ -29,6 +29,68 @@ export function onBeat(an: Analysis, t: number, reach = 0.35): number {
   let best = t;
   for (const b of an.beats) if (Math.abs(b - t) <= reach && Math.abs(b - t) < Math.abs(best - t)) best = b;
   return best;
+}
+
+const positions = new WeakMap<Analysis, Int32Array>();
+
+/** Every tracked beat's place in its bar (0 the downbeat), counted from the downbeat before it. */
+export function barPositions(an: Analysis): Int32Array {
+  let pos = positions.get(an);
+  if (pos) return pos;
+  const b = an.beats, downs = new Set<number>();
+  for (const x of an.downbeats) {
+    const k = clip(searchsorted(b, x - 0.01), 0, Math.max(0, b.length - 1));
+    if (b.length && Math.abs(b[k] - x) < 0.05) downs.add(k);
+  }
+  pos = new Int32Array(b.length);
+  let last: number | null = null;
+  for (let i = 0; i < b.length; i++) {
+    if (downs.has(i)) last = i;
+    pos[i] = last !== null ? (i - last) % 4 : i % 4;
+  }
+  positions.set(an, pos);
+  return pos;
+}
+
+const subGrids = new WeakMap<Analysis, Map<number, Float64Array>>();
+
+/** Every 1/div beat of the tracked beats (sixteenths for div 4), following the music's own spacing. */
+function subGrid(an: Analysis, div = 4): Float64Array {
+  let cache = subGrids.get(an);
+  if (!cache) subGrids.set(an, (cache = new Map()));
+  let g = cache.get(div);
+  if (g === undefined) {
+    const b: ArrayLike<number> = an.beats.length >= 2 ? an.beats : arange(0, an.duration, beatLen(an));
+    const gaps = diff(b), out = new Float64Array(b.length * div);
+    for (let i = 0; i < b.length; i++) {
+      const gap = gaps[Math.min(i, gaps.length - 1)];
+      for (let j = 0; j < div; j++) out[i * div + j] = b[i] + (gap * j) / div;
+    }
+    cache.set(div, (g = out));
+  }
+  return g;
+}
+
+/** `t` on the nearest sixteenth (1/div beat) of the performer-following beat map, and from there on a note
+ * played within an eighth of it (at most 40 ms): the grid bends with the tempo, the light lands on the
+ * attack. */
+export function snap(an: Analysis, t: number, div = 4): number {
+  const q = nearest(subGrid(an, div), t), et = an.events.t;
+  if (et.length > 1) {
+    const tol = Math.min(0.04, beatAt(an, q) / (2 * div));
+    const near = nearest(et, q);
+    if (Math.abs(near - q) <= tol) return near;
+  }
+  return q;
+}
+
+/** The eighth of the beat map nearest t: a beat, or halfway between two. */
+export const eighthAt = (an: Analysis, t: number) => nearest(subGrid(an, 2), t);
+
+/** The value of `a` (sorted, two or more) nearest t. */
+function nearest(a: ArrayLike<number>, t: number): number {
+  const i = clip(searchsorted(a, t), 1, a.length - 1);
+  return t - a[i - 1] <= a[i] - t ? a[i - 1] : a[i];
 }
 
 /** [times, strengths] of the played attacks: transcribed note events (chords count more) and the

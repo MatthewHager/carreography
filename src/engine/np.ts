@@ -14,14 +14,6 @@ export function mean(a: Arr, start = 0, end = a.length): number {
   return sum(a, start, end) / (end - start);
 }
 
-/** The standard deviation (of the population). */
-export function std(a: Arr): number {
-  const m = mean(a);
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += (a[i] - m) * (a[i] - m);
-  return Math.sqrt(s / a.length);
-}
-
 /** Index of the first maximum. */
 export function argmax(a: Arr): number {
   let k = 0;

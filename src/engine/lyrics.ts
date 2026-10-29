@@ -6,7 +6,7 @@ import type { Analysis, LyricLine } from './analysis';
 import type { Car } from './car';
 import { flowsAt } from './feel';
 import * as M from './moves';
-import { beatAt, onBeat } from './tempo';
+import { beatAt, onBeat, snap } from './tempo';
 
 /** A picture a line calls for: interior colours from t0 to t1, a lightning strike at t0, or a ping of
  * one car's front at t0 (the k-th word of a chant lands on car k, round the lineup). */
@@ -95,7 +95,7 @@ export function moments(lines: LyricLine[], an: Analysis): Moment[] {
 export function onGrid(an: Analysis, t: number): number {
   if (an.beats.length < 2) return t;
   const near = onBeat(an, t, 0.25 * beatAt(an, t));
-  return near !== t ? near : M.snap(an, t, 2);
+  return near !== t ? near : snap(an, t, 2);
 }
 
 /** The moments on the stage (a line's colour is the cabins', bed.ts): its lightning strike or chant pings on

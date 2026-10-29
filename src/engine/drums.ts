@@ -22,6 +22,7 @@ import type { Car } from './car';
 import { flowsAt } from './feel';
 import { DRIVE, GROOVE, levelAt, PEAK } from './level';
 import { clip, searchsorted } from './np';
+import { eighthAt } from './tempo';
 
 const REACH_S = 2.0;            // presence is counted over this much either side of a hit
 const GRID_S = 0.05;            // a hit this close to a beat or an eighth keeps time
@@ -29,22 +30,11 @@ const MIN_STRENGTH = 0.2;
 const NEED = { kick: 0.4, snare: 0.3, hats: 0.9 };
 const HEARD = 0.1;              // below this level the music is barely there: no drums
 
-/** The beat, or the point halfway between two, that t lands on (`beats` sorted), or NaN. */
-function gridAt(beats: number[], t: number): number {
-  const i = searchsorted(beats, t);
-  for (const k of [i - 1, i]) {
-    if (k < 0 || k >= beats.length) continue;
-    if (Math.abs(beats[k] - t) <= GRID_S) return beats[k];
-    const half = (beats[k] + beats[k + 1]) / 2;
-    if (Math.abs(half - t) <= GRID_S) return half;
-  }
-  return NaN;
-}
-
-/** Per hit of `hits`, where it keeps time (the beat or half it lands on: gridAt), or NaN where it doesn't:
- * off the grid, or with fewer than `need` such hits of MIN_STRENGTH a beat around it. */
+/** Per hit of `hits`, where it keeps time (the beat or half beat within GRID_S of it), or NaN where it
+ * doesn't: off the grid, or with fewer than `need` such hits of MIN_STRENGTH a beat around it. */
 function keepsTime(an: Analysis, hits: number[][], need: number): number[] {
-  const beats = an.beats, at = hits.map(([t, s]) => (s >= MIN_STRENGTH ? gridAt(beats, t) : NaN));
+  const beats = an.beats, on = (t: number, g = eighthAt(an, t)) => (Math.abs(g - t) <= GRID_S ? g : NaN);
+  const at = hits.map(([t, s]) => (s >= MIN_STRENGTH ? on(t) : NaN));
   const strong = hits.filter((_, i) => !Number.isNaN(at[i])).map(([t]) => t);
   const count = (a: number[], t0: number, t1: number) => searchsorted(a, t1) - searchsorted(a, t0);
   return hits.map(([t], i) =>
@@ -54,6 +44,7 @@ function keepsTime(an: Analysis, hits: number[][], need: number): number[] {
 
 /** The drum layer (after the moves, before the beat layer). */
 export function apply(cars: Car[], an: Analysis): void {
+  if (an.beats.length < 2) return;
   const play = (hits: number[][], need: number, fn: (t: number, strength: number, s: number) => void) => {
     const keeps = keepsTime(an, hits, need);
     hits.forEach(([, strength], i) => {

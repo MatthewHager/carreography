@@ -14,8 +14,8 @@ import type { Analysis, Phrase } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
 import { DRIVE, GROOVE, levelAt, PEAK, stepOf } from './level';
-import { arange, clip, cumsum, diff, linspace, quantiles, runs, searchsorted, sum } from './np';
-import { beatAt, beatLen } from './tempo';
+import { arange, clip, cumsum, linspace, quantiles, runs, searchsorted, sum } from './np';
+import { barPositions, beatAt, eighthAt, snap } from './tempo';
 
 const ON_500 = C.ON_500, OFF_500 = C.OFF_500, OFF_1000 = C.OFF_1000;
 const BAR = C.FRONT_BAR.length;   // 60 LEDs
@@ -178,27 +178,6 @@ function slotHit(car: Car, side: LR, t: number, dur: number, s: number) {
 
 const within = (a: ArrayLike<number>, lo: number, hi: number) => Array.from(a).filter((x) => x >= lo && x < hi);
 
-const positions = new WeakMap<Analysis, Int32Array>();
-
-/** Every tracked beat's place in its bar (0 the downbeat), counted from the downbeat before it. */
-export function barPositions(an: Analysis): Int32Array {
-  let pos = positions.get(an);
-  if (pos) return pos;
-  const b = an.beats, downs = new Set<number>();
-  for (const x of an.downbeats) {
-    const k = clip(searchsorted(b, x - 0.01), 0, Math.max(0, b.length - 1));
-    if (b.length && Math.abs(b[k] - x) < 0.05) downs.add(k);
-  }
-  pos = new Int32Array(b.length);
-  let last: number | null = null;
-  for (let i = 0; i < b.length; i++) {
-    if (downs.has(i)) last = i;
-    pos[i] = last !== null ? (i - last) % 4 : i % 4;
-  }
-  positions.set(an, pos);
-  return pos;
-}
-
 /** Beats at the level's pace there, counted in the bar so none is lost where the performer's beats are
  * uneven: every one from drive up, 1 and 3 in a groove, the downbeat when calm, so a calm passage swoops
  * and every-beat hitting is kept for the climbs. */
@@ -224,42 +203,6 @@ function grid(an: Analysis, ph: Span, kind: 'beats' | 'downbeats' = 'beats'): nu
     if (!g.length) g = [ph.t0];
   }
   return kind === 'beats' ? paced(an, g) : g;
-}
-
-const subGrids = new WeakMap<Analysis, Map<number, Float64Array>>();
-
-/** Every 1/div beat of the tracked beats (sixteenths for div 4), following the music's own spacing. */
-function subGrid(an: Analysis, div = 4): Float64Array {
-  let cache = subGrids.get(an);
-  if (!cache) subGrids.set(an, (cache = new Map()));
-  let g = cache.get(div);
-  if (g === undefined) {
-    const b: ArrayLike<number> = an.beats.length >= 2 ? an.beats : arange(0, an.duration, beatLen(an));
-    const gaps = diff(b), out = new Float64Array(b.length * div);
-    for (let i = 0; i < b.length; i++) {
-      const gap = gaps[Math.min(i, gaps.length - 1)];
-      for (let j = 0; j < div; j++) out[i * div + j] = b[i] + (gap * j) / div;
-    }
-    cache.set(div, (g = out));
-  }
-  return g;
-}
-
-/** `t` on the nearest sixteenth (1/div beat) of the performer-following beat map, and from there on a note
- * played within an eighth of it (at most 40 ms): the grid bends with the tempo, the light lands on the
- * attack. */
-export function snap(an: Analysis, t: number, div = 4): number {
-  const g = subGrid(an, div);
-  const i = clip(searchsorted(g, t), 1, g.length - 1);
-  const q = t - g[i - 1] <= g[i] - t ? g[i - 1] : g[i];
-  const et = an.events.t;
-  if (et.length > 1) {
-    const tol = Math.min(0.04, beatAt(an, q) / (2 * div));
-    const j = clip(searchsorted(et, q), 1, et.length - 1);
-    const near = q - et[j - 1] <= et[j] - q ? et[j - 1] : et[j];
-    if (Math.abs(near - q) <= tol) return near;
-  }
-  return q;
 }
 
 /** `n` evenly spread steps over [t, t + span), each on the nearest sixteenth. */
@@ -482,14 +425,13 @@ const ON_GRID_S = 0.05;     // a note this close to an eighth of the beat map is
 export function barMelody(cars: Car[], an: Analysis, ph: Phrase, eighths = false) {
   const trucks = cars.filter((c) => c.isCt), ev = an.events;
   if (!trucks.length) return;
-  const ranges = localRanges(an, ph), g = subGrid(an, 2);
+  const ranges = localRanges(an, ph);
   let last = -1;
   for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t), at = posOf(ev.top[i], ...ranges[i - ph.a]);
+    const t = ev.t[i], s = levelAt(an, t), at = posOf(ev.top[i], ...ranges[i - ph.a]), g = eighthAt(an, t);
     if (eighths) {
-      const k = clip(searchsorted(g, t), 1, g.length - 1), j = t - g[k - 1] <= g[k] - t ? k - 1 : k;
-      if (Math.abs(g[j] - t) > ON_GRID_S || j === last) continue;
-      last = j;
+      if (Math.abs(g - t) > ON_GRID_S || g === last) continue;
+      last = g;
     }
     for (const c of trucks) comet(c, t, at, ev.dur[i], s, 0.6 + 0.4 * s);
   }

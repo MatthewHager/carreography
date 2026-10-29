@@ -35,7 +35,7 @@ import { CALM, DRIVE, GROOVE, levelAt, levelOver, stepOf } from './level';
 import { type Moment, onGrid } from './lyrics';
 import * as M from './moves';
 import { clip, quantile } from './np';
-import { beatAt, beatLen } from './tempo';
+import { barPositions, beatAt, beatLen } from './tempo';
 
 const OWNERS = new Set(['cadence', 'motif']);     // phrase shapes whose moves own the whole stage
 const CLEAR = 0.6, FAINT = 0.25, SURE = 0.9;       // how clear the beat is (an.beatConfidence): a full pulse,
@@ -115,7 +115,7 @@ interface Hit { t: number; kind: string; own: number; hold: number; ramp: number
 /** Every hit the layer plays (see the module notes). Each decays on the shortest of Tesla's ramps that lasts
  * until the next, so a beat lands while the last still glows. */
 function hits(an: Analysis): Hit[] {
-  const b = an.beats, pos = M.barPositions(an), spans = builds(an), on = struckBeats(an);
+  const b = an.beats, pos = barPositions(an), spans = builds(an), on = struckBeats(an);
   const out: Hit[] = [];
   const owners = (an.phrases ?? []).filter((ph) => OWNERS.has(ph.gesture));
   for (let i = 0; i < b.length; i++) {
