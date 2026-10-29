@@ -224,18 +224,20 @@ function playPassages(cars: Car[], an: Analysis) {
       }
       figs.forEach(([g0, g1, group, fam], j) => {
         let move = moves[j];
+        const peak = stepOf(levelOver(an, g0, g1)) === 4;      // no sparse move at the peak
         // a replay keeps its move where the music still allows it (a beat to follow for a beat move, a held
         // chord for a swell, flowing music for a flowing move) and the figure before didn't just play it:
         // material repeated back to back changes its figure rather than playing one move for half a minute
         const fits = (m: string) => {
           const f = familyOf(m);
           return (f === 'held') === (fam === 'held') && (f === 'flow') === (fam === 'flow')
-            && (m !== prev || m === 'swell') && (f !== 'beat' || fam === 'beat' || followable(an, g0, g1));
+            && (m !== prev || m === 'swell') && (f !== 'beat' || fam === 'beat' || followable(an, g0, g1))
+            && !(peak && CAT.SPARSE_MOVES.includes(m));
         };
         if (move === undefined || !fits(move)) {
           // the least used of the family, and of those the one the figure's register points to, so songs and
           // figures don't all walk the catalogue in the same order
-          const pool = POOLS[fam].filter((m) => step < 4 || !CAT.SPARSE_MOVES.includes(m));
+          const pool = POOLS[fam].filter((m) => !peak || !CAT.SPARSE_MOVES.includes(m));
           const fresh = pool.length > 1 ? pool.filter((m) => m !== prev) : pool;
           const least = Math.min(...fresh.map((m) => used.get(m) ?? 0));
           const ties = fresh.filter((m) => (used.get(m) ?? 0) === least);
@@ -272,7 +274,8 @@ function register(an: Analysis, t0: number, t1: number): number {
   const ev = an.events, a = searchsorted(ev.t, t0), b = searchsorted(ev.t, t1);
   if (b <= a) return 0.5;
   let sum = 0;
-  for (let i = a; i < b; i++) sum += clip((ev.top[i] - an.pitchLo) / Math.max(an.pitchHi - an.pitchLo, 1), 0, 0.999);
+  const span = Math.max(an.pitchHi - an.pitchLo, 1);
+  for (let i = a; i < b; i++) sum += clip((ev.top[i] - an.pitchLo) / span, 0, 0.999);
   return sum / (b - a);
 }
 
