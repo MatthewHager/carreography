@@ -1,4 +1,5 @@
 // What a music visualizer measures, on the show's frame grid, so the lights can look like the music:
+//   loudness          the whole mix's level in dB, the song's loud end at 1
 //   bands             the energy in four bands, with a level meter's instant rise and gentle fall
 //   kick/snare/hats   the drum kit piece by piece: transients across each one's band
 //   brightness        the spectral centroid: dull to bright
@@ -312,7 +313,7 @@ function kitOf(beats: number[], kick: number[][], snare: number[][], hats: numbe
   return perBeat(beats, kit, nFrames, step);
 }
 
-type Visuals = Pick<Analysis, 'bands' | 'kick' | 'snare' | 'hats' | 'brightness' | 'chroma' | 'pitchClass'
+type Visuals = Pick<Analysis, 'loudness' | 'bands' | 'kick' | 'snare' | 'hats' | 'brightness' | 'chroma' | 'pitchClass'
   | 'pitchClassStrength' | 'novelty' | 'noveltyPeaks' | 'kit' | 'beatConfidence'>;
 
 /** The visualizer's measurements of `y`, from its spectrum `spec`, the onset curve `env` (the mean flux of
@@ -325,6 +326,7 @@ export function visuals(y: Float32Array, spec: Spectrum, env: Float32Array, beat
   const [kick, snare] = apart(voiceOnsets(mel, db, T, VOICES.kick), voiceOnsets(mel, db, T, VOICES.snare));
   const hats = voiceOnsets(mel, db, T, VOICES.hats);
   return {
+    loudness: g(loud),
     bands: bandsOf(mel, T, g, step),
     kick, snare, hats,
     brightness: g(brightnessOf(mel, T, loud)),

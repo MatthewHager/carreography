@@ -291,6 +291,7 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   return {
     duration, nFrames, step, tempo, beats, downbeats, bass, highs, hits, intensity, build, tier,
     loudFast, events, pitchLo, pitchHi, beatScore, sections,
+    heardBeats: opts.neuralBeats?.beats.slice() ?? null,
     pulseEnv: Array.from(fullEnv), pulseHop: HOP / SR,
     ...visuals(y, spec, fullEnv, beats, nFrames, step),
   };

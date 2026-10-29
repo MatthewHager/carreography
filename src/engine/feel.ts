@@ -3,22 +3,27 @@
 //
 //   flow   No steady beat to follow, so the lights flow (legato.ts: layers that swell with the music
 //          and the melody gliding across the stage) instead of hitting. Both signs of a beat must be
-//          missing: the tracked beats don't keep time (fewer than STEADY of their gaps within STEADY_TOL
-//          of the usual gap) and the music doesn't hit on them (clarity below FLOW_CLARITY). Either one
-//          keeps the beat: a band's groove can be syncopated (little on the beat itself), and an
-//          orchestra following its conductor (beats that stretch) still hits hard on them.
+//          missing: the neural tracker's beats don't keep time (fewer than STEADY of their gaps within
+//          STEADY_TOL of the gaps around them, so a performer speeding up still keeps time) and the music
+//          doesn't hit on the beats (clarity below FLOW_CLARITY). Either one keeps the beat: a band's groove
+//          can be syncopated (little on the beat itself), and an orchestra's tutti hits everywhere but its
+//          tracker hears a firm pulse. A stretch under ISLAND_S between two that agree goes their way,
+//          so the style doesn't flip for a few bars.
 //   kit    A rhythm section, so the drum-kit layer runs (kicks thump the fogs, snares the side cars,
 //          hats tick the markers); elsewhere the gentler percussion layer. A low hit (kick, bass,
 //          timpani) right on at least KICK of the beats, and at least HATS high hits (snare, hats,
 //          cymbals) a beat. An orchestra passage that pounds like that counts too.
 //
-// Measured on the beats as the listening tracked them, before tempo.ts moves them onto what is played.
+// Measured on the beats as the listening tracked them, before tempo.ts moves them onto what is played. The
+// neural tracker's own beats say best whether there is a pulse: where it hears none its beats wander, while
+// the fallback tracker always draws an even grid.
 
 import type { Analysis, Phrase } from './analysis';
 import { clip, mean, median } from './np';
 
-const FLOW_CLARITY = 2.5;
+const FLOW_CLARITY = 2.2;
 const STEADY = 0.75, STEADY_TOL = 0.05;
+const ISLAND_S = 20;
 const KICK = 0.3, HATS = 1.0, KICK_NEAR_S = 0.05;
 
 /** One section of the song and how it moves. */
@@ -52,12 +57,15 @@ export function clarity(an: Analysis, t0: number, t1: number, reach = 4.0): numb
   return mean(peaks) / (mean(env, i0, i1) + 1e-9);
 }
 
-/** The share of the beats' gaps within `tol` of their median. */
+/** The share of the beats' gaps within `tol` of the gaps around them (the median of the eight nearest), or
+ * within a frame of the tracker's (20 ms) at a fast tempo: a performer speeding up still keeps time. */
 function steadiness(beats: number[], tol: number): number {
   const gaps = beats.slice(1).map((b, i) => b - beats[i]);
   if (gaps.length < 4) return 0;
-  const usual = median(gaps);
-  return gaps.filter((g) => Math.abs(g / usual - 1) < tol).length / gaps.length;
+  return gaps.filter((g, i) => {
+    const m = median(gaps.slice(Math.max(0, i - 4), i + 5));
+    return Math.abs(g - m) < Math.max(tol * m, 0.025);
+  }).length / gaps.length;
 }
 
 const near = (sorted: number[], t: number, reach: number) => {
@@ -89,9 +97,18 @@ export function feel(an: Analysis, phrases?: Phrase[]): Feel[] {
   const spans = an.sections?.length ? an.sections.map((s) => [s.t0, s.t1]) : [[0, an.duration]];
   out = spans.map(([t0, t1]) => {
     const beats = an.beats.filter((b) => b >= t0 && b < t1);
-    const flow = clarity(an, t0, t1, 0) < FLOW_CLARITY && steadiness(beats, STEADY_TOL) < STEADY;
+    const heard = an.heardBeats ? an.heardBeats.filter((b) => b >= t0 && b < t1) : beats;
+    const flow = clarity(an, t0, t1, 0) < FLOW_CLARITY && steadiness(heard, STEADY_TOL) < STEADY;
     return { t0, t1, flow, kit: !flow && hasKit(an, t0, t1, beats) };
   });
+  // a short stretch between two that agree goes their way: the style doesn't flip for a few bars
+  for (let i = 1; i + 1 < out.length; i++) {
+    const f = out[i];
+    if (f.t1 - f.t0 < ISLAND_S && out[i - 1].flow === out[i + 1].flow && f.flow !== out[i - 1].flow) {
+      f.flow = !f.flow;
+      f.kit = f.kit && !f.flow;
+    }
+  }
   if (phrases?.length) {
     const starts = phrases.map((ph) => ph.t0);
     for (let i = 1; i < out.length; i++) {

@@ -82,12 +82,15 @@ export interface Analysis {
   pitchLo: number;       // the song's melodic range, mapped across the stage
   pitchHi: number;
   beatScore: number;     // the onset curve on the beats over its mean (2 and up: a beat to follow)
+  heardBeats: number[] | null;   // the neural tracker's beats as it heard them (feel.ts), if it ran
   sections: Section[];
   pulseEnv: number[];    // the onset strength curve, one value per pulseHop seconds
   pulseHop: number;
   // What a music visualizer shows (listen/visual.ts). Curves have one value per frame (nFrames), 0..1 over
   // the song, except kit and beatConfidence, which mean the same in every song (a song without drums stays
   // low); hit lists are rows of time, strength 0..1, in time order.
+  loudness: Float32Array;       // the whole mix's level in dB: its loud end (99th percentile) 1, 40 dB below
+                                // it (or its quietest stretch, at least 12 dB down) 0
   bands: Bands;
   kick: number[][];             // kick hits: the low end jumping (a bass drum, timpani, a bass note's attack)
   snare: number[][];            // snare hits: a body and noise up to 7 kHz at once (snare, claps, a crash)
