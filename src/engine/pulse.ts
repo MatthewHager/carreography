@@ -104,6 +104,9 @@ const clearAt = (an: Analysis, t: number) =>
   Math.max(an.beatConfidence[clip(Math.round(t / an.step), 0, an.nFrames - 1)], steadyAt(an, t) ? CLEAR : 0);
 
 const ATTACK_S = [0.1, 0.2];     // a hit holds full this long, from a groove to the peak, then decays: a thump
+const ONE = 1.25;                // the 1 holds this much longer
+const BAR_FLASH_S = 0.3;         // the trucks' bars flash on the 1 for this long at most, the 2025+ Model Y's
+const GLINT_S = 0.1;             // ... for this long
 const RAMPS: [number, number][] = [[0.5, C.OFF_500], [1.0, C.OFF_1000], [2.0, C.OFF_2000]];
 
 /** One hit of the layer: its beat, kind ('tick' the calm downbeat, 'big' on the 1, 'beat' the others, ''
@@ -162,17 +165,18 @@ export function apply(cars: Car[], an: Analysis): void {
   let sweep = 0;
   for (const { t, kind, hold, ramp, end } of hits(an)) {
     const peak = stepOf(levelAt(an, t)) === 4;
-    const hit = (c: Car, chs: number[], dur: number, until = end, code = ramp) => {
+    const hit = (c: Car, chs: number[], dur: number) => {
       c.lightOver(chs, t, t + dur);
-      c.lightOver(chs, t + dur, until, code);
+      c.lightOver(chs, t + dur, end, ramp);
     };
     if (kind === 'tick') hit(mid, mid.inner(), ATTACK_S[0]);
     if (kind !== 'big' && kind !== 'beat') continue;
     for (const c of cars) {
-      hit(c, peak ? c.heads() : c.inner(), kind === 'big' ? hold * 1.25 : hold);
-      if (kind === 'big' && peak) hit(c, c.everything(), hold);
-      if (kind === 'big' && c.isCt) M.barFlash(c, t, Math.min(0.3, end - t), peak ? 1.0 : 0.5);
-      if (kind === 'big') c.light(c.bar(), t, t + 0.1);
+      hit(c, peak ? c.heads() : c.inner(), kind === 'big' ? hold * ONE : hold);
+      if (kind !== 'big') continue;
+      if (peak) hit(c, c.everything(), hold);
+      if (c.isCt) M.barFlash(c, t, Math.min(BAR_FLASH_S, end - t), peak ? 1.0 : 0.5);
+      c.light(c.bar(), t, t + GLINT_S);
     }
     if (peak && end - t > 2 * hold) {             // the off-beat sweeping the turns: 0, 1, 2, 1, 0 ...
       const n = cars.length, j = sweep++ % Math.max(1, 2 * n - 2), c = cars[j < n ? j : 2 * n - 2 - j];

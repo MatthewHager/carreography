@@ -289,14 +289,19 @@ function stretch(an: Analysis, t0: number, t1: number): Phrase {
 // ---- The end ------------------------------------------------------------------------------------
 
 const END_S = 12;          // the ending's hit is looked for this far before the music stops ...
-const STRONG = 0.6;        // ... the last beat at least this strong against the strongest there
+const STRONG = 0.6;        // ... the last beat at least this strong against the strongest there ...
+const LAST_S = 0.6;        // ... and this far before the music stops, or 1.5 s before it with none
+const RING_S = 0.2;        // a last hit is loud if it rings this long at PULSE.LOUD
+const ALL_ON_S = 0.3;      // everything on this long, then Tesla's 2 s ramp down: dark FADE_S after the hit
+const FADE_S = 2.5;
 const BAR_HOLD = 1.15;     // the bars hold full for the fade's first eighth, then go with the lamps
+const FLOW_FADE_S = 2.0;   // music that ends flowing fades this long from where it stops
 
 /** The music's last strong beat: the last beat in the final END_S whose attack is at least STRONG of the
  * strongest there. */
 function finalBeat(an: Analysis, end: number): number | null {
   const env = an.pulseEnv;
-  const b = an.beats.filter((x) => x > end - END_S && x < end - 0.6);
+  const b = an.beats.filter((x) => x > end - END_S && x < end - LAST_S);
   if (!env || !b.length) return null;
   const hop = an.pulseHop;
   const strength = b.map((x) => {
@@ -317,23 +322,23 @@ function finale(cars: Car[], an: Analysis) {
   let t = late.length ? late[late.length - 1] : Math.max(end - 1.5, 0);
   const last = finalBeat(an, end);
   if (last !== null && last > t) t = last;
-  const ring = an.loudness.subarray(cars[0].fr(t), cars[0].fr(t + 0.2) + 1);
+  const ring = an.loudness.subarray(cars[0].fr(t), cars[0].fr(t + RING_S) + 1);
   if (flowsAt(an, end - 0.25) && !(late.includes(t) && Math.max(...ring) >= PULSE.LOUD)) {
     for (const c of cars) {
       const row = clip(c.fr(end) - 1, 0, c.nFrames - 1);
       const lit = c.out(c.everything()).filter((ch) => c.get(row, ch) > 0);
       c.dark(c.everything(), end, an.duration);
-      c.light(lit, end, Math.min(an.duration, end + 2.0), C.OFF_2000);
+      c.light(lit, end, Math.min(an.duration, end + FLOW_FADE_S), C.OFF_2000);
     }
     return;
   }
-  const fadeEnd = Math.min(an.duration - 0.1, t + 2.5);
+  const fadeEnd = Math.min(an.duration - 0.1, t + FADE_S);
   const bars: number[] = [];
   for (let ch = C.FRONT_BAR[0]; ch <= C.REAR_BAR[C.REAR_BAR.length - 1]; ch++) bars.push(ch);
   for (const c of cars) {
     for (const ch of c.everything()) {
-      c.set(ch, t, t + 0.3, C.ON);
-      c.set(ch, t + 0.3, fadeEnd, C.OFF_2000);
+      c.set(ch, t, t + ALL_ON_S, C.ON);
+      c.set(ch, t + ALL_ON_S, fadeEnd, C.OFF_2000);
     }
     c.set(bars, t, an.duration, 0);
     if (c.isCt) {
