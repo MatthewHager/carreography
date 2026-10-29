@@ -6,14 +6,15 @@
 //   calm    a soft tick of the middle car's inner beams on each downbeat, where the beat is very clear
 //   groove  1 and 3 on every car's inner beams, the bars glinting on the 1
 //   drive   every beat on every car's inner beams, the bars on the 1
-//   peak    every beat on the outer beams, and every lamp of every car on the 1, the bars full white: the
-//           inner beams are the moves', so the climax travels the stage as it thumps
+//   peak    every beat on the outer beams (a lone car's whole front), every lamp of every car on the 1,
+//           the bars full white, and the off-beats sweeping the stage car by car on the amber turns; the
+//           moves light whole halves over it, so the climax travels the stage as it thumps
 //
 // Each hit is a bright attack that decays on the shortest of Tesla's ramps (0.5, 1 or 2 s) that lasts until
 // the next hit, the way the drum it follows sounds, so every beat lands as a thump from a glow, never from
-// black. While a hit rings its beams are the beat's (ownership): where the music strikes most beats, the
-// moves leave them to the pulse. The other lamps are the moves', so a figure travelling the stage shows over
-// the thump.
+// black. Below the peak, while a hit rings its inner beams are the beat's (ownership, kept by Car.light):
+// where the music strikes most beats, the moves light around them. The other lamps are the moves', so a
+// figure travelling the stage shows over the thump.
 // A beat the music doesn't strike gets no hit. Where the beat is unclear (an.beatConfidence under CLEAR, and
 // the tracker not keeping steady time either) the layer plays only the downbeats from drive up, and where
 // the music flows (feel.ts) it isn't there.
@@ -107,7 +108,7 @@ const RAMPS: [number, number][] = [[0.5, C.OFF_500], [1.0, C.OFF_1000], [2.0, C.
 
 /** One hit of the layer: its beat, kind ('tick' the calm downbeat, 'big' on the 1, 'beat' the others, ''
  * a build's beat, which buildPulse plays), the headlights it owns while it rings (0 none, 1 the inner beams,
- * 2 the outer, 3 both), how long its attack holds, the ramp it decays on, and when it stops ringing: when
+ * 3 both, in a build), how long its attack holds, the ramp it decays on, and when it stops ringing: when
  * the next hit lands or the ramp ends, whichever is first. */
 interface Hit { t: number; kind: string; own: number; hold: number; ramp: number; end: number }
 
@@ -133,7 +134,7 @@ function hits(an: Analysis): Hit[] {
     const plays = every && struckShare(an, b[Math.max(0, i - 4)], b[i + 4] ?? t + 1) >= 0.5;
     const loud = clip((s - GROOVE) / (1 - GROOVE), 0, 1);
     const hold = Math.min(ATTACK_S[0] + (ATTACK_S[1] - ATTACK_S[0]) * loud, 0.4 * (next - t));
-    out.push({ t, kind, own: plays ? (step === 4 ? 2 : 1) : 0, hold, ramp: 0, end: 0 });
+    out.push({ t, kind, own: plays && step < 4 ? 1 : 0, hold, ramp: 0, end: 0 });
   }
   out.forEach((h, k) => {
     if (!h.kind) return;
@@ -158,6 +159,7 @@ export function ownership(an: Analysis): Uint8Array {
 export function apply(cars: Car[], an: Analysis): void {
   if (an.beats.length < 4) return;
   const mid = M.centreTruck(cars) ?? cars[Math.floor(cars.length / 2)];
+  let sweep = 0;
   for (const { t, kind, hold, ramp, end } of hits(an)) {
     const peak = stepOf(levelAt(an, t)) === 4;
     const hit = (c: Car, chs: number[], dur: number, until = end, code = ramp) => {
@@ -167,10 +169,15 @@ export function apply(cars: Car[], an: Analysis): void {
     if (kind === 'tick') hit(mid, mid.inner(), ATTACK_S[0]);
     if (kind !== 'big' && kind !== 'beat') continue;
     for (const c of cars) {
-      hit(c, peak ? c.outer() : c.inner(), kind === 'big' ? hold * 1.25 : hold);
+      // a lone car has no stage for a figure to travel: its climax thumps its whole front
+      hit(c, peak ? (cars.length > 1 ? c.outer() : c.heads()) : c.inner(), kind === 'big' ? hold * 1.25 : hold);
       if (kind === 'big' && peak) hit(c, c.everything(), hold);
       if (kind === 'big' && c.isCt) M.barFlash(c, t, Math.min(0.3, end - t), peak ? 1.0 : 0.5);
       if (kind === 'big' && c.juniper) c.light(c.sig(), t, t + 0.1);       // its whole bar
+    }
+    if (peak && end - t > 2 * hold) {             // the off-beat sweeping the turns: 0, 1, 2, 1, 0 ...
+      const n = cars.length, j = sweep++ % Math.max(1, 2 * n - 2), c = cars[j < n ? j : 2 * n - 2 - j];
+      c.light(c.turns(), (t + end) / 2, (t + end) / 2 + hold, C.ON, true);
     }
   }
   for (const [s0, land] of builds(an)) buildPulse(cars, an, s0, land);
