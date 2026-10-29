@@ -21,8 +21,6 @@ const list = (chs: Chs): readonly number[] => (typeof chs === 'number' ? [chs] :
 export class Car {
   readonly frames: Uint8Array;
   readonly closureCounts = new Map<number, number>();
-  /** Spans [t0, t1] in which the windows must not move (a Model X's doors are moving). */
-  readonly windowsStill: [number, number][] = [];
   /** Per frame, how long the music has been silent there (0 while it sounds): silence is dark. */
   hush: Uint8Array | null = null;
 
