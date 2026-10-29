@@ -94,10 +94,10 @@ const posOf = (p: number, lo: number, hi: number) => clip((p - lo) / Math.max(hi
 /** What one hit lights of a car's half at level s: a single lamp at a hush, then the signature and DRL, from
  * a groove the inner headlight too, from drive the outer one as well (but those the beat rings: Car.light).
  * A truck's half is its side marker and headlights (its bar is
- * drawn separately). A 2025+ Model Y's is its bar's end and centre, but from a groove to the peak only the
- * end, so the busy figures keep its two halves apart. */
+ * drawn separately). A 2025+ Model Y's is its bar's end and centre, but in drive (every beat) only the end,
+ * so the busy figures keep its two halves apart. */
 export function half(car: Car, side: LR, s: number): number[] {
-  const out = car.juniper ? (s >= GROOVE && s < PEAK ? car.drl(side) : car.accents(side))
+  const out = car.juniper ? (s >= DRIVE && s < PEAK ? car.drl(side) : car.accents(side))
     : car.isCt || s < CALM ? car.sig(side) : car.accents(side);
   if (s >= GROOVE) out.push(...car.inner(side));
   if (s >= DRIVE) out.push(...car.outer(side));

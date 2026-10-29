@@ -127,8 +127,8 @@ table below), so no layer has to dodge another and nothing is cleaned up after t
    in its pianissimo through marches and mirrors to rings and fills at the climax.
 3. **Every hit is sized by the level at its moment** (`moves.half`): a single lamp at a hush, a half car's
    signature and DRL when calm, its inner beam from a groove, its outer beam too from drive (a 2025+ Model
-   Y's half is its bar's end and centre, but in a busy figure from a groove to the peak its end alone, so
-   its halves stay apart). A calm short
+   Y's half is its bar's end and centre, but in drive, where figures hit every beat, its end alone, so its
+   halves stay apart). A calm short
    note flashes and fades over half a second, a held one swells in and holds as it sounds; from a groove up
    a note is struck and held most of the way to the next. Whatever the move, the melody runs along the
    trucks' bars as comets, so the centrepiece always carries the tune.
