@@ -6,7 +6,7 @@ What each move looks like, when the choreographer plays it, and what it locks to
 | move | what you see | plays | locks to |
 |---|---|---|---|
 | keyboard | notes play across the stage like a keyboard, low on the crowd's left and high on the right, the melody along the truck's bar | a figure that follows its melody | note |
-| relay | one light runs the stage note by note, through every lamp and along the bar, turning when the melody turns | a figure that follows its melody | note |
+| relay | one light runs the stage note by note, through every lamp and along the bar, end to end and back | a figure that follows its melody | note |
 | mirror | pitch is the distance from the middle: low notes light the centre, high notes both ends, so a rising line opens out and a falling one closes in | a figure that follows its melody | note |
 | antiphony | call and response: bar by bar the melody passes between the left and the right half of the stage | a figure that follows its melody | note |
 | block | chords as blocks of light from their lowest note to their highest, held with the chord; a big chord fills the stage | every phrase shaped as chords | note |

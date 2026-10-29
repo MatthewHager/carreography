@@ -242,8 +242,9 @@ const keyboard: Move = (cars, an, ph) => {
   barMelody(cars, an, ph);
 };
 
-/** A light runs the stage note by note, through every lamp and along the bar, turning when the melody
- * turns and bouncing off the ends; at a high level each step lights the whole half it reaches. */
+/** A light runs the stage note by note, through every lamp and along the bar, from the end the melody
+ * heads for to the other and back, so every car takes its turn; at a high level each step lights the whole
+ * half it reaches. */
 const relay: Move = (cars, an, ph) => {
   const ev = an.events;
   const stations: [Car, LR, number[] | number][] = [];   // a lamp, or a sixth of a truck's bar
@@ -251,10 +252,10 @@ const relay: Move = (cars, an, ph) => {
     if (c.isCt) for (let k = 0; k < 6; k++) stations.push([c, k < 3 ? 'L' : 'R', k]);
     else c.lamps().forEach((lamp, k) => stations.push([c, k < 4 ? 'L' : 'R', lamp]));
   }
-  const n = stations.length;
-  let dir = ph.up >= 0.5 ? 1 : -1, pos = dir > 0 ? 0 : n - 1;
+  const n = stations.length, lap = Math.max(1, 2 * n - 2);
   for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t);
+    const t = ev.t[i], s = levelAt(an, t), k = (i - ph.a) % lap, there = k < n ? k : lap - k;
+    const pos = ph.up >= 0.5 ? there : n - 1 - there;
     const [car, side, st] = stations[pos], nxt = ev.t[i + 1] ?? Infinity;
     if (typeof st === 'number') {
       const trail = Math.max(clip(ev.dur[i], 0.1, 0.25), 0.2 + 0.2 * s);    // longer when loud
@@ -262,15 +263,6 @@ const relay: Move = (cars, an, ph) => {
       if (s >= DRIVE) note(car, car.half(side, s), t, ev.dur[i], s, nxt);
     } else {
       note(car, s >= DRIVE ? car.half(side, s) : st, t, ev.dur[i], s, nxt);
-    }
-    if (i + 1 < ph.b) {
-      const step = Math.sign(ev.top[i + 1] - ev.top[i]);
-      if (step !== 0) dir = step;
-    }
-    pos += dir;
-    if (pos >= n || pos < 0) {
-      dir = -dir;
-      pos = clip(pos + 2 * dir, 0, n - 1);
     }
   }
   barMelody(cars, an, ph);

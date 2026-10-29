@@ -23,8 +23,8 @@ const mv = (what: string, grid: Move['grid']): Move => ({ what, grid });
 export const MOVES: Record<string, Move> = {
   keyboard: mv("notes play across the stage like a keyboard, low on the crowd's left and high on the right, "
     + "the melody along the truck's bar", 'note'),
-  relay: mv('one light runs the stage note by note, through every lamp and along the bar, turning when the '
-    + 'melody turns', 'note'),
+  relay: mv('one light runs the stage note by note, through every lamp and along the bar, end to end and '
+    + 'back', 'note'),
   mirror: mv('pitch is the distance from the middle: low notes light the centre, high notes both ends, so a '
     + 'rising line opens out and a falling one closes in', 'note'),
   antiphony: mv('call and response: bar by bar the melody passes between the left and the right half of the '
