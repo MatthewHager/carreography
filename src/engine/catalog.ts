@@ -4,7 +4,7 @@
 //   what      one line: what the audience sees across the cars
 //   grid      what it locks to:
 //               note   the transcribed notes
-//               beat   the tracked beats (every 2nd or 4th when calm)
+//               beat   the tracked beats at the level's pace (every one, 1 and 3, or the downbeat)
 //               bar    the tracked downbeats, a whole bar at a time
 //               self   its own timing (a cadence's chords, the Toccata's motif, a trill)
 //
@@ -50,8 +50,8 @@ export const MOVES: Record<string, Move> = {
     + 'until the next', 'beat'),
 };
 
-/** A passage plays one move: one that follows the melody, or one that follows the beat (choreo.ts chooses
- * which, and the least used of the pool). */
+/** A figure of a passage plays one move: one that follows the melody, or one that follows the beat (choreo.ts
+ * chooses which, and the least used of the pool). */
 export const NOTE_MOVES = ['keyboard', 'mirror', 'antiphony', 'relay', 'lr_notes'];
 export const BEAT_MOVES = ['march', 'lr_channel', 'checker', 'beam', 'converge', 'tug_of_war', 'shockwave'];
 /** ... or the swell of a chord held with no beat to follow. */
@@ -85,8 +85,8 @@ export function markdown(): string {
 function plays(name: string): string {
   const shapes = Object.entries(FOR_GESTURE).filter(([, m]) => m === name).map(([g]) => g);
   if (shapes.length) return `every phrase shaped as ${shapes.join(', ')}`;
-  if (NOTE_MOVES.includes(name)) return 'a passage that follows its melody';
-  if (BEAT_MOVES.includes(name)) return 'a passage that follows its beat';
+  if (NOTE_MOVES.includes(name)) return 'a figure that follows its melody';
+  if (BEAT_MOVES.includes(name)) return 'a figure that follows its beat';
   if (HELD_MOVES.includes(name)) return 'a chord held with no beat to follow';
   return '';
 }

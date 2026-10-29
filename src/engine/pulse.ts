@@ -6,12 +6,13 @@
 //   calm    a soft tick of the middle car's inner beams on each downbeat, where the beat is very clear
 //   groove  1 and 3 on every car's inner beams, the bars glinting on the 1
 //   drive   every beat on every car's inner beams, the bars on the 1
-//   peak    every beat on both headlights, the off-beats on the middle car: the whole stage
+//   peak    every beat on both headlights, every lamp on the 1 and the bars full white, the off-beats
+//           sweeping the stage car by car on the amber turns: the whole stage
 //
-// The headlights it plays are the beat's (ownership): where the music strikes most beats, the moves leave a
-// car's inner beams to the pulse from a groove up, and both headlights at the peak. Each hit is a bright
-// attack that decays on Tesla's half-second ramp until the next, the way the drum it follows sounds, so
-// every beat lands as a thump from a dimmer glow, never from black, and the rest of the stage stays lit.
+// Each hit is a bright attack that decays on the shortest of Tesla's ramps (0.5, 1 or 2 s) that lasts until
+// the next hit, the way the drum it follows sounds, so every beat lands as a thump from a glow, never from
+// black. While a hit rings its headlights are the beat's (ownership): where the music strikes most beats,
+// the moves leave a car's inner beams to the pulse from a groove up, and both headlights at the peak.
 // The outer beams are the moves' below the peak, and the bars and every other lamp always are, so a figure
 // travelling the stage shows over the thump.
 // A beat the music doesn't strike gets no hit. Where the beat is unclear (an.beatConfidence under CLEAR, and

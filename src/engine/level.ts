@@ -19,7 +19,7 @@
 //   1  calm     a lamp or two a note, soft fades, a pulse on the downbeats where the beat is clear
 //   2  groove   half cars, the pulse on 1 and 3, the drums, the motors start to move
 //   3  drive    every beat, half cars with headlights, the rear lit, the motors spend the most
-//   4  peak     everything: whole cars, every beat and its off-beat, the lids dancing
+//   4  peak     everything: whole cars, every lamp on the downbeat, the off-beats too, the lids dancing
 
 import type { Analysis } from './analysis';
 import { clip, quantile } from './np';

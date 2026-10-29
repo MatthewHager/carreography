@@ -4,7 +4,8 @@
 //               (level.ts); every layer sizes itself by it
 //   bed         what is lit steadily: rear lamps, the trucks' bars glowing, the cabins in the harmony's
 //               colour (bed.ts)
-//   moves       the foreground: one move per passage of the music, following its melody or its beat, with
+//   moves       the foreground: one move per figure (a period of a passage), following its melody or its
+//               beat or swelling with a held chord, with
 //               chords, trills, cadences and the Toccata's motif getting their own (moves.ts, catalog.ts)
 //   drums       each drum voice on lamps of its own wherever it plays (drums.ts)
 //   pulse       the beat on the headlights, and the builds that speed up into a drop (pulse.ts)
@@ -83,7 +84,8 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
 }
 
 // ---- Passages ----------------------------------------------------------------------------------
-// One move per passage, so the same music reads as the same idea, and a new move where the music grows:
+// One move per figure of a passage, so the same music reads as the same idea, and a new move where the music
+// grows or a period ends (playPassages):
 // Hall of the Mountain King's theme, played eighteen times and growing, follows its notes while it is quiet,
 // then turns into figures that travel the whole stage on the beat as it drives into its climax. A passage
 // runs from one change in the music to the next: a section of the form map that brings back earlier

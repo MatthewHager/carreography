@@ -23,7 +23,8 @@ gh release download car-models --dir public/models/tesla-app           # Tesla's
   - `vehicles.ts`: the lineup letters (`S`, `M`, `m`, `X`, `Y`, `y`, `B`, `L`, `C`), folder names and
     places.
   - `car.ts`: `Car` (one car's frames, the lamp groups, crowd-side flipping, closure command counting).
-  - `choreo.ts`: `choreograph()` (the pipeline: the layers in order), the passages and the move each plays.
+  - `choreo.ts`: `choreograph()` (the pipeline: the layers in order), the passages, their figures and the
+    move each plays.
   - `level.ts`: one level per frame from the loudness, its top kept for the peak; every layer sizes by it.
   - `bed.ts` (steady lamps, the trucks' bars, the cabins' colour), `moves.ts` (every move as
     `(cars, an, ph) => void`, sized by the level, the `MOVES` table, `centreTruck`, `sides`, `slotFor`),
@@ -56,7 +57,8 @@ gh release download car-models --dir public/models/tesla-app           # Tesla's
   `centreTruck(cars)` (may be `null`) and `sides(cars)` from `moves.ts`.
 - **Tesla's motor limits** (`CLOSURE_LIMITS` in `channels.ts`): liftgate 6, each window 6, each mirror
   20, charge port 3, a Model X's doors 6 each. Dance only once a lid is fully open; about 30 s of dancing
-  per closure per show (each motor's own thermal limit). `Car.closure()` refuses commands past the limits, and `vehicles.test.ts` checks every letter.
+  per closure per show (each motor's own thermal limit). `Car.closure()` refuses commands past the
+  limits, and `vehicles.test.ts` checks every letter.
 - **Deterministic, byte-identical output.** The same input gives the same FSEQ: nothing random, no
   `Math.random()` or clock time in the engine (`choreo.test.ts` checks). Refactors must keep shows
   identical: make a song's show before and after with the review tool and compare the files.
@@ -69,8 +71,8 @@ gh release download car-models --dir public/models/tesla-app           # Tesla's
 ## Adding things
 
 - **A move:** a function in `moves.ts` sized by the level, its name in the `MOVES` table at the end of
-  `moves.ts`, and an entry in `catalog.MOVES` (and `NOTE_MOVES` or `BEAT_MOVES`). Dispatch is by name.
-  Details in CONTRIBUTING.md.
+  `moves.ts`, and an entry in `catalog.MOVES` (and `NOTE_MOVES`, `BEAT_MOVES` or
+  `HELD_MOVES`). Dispatch is by name. Details in CONTRIBUTING.md.
 - **A car:** `vehicles.ts`, the `Car` lamp groups, `lamps.ts` if the hardware differs, `motors.ts`
   travel times, the viewer profile (`viewer/core/vehicles.ts`) and app model (`viewer/car/appBody.ts`,
   `tools/export_car_models.py`). Details in CONTRIBUTING.md.
