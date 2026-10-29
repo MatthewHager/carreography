@@ -532,33 +532,31 @@ function onRuns(col: Uint8Array): [number[], number[]] {
   return [starts, ends];
 }
 
-const MERGE_S = [0.25, 0.25, 0.2];     // a lamp lit again this soon at a hush, calm or groove stays lit
+const MERGE_S = 0.25;     // below drive, a lamp dark for less than this between two longer lightings flickers
+const MIN_ON = 5, MIN_OFF = 3;     // frames: a flash shorter than 100 ms doesn't read; a gap under 60 ms neither
 
 /** On-off lamps, so that rapid notes read as separate flashes and calm music doesn't flicker: flashes shorter
- * than 100 ms get stretched; below drive a lamp lit again within MERGE_S of going out stays lit, so a quick
- * figure on one lamp is held light rather than blinking; from drive up gaps under 60 ms get opened up. */
+ * than MIN_ON get stretched; below drive a lamp that goes dark for less than MERGE_S, and for less time than
+ * it was lit either side, stays lit (a quick figure on one lamp is held light, while a trill's flicker, its
+ * gaps as long as its flashes, stays a flicker); from drive up gaps under MIN_OFF get opened up. */
 function tidy(car: Car, an: Analysis) {
-  const minOn = 5, minOff = 3;
-  const n = car.nFrames, lv = an.level!;
-  const merge = (f: number) => {
-    const k = stepOf(lv[clip(f, 0, n - 1)]);
-    return k < MERGE_S.length ? Math.round(MERGE_S[k] / an.step) : 0;
-  };
+  const n = car.nFrames, lv = an.level!, merge = Math.round(MERGE_S / an.step);
   for (let ch = C.L_OUTER_MAIN; ch <= C.LICENSE_PLATE; ch++) {
     const col = car.column(ch);
     let [starts, ends] = onRuns(col);
     if (!starts.length) continue;
     starts.forEach((s0, k) => {                // stretch short flashes
-      if (ends[k] - s0 < minOn) {
+      if (ends[k] - s0 < MIN_ON) {
         const v = col[s0];
-        for (let f = s0; f < Math.min(n, s0 + minOn); f++) col[f] = Math.max(col[f], v);
+        for (let f = s0; f < Math.min(n, s0 + MIN_ON); f++) col[f] = Math.max(col[f], v);
       }
     });
     [starts, ends] = onRuns(col);
     for (let k = 0; k < ends.length - 1; k++) {
-      const e0 = ends[k], s1 = starts[k + 1];
-      if (s1 - e0 < merge(e0)) col.fill(col[e0 - 1], e0, s1);                      // hold calm figures
-      else if (s1 - e0 < minOff) for (let f = s1; f < Math.min(n, e0 + minOff); f++) col[f] = 0;
+      const e0 = ends[k], s1 = starts[k + 1], gap = s1 - e0;
+      const held = gap < merge && gap < e0 - starts[k] && gap < ends[k + 1] - s1 && lv[clip(e0, 0, n - 1)] < DRIVE;
+      if (held) col.fill(col[e0 - 1], e0, s1);
+      else if (gap < MIN_OFF) for (let f = s1; f < Math.min(n, e0 + MIN_OFF); f++) col[f] = 0;
     }
     for (let f = 0; f < n; f++) car.put(f, ch, col[f]);
   }
