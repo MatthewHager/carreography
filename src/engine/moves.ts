@@ -109,12 +109,12 @@ export const owned = (an: Analysis, t: number) =>
  * drawn separately). */
 export function half(car: Car, side: LR, s: number, own = 0): number[] {
   const out = car.isCt || s < CALM ? car.sig(side) : car.accents(side);
-  if (s >= GROOVE && own < 1) out.push(...car.inner(side));
-  if (s >= DRIVE && own < 2) out.push(...car.outer(side));
-  return out;
+  if (s >= GROOVE) out.push(...car.inner(side));
+  if (s >= DRIVE) out.push(...car.outer(side));
+  return free(car, out, own);
 }
 
-/** `chs` without the headlights the beat layer owns. */
+/** `chs` without the headlights the beat layer owns (`own`, as owned() says). */
 const free = (car: Car, chs: number[], own: number) =>
   chs.filter((ch) => !(own >= 1 && car.inner().includes(ch)) && !(own >= 2 && car.outer().includes(ch)));
 
