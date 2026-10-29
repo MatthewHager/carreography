@@ -105,7 +105,8 @@ export function half(car: Car, side: LR, s: number): number[] {
 }
 
 /** Both halves of a car: a 2025+ Model Y's whole bar. */
-const whole = (car: Car, s: number) => [...half(car, 'L', s), ...half(car, 'R', s), ...(car.juniper ? car.sig() : [])];
+const whole = (car: Car, s: number) =>
+  [...half(car, 'L', s), ...half(car, 'R', s), ...(car.juniper ? car.sig() : [])];
 
 const HELD_NOTE_S = 0.6, SWELL_MAX_S = 2.5;     // a note this long is held: it swells, for up to this long
 
@@ -649,6 +650,7 @@ function ring([car, side]: [Car, LR], t: number, end: number, s: number) {
 // With no beat to follow, the light glides with the melody instead of hitting.
 
 const GLIDE_S = 0.5, SPREAD_S = 3;     // the melody's place is smoothed over this, then spread over this
+const SPOT = 0.9, SPOT_LEDS = 6;       // its spot on a truck's bar: just under full, about this many LEDs wide
 const paths = new WeakMap<Analysis, Float64Array>();
 
 /** Per frame, the melody's place on the stage, 0..1 (NaN where none sounds): the louder two thirds of the
@@ -712,7 +714,9 @@ const flowing = (places: (p: number) => number[]): Move => (cars, an, ph) => {
       if (!car.isCt) continue;
       if (!spot.has(car)) spot.set(car, rows(b - a, () => 0));
       const row = spot.get(car)![f - a];
-      for (let j = 0; j < BAR; j++) row[j] = Math.max(row[j], 0.9 * Math.exp(-(((j - w * (BAR - 1)) / 6) ** 2)));
+      for (let j = 0; j < BAR; j++) {
+        row[j] = Math.max(row[j], SPOT * Math.exp(-(((j - w * (BAR - 1)) / SPOT_LEDS) ** 2)));
+      }
     }
   }
   for (const [key, on] of lit) {

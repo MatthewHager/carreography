@@ -22,6 +22,9 @@ import { clip, runs } from './np';
 
 const DWELL_S = 4.0;          // a lamp of the bed stays at least this long once it changes
 const METER = 0.7;            // the rear bar's level meter at the top, so a kick's flash still stands out
+const GLOW = 0.15, GLOW_UP = 0.5;   // a truck's front bar: lit this much even in a pianissimo, this much more
+                                    // at the top (by the level to the power 1.5, as the level's own steps)
+const VOICE = 0.4;            // ... and up to this share of it follows the voice and the lead
 const DULL = [110, 0, 200], BRIGHT = [255, 140, 20];
 
 /** Per frame, whether the level is at `at` or above where the music beats, held for DWELL_S so a lamp never
@@ -52,7 +55,7 @@ export function apply(cars: Car[], an: Analysis): void {
     const front: Float64Array[] = [], rear: Float64Array[] = [];
     for (let f = 0; f < an.nFrames; f++) {
       const flows = !Number.isNaN(B[f]), x = flows ? (lv[f] + B[f]) / 2 : lv[f];
-      const glow = (0.15 + 0.5 * x ** 1.5) * (0.6 + 0.4 * highMid[f]);
+      const glow = (GLOW + GLOW_UP * x ** 1.5) * (1 - VOICE + VOICE * highMid[f]);
       front.push(new Float64Array(C.FRONT_BAR.length).fill(glow));
       const meter = flows ? 0 : clip((lv[f] - CALM) / (1 - CALM), 0, 1) * METER * (0.3 + 0.7 * low[f]);
       rear.push(new Float64Array(C.REAR_BAR.length).fill(meter));
@@ -129,13 +132,18 @@ function cabins(cars: Car[], an: Analysis): void {
 const RES = 0.25;            // seconds per step of the layers
 const HYST = 0.2;            // a layer goes out this far (in layers) below its way in
 const MIN_DWELL = 0.75;      // seconds a layer stays once it changes
-const BREATH_S = 6;
+const BREATH_S = 6;          // a phrase's loudness is measured against this much either side
+const LOUD_S = 0.3;          // ... over this much around each moment
+const SWELL = 0.6;           // the breath's share that is the phrase's swell (the rest is its loudness)
+const SHAPE = 1.2;           // the swell a little narrower than a sine's hump, so it rises off the start
 const FULL = DRIVE + 0.1;    // the level from which a phrase can reach every layer
+const LATE = 1.6;            // a quiet phrase fills its layers late (its breath to this power), a loud one
+                             // at once (to this less one)
 const TAIL_BAR = 0.6;        // a truck's rear bar at the tails' layer: red, not a flash
 
 /** Per frame, the breath 0..1 where the music flows, NaN where it doesn't (see above). */
 function breath(an: Analysis): Float64Array {
-  const n = an.nFrames, x = an.loudness, w = Math.round(0.3 / an.step), cs = new Float64Array(n + 1);
+  const n = an.nFrames, x = an.loudness, w = Math.round(LOUD_S / an.step), cs = new Float64Array(n + 1);
   const [start, end] = musicSpan(an);
   const flows = (f: number) => f * an.step >= start && f * an.step < end && flowsAt(an, f * an.step);
   for (let i = 0; i < n; i++) cs[i + 1] = cs[i] + x[i];
@@ -144,7 +152,7 @@ function breath(an: Analysis): Float64Array {
   const swell = new Float64Array(n).fill(NaN);
   for (const ph of an.phrases ?? []) {
     const a = Math.trunc(ph.t0 / an.step), b = Math.min(n, Math.trunc(ph.t1 / an.step));
-    for (let f = a; f < b; f++) swell[f] = Math.sin((Math.PI * (f - a)) / Math.max(1, b - a)) ** 1.2;
+    for (let f = a; f < b; f++) swell[f] = Math.sin((Math.PI * (f - a)) / Math.max(1, b - a)) ** SHAPE;
   }
   const out = new Float64Array(n).fill(NaN), reach = Math.round(BREATH_S / an.step), stride = 5;
   for (let i = 0; i < n; i += stride) {
@@ -155,7 +163,7 @@ function breath(an: Analysis): Float64Array {
     }
     for (let f = i; f < Math.min(n, i + stride); f++) {
       const rel = clip((loud(f) - lo) / Math.max(hi - lo, 0.1), 0, 1);
-      out[f] = Number.isNaN(swell[f]) ? rel : 0.6 * swell[f] + 0.4 * rel;
+      out[f] = Number.isNaN(swell[f]) ? rel : SWELL * swell[f] + (1 - SWELL) * rel;
     }
   }
   return out;
@@ -179,7 +187,7 @@ function breathe(cars: Car[], an: Analysis, B: Float64Array): void {
     const v = B[i * stride], s = lv[i * stride];
     if (Number.isNaN(v)) return (cur = 0) - 1;
     const loud = clip((s - CALM) / (FULL - CALM), 0, 1);
-    const cap = 1 + 3 * loud + (s >= PEAK ? 1 : 0), fill = v ** (1.6 - loud) * (cap + 1);
+    const cap = 1 + 3 * loud + (s >= PEAK ? 1 : 0), fill = v ** (LATE - loud) * (cap + 1);
     let want = cur;
     while (want < Math.floor(cap) && fill >= want + 1) want += 1;
     while (want > 0 && (fill < want - HYST || want > cap)) want -= 1;
