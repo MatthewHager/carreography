@@ -142,8 +142,8 @@ function hits(an: Analysis): Hit[] {
   return out;
 }
 
-/** Per frame, the headlights the beat layer owns (as Hit.own says), from each hit until it stops ringing.
- * The moves leave what it owns alone (moves.half); choreograph sets it on the analysis before they play. */
+/** Per frame, the headlights the beat layer owns (as Hit.own says), from each hit until it stops ringing:
+ * every other layer lights around them (Car.light). */
 export function ownership(an: Analysis): Uint8Array {
   const out = new Uint8Array(an.nFrames);
   const f = (x: number) => clip(Math.round(x / an.step) - 1, 0, an.nFrames);     // the lights lead a frame
@@ -158,8 +158,8 @@ export function apply(cars: Car[], an: Analysis): void {
   for (const { t, kind, hold, ramp, end } of hits(an)) {
     const peak = stepOf(levelAt(an, t)) === 4;
     const hit = (c: Car, chs: number[], dur: number, until = end, code = ramp) => {
-      c.light(chs, t, t + dur);
-      c.light(chs, t + dur, until, code);
+      c.light(chs, t, t + dur, C.ON, true);
+      c.light(chs, t + dur, until, code, true);
     };
     if (kind === 'tick') hit(mid, mid.inner(), ATTACK_S[0]);
     if (kind !== 'big' && kind !== 'beat') continue;
@@ -191,7 +191,7 @@ function buildPulse(cars: Car[], an: Analysis, t0: number, land: number): void {
       if (t >= land - gap - 0.01) continue;                             // the beat of black before the landing
       const hold = clip(gap * 0.3, 0.08, 0.14);
       const lamps = (c: Car) => (levelAt(an, t) >= DRIVE ? c.heads() : c.inner());
-      for (const c of order.slice(0, reach)) c.light(lamps(c), t, t + hold);
+      for (const c of order.slice(0, reach)) c.light(lamps(c), t, t + hold, C.ON, true);
     }
   });
 }

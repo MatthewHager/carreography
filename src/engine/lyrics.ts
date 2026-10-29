@@ -122,7 +122,7 @@ export function apply(cars: Car[], an: Analysis, said: Moment[]) {
       M.lightning(cars, t);
     } else {
       const car = cars[m.car! % cars.length];
-      car.light([...car.sig(), ...car.drl(), ...car.heads()], t, t + 0.22);
+      car.light([...car.sig(), ...car.drl(), ...car.heads()], t, t + 0.22, C.ON, true);
       if (car.isCt) M.barFlash(car, t, 0.3, 1.0);
     }
   }

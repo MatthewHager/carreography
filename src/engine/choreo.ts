@@ -49,9 +49,8 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
   if (an.beats.length > 8) an.tempo = 60.0 / median(an.beats.slice(1).map((b, i) => b - an.beats[i]));
   an.level = levelCurve(an);
   for (const ph of an.phrases) ph.level = levelOver(an, ph.t0, ph.t1);
-  const cars = makeLineup(layout, an.nFrames, an.step, silence(an));
+  const cars = makeLineup(layout, an.nFrames, an.step, silence(an), PULSE.ownership(an));
   const said = sung ? LY.moments(sung, an) : [];
-  an.beatLamps = PULSE.ownership(an);       // the headlights the beat plays, which the moves leave to it
   BED.apply(cars, an);
   playPassages(cars, an);
   DRUMS.apply(cars, an);

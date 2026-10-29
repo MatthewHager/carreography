@@ -94,5 +94,4 @@ export interface Analysis {
   // set while choreographing
   phrases?: Phrase[];
   level?: Float32Array;  // per frame 0..1: how big the show is (level.ts)
-  beatLamps?: Uint8Array;   // per frame, the headlights the beat owns (pulse.ts): 1 the inner, 2 the outer, 3 both
 }

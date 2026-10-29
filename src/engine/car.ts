@@ -27,6 +27,7 @@ type Chs = number | readonly number[];
 
 const list = (chs: Chs): readonly number[] => (typeof chs === 'number' ? [chs] : chs);
 
+const INNER = [C.L_INNER_MAIN, C.R_INNER_MAIN], OUTER = [C.L_OUTER_MAIN, C.R_OUTER_MAIN];
 const CENTRE = [C.L_CH6, C.R_CH6], REPEATERS = [C.L_SIDE_REPEATER, C.R_SIDE_REPEATER];
 /** A Model Y lamp -> the 2025+ Model Y lamps that show it: a signature is its side's end of the bar and the
  * centre (a side's accents read as end and centre, both sides as the whole bar), channel 5 that end alone,
@@ -55,6 +56,9 @@ export class Car {
     readonly falcon: boolean,
     /** Per frame, how long the music has been silent there (0 while it sounds): silence is dark. */
     readonly hush: Uint8Array | null = null,
+    /** Per frame, the headlights the beat rings there (pulse.ownership: 1 the inner beams, 2 the outer, 3
+     * both): theirs alone, and the whole-stage moments', so the moves light around them. */
+    readonly beat: Uint8Array | null = null,
   ) {
     this.frames = new Uint8Array(nFrames * C.N_CHANNELS);
   }
@@ -87,9 +91,12 @@ export class Car {
 
   /** The lamps lit from t0 to t1, shaped so the lighting reads: lit at least MIN_ON frames, joined to another
    * lighting under MIN_OFF frames away (so short a dark is a flicker, not a pause), and never lit in a
-   * silence: one still lit as the music stops fades out on Tesla's shortest ramp. */
-  light(chs: Chs, t0: number, t1: number, value = C.ON) {
-    const a = this.fr(t0), cs = this.out(chs), on = value >= 128, n = this.nFrames;
+   * silence: one still lit as the music stops fades out on Tesla's shortest ramp. The headlights the beat
+   * rings at t0 are left to it, unless this is the beat or the whole stage at once (`over`). */
+  light(chs: Chs, t0: number, t1: number, value = C.ON, over = false) {
+    const a = this.fr(t0), on = value >= 128, n = this.nFrames, own = over ? 0 : this.beat?.[a] ?? 0;
+    const cs = this.out(own ? list(chs).filter((ch) => !(own & 1 && INNER.includes(ch))
+      && !(own & 2 && OUTER.includes(ch))) : chs);
     let b = this.fr(t1);
     if (b <= a || !cs.length) return;
     if (on) b = Math.min(n, Math.max(b, a + MIN_ON));
@@ -267,8 +274,10 @@ export class Car {
   }
 }
 
-/** One Car per letter, crowd-left to right (vehicles.ts), dark wherever `hush` says the music is silent. */
-export function makeLineup(layout: string, nFrames: number, step: number, hush: Uint8Array | null): Car[] {
+/** One Car per letter, crowd-left to right (vehicles.ts), dark wherever `hush` says the music is silent, its
+ * headlights the beat's wherever `beat` says it rings. */
+export function makeLineup(layout: string, nFrames: number, step: number, hush: Uint8Array | null,
+  beat: Uint8Array | null = null): Car[] {
   return lineupCars(layout).map(([name, v], i) => new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon,
-    hush));
+    hush, beat));
 }
