@@ -6,15 +6,14 @@
 //   calm    a soft tick of the middle car's inner beams on each downbeat, where the beat is very clear
 //   groove  1 and 3 on every car's inner beams, the bars glinting on the 1
 //   drive   every beat on every car's inner beams, the bars on the 1
-//   peak    every beat on both headlights, every lamp on the 1 and the bars full white, the off-beats
-//           sweeping the stage car by car on the amber turns: the whole stage
+//   peak    every beat on the outer beams, and every lamp of every car flashing on the 1, the bars full
+//           white: the inner beams are the moves', so the climax travels the stage as it thumps
 //
 // Each hit is a bright attack that decays on the shortest of Tesla's ramps (0.5, 1 or 2 s) that lasts until
 // the next hit, the way the drum it follows sounds, so every beat lands as a thump from a glow, never from
-// black. While a hit rings its headlights are the beat's (ownership): where the music strikes most beats,
-// the moves leave a car's inner beams to the pulse from a groove up, and both headlights at the peak.
-// The outer beams are the moves' below the peak, and the bars and every other lamp always are, so a figure
-// travelling the stage shows over the thump.
+// black. While a hit rings its beams are the beat's (ownership): where the music strikes most beats, the
+// moves leave them to the pulse. The other lamps are the moves', so a figure travelling the stage shows over
+// the thump.
 // A beat the music doesn't strike gets no hit. Where the beat is unclear (an.beatConfidence under CLEAR, and
 // the tracker not keeping steady time either) the layer plays only the downbeats from drive up, and where
 // the music flows (feel.ts) it isn't there.
@@ -103,10 +102,10 @@ const clearAt = (an: Analysis, t: number) =>
 const ATTACK_S = [0.1, 0.2];     // a hit holds full this long, from a groove to the peak, then decays: a thump
 const RAMPS: [number, number][] = [[0.5, C.OFF_500], [1.0, C.OFF_1000], [2.0, C.OFF_2000]];
 
-/** One hit of the layer: its beat, kind ('tick' the calm downbeat, 'big' on the 1, 'mid' on the 3, 'beat' on
- * the others, '' a build's beat, which buildPulse plays), how much of the headlights it owns while it rings
- * (0, 1 the inner beams, 2 both), how long its attack holds, the ramp it decays on, and when it stops
- * ringing: when the next hit lands or the ramp ends, whichever is first. */
+/** One hit of the layer: its beat, kind ('tick' the calm downbeat, 'big' on the 1, 'beat' the others, ''
+ * a build's beat, which buildPulse plays), the headlights it owns while it rings (0 none, 1 the inner beams,
+ * 2 the outer, 3 both), how long its attack holds, the ramp it decays on, and when it stops ringing: when
+ * the next hit lands or the ramp ends, whichever is first. */
 interface Hit { t: number; kind: string; own: number; hold: number; ramp: number; end: number }
 
 /** Every hit the layer plays (see the module notes). Each decays on the shortest of Tesla's ramps that lasts
@@ -119,19 +118,16 @@ function hits(an: Analysis): Hit[] {
     const t = b[i], next = b[i + 1] ?? t + beatLen(an);
     if (flowsAt(an, t) || owners.some((ph) => t >= ph.t0 - 0.05 && t < ph.t1)) continue;
     if (spans.some(([s0, land]) => t >= s0 && t < land)) {                     // the build's own pulse
-      out.push({ t, kind: '', own: 2, hold: 0, ramp: 0, end: next });
+      out.push({ t, kind: '', own: 3, hold: 0, ramp: 0, end: next });
       continue;
     }
     const s = levelAt(an, t), step = stepOf(s), clear = clearAt(an, t);
     if (step === 0 || clear < FAINT || !on[i]) continue;
-    let kind = '';
-    if (step === 1) kind = pos[i] === 0 && clear >= SURE ? 'tick' : '';
-    else if (clear < CLEAR) kind = pos[i] === 0 && step >= 3 ? 'big' : '';
-    else if (step === 2) kind = pos[i] === 0 ? 'big' : pos[i] === 2 ? 'mid' : '';
-    else kind = pos[i] === 0 ? 'big' : pos[i] === 2 ? 'mid' : 'beat';
+    const every = clear >= CLEAR ? (step === 2 ? 2 : 1) : 0;    // how often it hits off the 1
+    const kind = step === 1 ? (pos[i] === 0 && clear >= SURE ? 'tick' : '')
+      : pos[i] === 0 && (step >= 3 || every) ? 'big' : every && pos[i] % every === 0 ? 'beat' : '';
     if (!kind) continue;
-    const around = struckShare(an, b[Math.max(0, i - 4)], b[i + 4] ?? t + 1);
-    const plays = step >= 2 && clear >= CLEAR && around >= 0.5;
+    const plays = every && struckShare(an, b[Math.max(0, i - 4)], b[i + 4] ?? t + 1) >= 0.5;
     const loud = clip((s - GROOVE) / (1 - GROOVE), 0, 1);
     const hold = Math.min(ATTACK_S[0] + (ATTACK_S[1] - ATTACK_S[0]) * loud, 0.4 * (next - t));
     out.push({ t, kind, own: plays ? (step === 4 ? 2 : 1) : 0, hold, ramp: 0, end: 0 });
@@ -146,8 +142,7 @@ function hits(an: Analysis): Hit[] {
   return out;
 }
 
-/** Per frame, how much of the headlights the beat layer owns: 0 none, 1 the inner beams, 2 both, from each
- * hit until it stops ringing. The moves leave what it owns alone (moves.half); choreograph sets it on the
+/** Per frame, the headlights the beat layer owns (as Hit.own says), from each hit until it stops ringing. The moves leave what it owns alone (moves.half); choreograph sets it on the
  * analysis before the moves play. */
 export function ownership(an: Analysis): Uint8Array {
   const out = new Uint8Array(an.nFrames);
@@ -156,34 +151,22 @@ export function ownership(an: Analysis): Uint8Array {
   return out;
 }
 
-/** Lay the beat layer over the choreography (after the moves and drums). At the peak every lamp family hits
- * the downbeat, the bars full white, and the off-beats sweep the stage car by car on the amber turns. */
+/** Lay the beat layer over the choreography (after the moves and drums), then the builds and the drops. */
 export function apply(cars: Car[], an: Analysis): void {
   if (an.beats.length < 4) return;
-  const ct = M.centreTruck(cars), mid = ct ?? cars[Math.floor(cars.length / 2)];
-  let sweep = 0;
-  for (const h of hits(an)) {
-    const { t, kind, hold, ramp, end } = h, step = stepOf(levelAt(an, t));
-    const hit = (c: Car, chs: number[], at: number, dur: number) => {
-      c.light(chs, at, at + dur);
-      c.light(chs, at + dur, end, ramp);
+  const mid = M.centreTruck(cars) ?? cars[Math.floor(cars.length / 2)];
+  for (const { t, kind, hold, ramp, end } of hits(an)) {
+    const peak = stepOf(levelAt(an, t)) === 4;
+    const hit = (c: Car, chs: number[], dur: number, until = end, code = ramp) => {
+      c.light(chs, t, t + dur);
+      c.light(chs, t + dur, until, code);
     };
-    if (!kind) continue;
-    if (kind === 'tick') {
-      hit(mid, mid.inner(), t, ATTACK_S[0]);
-      continue;
-    }
-    for (const c of cars) hit(c, step === 4 ? c.heads() : c.inner(), t, kind === 'big' ? hold * 1.25 : hold);
-    if (kind === 'big') {
-      for (const c of cars) {
-        if (step === 4) hit(c, c.everything(), t, hold);
-        if (c.hasBar) M.barFlash(c, t, Math.min(0.3, end - t), step === 4 ? 1.0 : 0.5);
-      }
-    }
-    const off = (t + end) / 2;
-    if (step === 4 && end - t > 2 * hold) {                  // there and back: 0, 1, 2, 1, 0 ...
-      const n = cars.length, k = sweep++ % Math.max(1, 2 * n - 2), c = cars[k < n ? k : 2 * n - 2 - k];
-      c.light(c.turns(), off, off + hold);
+    if (kind === 'tick') hit(mid, mid.inner(), ATTACK_S[0]);
+    if (kind !== 'big' && kind !== 'beat') continue;
+    for (const c of cars) {
+      hit(c, peak ? c.outer() : c.inner(), kind === 'big' ? hold * 1.25 : hold);
+      if (kind === 'big' && peak) hit(c, c.everything(), hold, t + hold + 0.5, C.OFF_500);   // flashes, is gone
+      if (kind === 'big' && c.hasBar) M.barFlash(c, t, Math.min(0.3, end - t), peak ? 1.0 : 0.5);
     }
   }
   for (const [s0, land] of builds(an)) buildPulse(cars, an, s0, land);
@@ -207,7 +190,7 @@ function buildPulse(cars: Car[], an: Analysis, t0: number, land: number): void {
       if (t >= land - gap - 0.01) continue;                             // the beat of black before the landing
       const hold = clip(gap * 0.3, 0.08, 0.14);
       const lamps = (c: Car) => (levelAt(an, t) >= DRIVE ? c.heads() : c.inner());
-      for (const c of order.slice(0, reach)) c.set(lamps(c), t, t + hold, C.ON);
+      for (const c of order.slice(0, reach)) c.light(lamps(c), t, t + hold);
     }
   });
 }

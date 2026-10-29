@@ -27,7 +27,6 @@ export const MOVES: Record<string, Move> = {
     + 'melody turns', 'note'),
   mirror: mv('pitch is the distance from the middle: low notes light the centre, high notes both ends, so a '
     + 'rising line opens out and a falling one closes in', 'note'),
-  lr_notes: mv('notes alternate between the left and right halves of the stage', 'note'),
   antiphony: mv('call and response: bar by bar the melody passes between the left and the right half of the '
     + 'stage', 'note'),
   block: mv('chords as blocks of light from their lowest note to their highest, held with the chord; a big '
@@ -36,8 +35,8 @@ export const MOVES: Record<string, Move> = {
   motif: mv('the signature motif: an ornament on the middle car, a sweep across, a hold where it lands',
     'self'),
   cadence: mv('a big closing chord: the whole stage on for the chord', 'self'),
-  swell: mv('a held chord with no beat to hit: the whole stage swells from the middle car out, holds while the '
-    + 'chord sounds and fades slowly, every lamp at the peak', 'self'),
+  swell: mv('held chords with no beat to hit: the whole stage swells from the middle car out and holds while '
+    + 'the chord sounds, breathing out and in again from the middle at each new chord', 'self'),
   march: mv('one light marches car to car on the beat, left, centre, right, centre', 'beat'),
   lr_channel: mv('left channel, right channel: the whole left half of the stage on one beat, the right on the '
     + 'next', 'beat'),
@@ -56,8 +55,10 @@ export const MOVES: Record<string, Move> = {
 
 /** A figure of a passage plays one move: one that follows the melody, or one that follows the beat (choreo.ts
  * chooses which, and the least used of the pool). */
-export const NOTE_MOVES = ['keyboard', 'mirror', 'antiphony', 'relay', 'lr_notes'];
+export const NOTE_MOVES = ['keyboard', 'mirror', 'antiphony', 'relay'];
 export const BEAT_MOVES = ['march', 'lr_channel', 'checker', 'beam', 'converge', 'tug_of_war', 'shockwave'];
+/** The beat moves that light only a car or two at a time: below the peak, so the peak is the biggest look. */
+export const SPARSE_MOVES = ['march', 'beam'];
 /** ... or the swell of a chord held with no beat to follow ... */
 export const HELD_MOVES = ['swell'];
 /** ... or, where the music flows, one that glides with the melody. */
@@ -92,6 +93,7 @@ function plays(name: string): string {
   const shapes = Object.entries(FOR_GESTURE).filter(([, m]) => m === name).map(([g]) => g);
   if (shapes.length) return `every phrase shaped as ${shapes.join(', ')}`;
   if (NOTE_MOVES.includes(name)) return 'a figure that follows its melody';
+  if (SPARSE_MOVES.includes(name)) return 'a figure that follows its beat, below the peak';
   if (BEAT_MOVES.includes(name)) return 'a figure that follows its beat';
   if (HELD_MOVES.includes(name)) return 'a chord held with no beat to follow';
   if (FLOW_MOVES.includes(name)) return 'a figure where the music flows';

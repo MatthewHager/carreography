@@ -233,8 +233,13 @@ function playPassages(cars: Car[], an: Analysis) {
             && (m !== prev || m === 'swell') && (f !== 'beat' || fam === 'beat' || followable(an, g0, g1));
         };
         if (move === undefined || !fits(move)) {
-          const pool = POOLS[fam], fresh = pool.length > 1 ? pool.filter((m) => m !== prev) : pool;
-          move = fresh.reduce((best, m) => ((used.get(m) ?? 0) < (used.get(best) ?? 0) ? m : best), fresh[0]);
+          // the least used of the family, and of those the one the figure's register points to, so songs and
+          // figures don't all walk the catalogue in the same order
+          const pool = POOLS[fam].filter((m) => step < 4 || !CAT.SPARSE_MOVES.includes(m));
+          const fresh = pool.length > 1 ? pool.filter((m) => m !== prev) : pool;
+          const least = Math.min(...fresh.map((m) => used.get(m) ?? 0));
+          const ties = fresh.filter((m) => (used.get(m) ?? 0) === least);
+          move = ties[Math.min(ties.length - 1, Math.floor(register(an, g0, g1) * ties.length))];
           moves[j] ??= move;
         }
         used.set(move, (used.get(move) ?? 0) + 1);
@@ -260,6 +265,15 @@ function playPassages(cars: Car[], an: Analysis) {
       for (const k of keys) if (!byKey.has(k)) byKey.set(k, moves);
     });
   }
+}
+
+/** Where the melody of [t0, t1) sits in the song's range, 0 (low) to 1 (high); the middle with no notes. */
+function register(an: Analysis, t0: number, t1: number): number {
+  const ev = an.events, a = searchsorted(ev.t, t0), b = searchsorted(ev.t, t1);
+  if (b <= a) return 0.5;
+  let sum = 0;
+  for (let i = a; i < b; i++) sum += clip((ev.top[i] - an.pitchLo) / Math.max(an.pitchHi - an.pitchLo, 1), 0, 0.999);
+  return sum / (b - a);
 }
 
 /** A stretch of a passage as a phrase, for a move drawn across it. */

@@ -6,14 +6,14 @@
 //
 // Every hit is sized by the level at its moment (level.ts), so one move grows with the music: at a hush a
 // note lights a single lamp and fades; then a half car's signature and DRL; from a groove its inner beam
-// too, from drive both headlights - except the headlights the beat layer owns there (pulse.ts), which the
-// moves leave to the beat. What each move looks like is in catalog.ts (MOVES.md);
+// too, from drive both headlights - except the headlights the beat layer rings on there (pulse.ts), which
+// the moves leave to the beat. What each move looks like is in catalog.ts (MOVES.md);
 // MOVES at the end is how the choreographer finds one by name.
 
 import type { Analysis, Phrase } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
-import { CALM, DRIVE, GROOVE, levelAt, levelOver, PEAK, stepOf } from './level';
+import { CALM, DRIVE, GROOVE, levelAt, PEAK, stepOf } from './level';
 import { arange, clip, cumsum, diff, linspace, quantiles, runs, searchsorted, sum } from './np';
 import { beatLen } from './tempo';
 
@@ -98,8 +98,7 @@ const posOf = (p: number, lo: number, hi: number) => clip((p - lo) / Math.max(hi
 
 // --- size ------------------------------------------------------------------------------------------
 
-/** How much of the headlights the beat layer owns at t (pulse.ownership): 0 none, 1 the inner beams, 2
- * both. */
+/** The headlights the beat layer owns at t (pulse.ownership): 1 the inner beams, 2 the outer, 3 both. */
 export const owned = (an: Analysis, t: number) =>
   an.beatLamps?.[clip(Math.trunc(t / an.step), 0, an.nFrames - 1)] ?? 0;
 
@@ -116,7 +115,7 @@ export function half(car: Car, side: LR, s: number, own = 0): number[] {
 
 /** `chs` without the headlights the beat layer owns (`own`, as owned() says). */
 const free = (car: Car, chs: number[], own: number) =>
-  chs.filter((ch) => !(own >= 1 && car.inner().includes(ch)) && !(own >= 2 && car.outer().includes(ch)));
+  chs.filter((ch) => !(own & 1 && car.inner().includes(ch)) && !(own & 2 && car.outer().includes(ch)));
 
 const whole = (car: Car, s: number, own = 0) => [...half(car, 'L', s, own), ...half(car, 'R', s, own)];
 
@@ -396,19 +395,6 @@ function halves(cars: Car[]): [[Car, LR][], [Car, LR][]] {
   return [all.slice(0, n / 2), all.slice(n / 2)];
 }
 
-/** Notes alternate between the left and right halves of the stage; loud, each takes its whole half. */
-const lrNotes: Move = (cars, an, ph) => {
-  const ev = an.events, ranges = localRanges(an, ph), sidesOf = halves(cars);
-  for (let k = 0, i = ph.a; i < ph.b; k++, i++) {
-    const t = ev.t[i], s = levelAt(an, t), group = sidesOf[k % 2];
-    const at = Math.min(group.length - 1, Math.trunc(posOf(ev.top[i], ...ranges[i - ph.a]) * group.length));
-    const pick = s >= DRIVE ? group : [group[at]];
-    const d = clip(ev.dur[i], 0.1, 0.25);
-    for (const [car, side] of pick) slotHit(car, side, t, d, s, owned(an, t));
-  }
-  barMelody(cars, an, ph);
-};
-
 /** Call and response: bar by bar the phrase passes between the left and the right half of the stage, and
  * within the half that has it each note sits where its pitch puts it. */
 const antiphony: Move = (cars, an, ph) => {
@@ -487,24 +473,33 @@ const motif: Move = (cars, an, ph) => {
 };
 
 const SWELL_WAVE_S = 0.5;     // each car further from the middle swells this much later: a slow wave out
+const CHORD_S = 1.5;          // a chord struck this long after the last swells on its own
 
 /** A held chord with no beat to hit swells: from the middle car out, each car's lamps for the level (every
- * lamp it has at the peak) ramp up over two seconds and hold while the chord sounds, then fade over two; the
- * trucks' bars fill from their centres as loud as the music is. */
+ * lamp at the peak) ramp up and hold while the chord sounds; each new chord struck (among the loudest fifth
+ * of the attacks) breathes out and swells in again from the middle, so a run of held chords ripples rather
+ * than standing lit. The trucks' bars fill from their centres as loud as the music is. */
 const swell: Move = (cars, an, ph) => {
-  const mid = (cars.length - 1) / 2, s = levelOver(an, ph.t0, ph.t1);
-  for (const c of cars) {
-    const t0 = ph.t0 + Math.abs(c.x - mid) * SWELL_WAVE_S;
-    if (t0 >= ph.t1) continue;
-    const chs = s >= PEAK ? c.everything() : whole(c, s, owned(an, t0));
-    c.light(chs, t0, ph.t1, C.ON_2000);
-    c.light(chs, ph.t1, ph.t1 + 2.0, C.OFF_2000);
-    if (!c.isCt) continue;
-    const lv = an.level!, f0 = Math.trunc(t0 / an.step), n = frames(c, t0, ph.t1 - t0);
-    const fill = Array.from({ length: n }, (_, f) => Math.min(1, f / (2.0 / an.step)) * lv[f0 + f]);
-    barFill(c, t0, ph.t1 - t0, fill);
-    if (s >= PEAK) c.pixels(C.REAR_BAR, t0, rows(n, (f) => fill[f], C.REAR_BAR.length));
+  const mid = (cars.length - 1) / 2, ev = an.events, lv = an.level!, chords = [ph.t0];
+  const strong = ph.b > ph.a ? quantiles(ev.amp.slice(ph.a, ph.b), [0.8])[0] : Infinity;
+  for (let i = ph.a; i < ph.b; i++) {
+    if (ev.amp[i] >= strong && ev.t[i] - chords[chords.length - 1] >= CHORD_S && ph.t1 - ev.t[i] >= CHORD_S) {
+      chords.push(ev.t[i]);
+    }
   }
+  chords.forEach((a, k) => {
+    const b = chords[k + 1] ?? ph.t1, last = k === chords.length - 1;
+    for (const c of cars) {
+      const t0 = a + Math.abs(c.x - mid) * SWELL_WAVE_S, t1 = last ? b : b - 0.2;
+      if (t0 >= t1) continue;
+      const s = levelAt(an, t0), chs = s >= PEAK ? c.everything() : whole(c, s, owned(an, t0));
+      c.light(chs, t0, t1, k ? C.ON_1000 : C.ON_2000);
+      c.light(chs, t1, t1 + (last ? 2.0 : 0.5), last ? C.OFF_2000 : OFF_500);
+      if (!c.isCt) continue;
+      const f0 = Math.trunc(t0 / an.step), n = frames(c, t0, t1 - t0), up = (k ? 1.0 : 2.0) / an.step;
+      barFill(c, t0, t1 - t0, Array.from({ length: n }, (_, f) => Math.min(1, f / up) * lv[f0 + f]));
+    }
+  });
 };
 
 /** A big closing chord: the whole stage on for the chord. */
@@ -597,8 +592,9 @@ const tugOfWar: Move = (cars, an, ph) => {
 /** A searchlight two slots wide sweeps the stage over each bar, left to right and back the next. */
 const beam: Move = (cars, an, ph) => {
   const all = slots(cars), n = all.length;
-  grid(an, ph, 'downbeats').forEach((d, k) => {
-    const span = Math.min(4 * beatAt(an, d), ph.t1 - d);
+  grid(an, ph, 'downbeats').forEach((d, k, downs) => {
+    // to the next downbeat: where the tracker missed one, the sweep slows over two bars rather than stopping
+    const span = Math.min((downs[k + 1] ?? Infinity) - d, 8 * beatAt(an, d), ph.t1 - d);
     if (span < 0.4) return;
     const per = span / (n + 1), times = steps(an, d, span, n + 1);
     times.forEach((t, step) => {
@@ -784,6 +780,6 @@ export function lightning(cars: Car[], t: number) {
 
 /** Every move by its catalogue name (catalog.ts). */
 export const MOVES: Record<string, Move> = {
-  keyboard, relay, mirror, lr_notes: lrNotes, antiphony, block, shimmer, motif, cadence, swell,
+  keyboard, relay, mirror, antiphony, block, shimmer, motif, cadence, swell,
   march, lr_channel: lrChannel, checker, tug_of_war: tugOfWar, beam, converge, shockwave, glide, bloom,
 };
