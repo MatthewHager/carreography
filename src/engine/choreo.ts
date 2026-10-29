@@ -22,7 +22,7 @@ import * as DRUMS from './drums';
 import { feel, flowsAt, followable, held, kitAt } from './feel';
 import * as LAMPS from './lamps';
 import * as LEGATO from './legato';
-import { DRIVE, GROOVE, levelAt, levelCurve, levelOver, musicSpan, stepOf } from './level';
+import { DRIVE, GROOVE, levelAt, levelCurve, levelOver, musicSpan, silence, stepOf } from './level';
 import * as LY from './lyrics';
 import type { Moment } from './lyrics';
 import * as motors from './motors';
@@ -44,7 +44,7 @@ export function choreograph(heard: Analysis, layout = 'YCY'): Car[] {
  * these). */
 export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: Analysis } {
   const an = structuredClone(heard);
-  const cars = makeLineup(layout, an.nFrames, an.step);
+  const cars = makeLineup(layout, an.nFrames, an.step, silence(an));
   const sung = an.lyricLines?.length ? an.lyricLines : null;     // a sung line starts a phrase
   const phrases = segment(an.events, sung ? sung.map((l) => l.t) : null);
   an.phrases = phrases;
@@ -70,9 +70,7 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
   colours(cars, said);
   motors.choreograph(cars, an);
   finale(cars, an, endsFlowing);
-  hush(cars, an);
   for (const car of cars) {
-    tidy(car, an);
     if (car.juniper) LAMPS.juniperOutput(car);
     steady(car, an);
     for (let f = Math.max(0, car.nFrames - 3); f < car.nFrames; f++) {
@@ -370,7 +368,7 @@ function accents(cars: Car[], an: Analysis, phrases: Phrase[], said: Moment[]) {
     } else {
       const hold = clip(ev.dur[i], 0.15, 0.4);
       for (const c of cars) {
-        c.flash(c.accents(), t, hold);
+        c.light(c.accents(), t, t + hold);
         if (c.hasBar) M.barFlash(c, t, hold + 0.2, 0.9);
       }
     }
@@ -418,7 +416,7 @@ function strikes(cars: Car[], an: Analysis, said: Moment[]) {
     } else {
       // one word of a chant: one car's whole front, pinging across the lineup word by word
       const car = cars[m.car! % cars.length];
-      car.flash([...car.sig(), ...car.drl(), ...car.heads()], t, 0.22);
+      car.light([...car.sig(), ...car.drl(), ...car.heads()], t, t + 0.22);
       if (car.isCt) M.barFlash(car, t, 0.3, 1.0);
     }
   }
@@ -482,89 +480,6 @@ function finale(cars: Car[], an: Analysis, flowed: boolean) {
       c.pixels(C.FRONT_BAR, t, env.map((v) => new Array(C.FRONT_BAR.length).fill(v)));
       c.pixels(C.REAR_BAR, t, env.map((v) => new Array(C.REAR_BAR.length).fill(v)));
     }
-  }
-}
-
-const SILENT = 0.06, SILENT_S = 0.4;     // the loudness (an.loudness) of silence, and how long it must last
-const LAMP_FADE_S = 0.5, PIXEL_FADE_S = 0.3;
-
-/** Silence is dark: wherever the music stops for SILENT_S or more, every lamp that is still on fades out
- * from the moment the sound stopped (over LAMP_FADE_S, Tesla's shortest ramp), and the bars and cabins go
- * dark with it, a little quicker (PIXEL_FADE_S). Fades already running (a finale, the legato ending) carry
- * on. */
-function hush(cars: Car[], an: Analysis) {
-  const x = an.loudness, n = an.nFrames, need = Math.round(SILENT_S / an.step);
-  const fade = Math.round(LAMP_FADE_S / an.step);
-  const lamps: number[] = [];
-  for (let ch = 0; ch < C.L_FALCON; ch++) lamps.push(ch);
-  const rgb = C.ALL_RGB.flatMap((ch) => [ch, ch + 1, ch + 2]);
-  const pixels = [...C.FRONT_BAR, ...C.REAR_BAR, ...C.OFFROAD_BAR, ...rgb];
-  for (let a = 0; a < n;) {
-    if (x[a] >= SILENT) {
-      a++;
-      continue;
-    }
-    let b = a;
-    while (b < n && x[b] < SILENT) b++;
-    if (b - a >= need) {
-      const from = a + 2, to = b - 1;                    // a frame's grace either side: the lights lead by one
-      for (const c of cars) {
-        for (let f = from; f < to; f++) {
-          for (const ch of lamps) {
-            const v = c.get(f, ch);
-            if (v >= 128) c.put(f, ch, f - from < fade ? C.OFF_500 : 0);
-          }
-          for (const ch of pixels) {
-            const v = c.get(f, ch);
-            if (v) c.put(f, ch, Math.trunc(v * clip(1 - (f - from) / (PIXEL_FADE_S / an.step), 0, 1)));
-          }
-        }
-      }
-    }
-    a = b;
-  }
-}
-
-function onRuns(col: Uint8Array): [number[], number[]] {
-  const starts: number[] = [], ends: number[] = [];
-  let prev = false;
-  for (let f = 0; f <= col.length; f++) {
-    const on = f < col.length && col[f] >= 128;
-    if (on && !prev) starts.push(f);
-    if (!on && prev) ends.push(f);
-    prev = on;
-  }
-  return [starts, ends];
-}
-
-const MERGE_S = 0.25;     // below drive, a lamp dark for less than this between two longer lightings flickers
-const MIN_ON = 5, MIN_OFF = 3;     // frames: a flash under 100 ms doesn't read, nor a gap under 60 ms
-
-/** On-off lamps, so that rapid notes read as separate flashes and calm music doesn't flicker: flashes shorter
- * than MIN_ON get stretched; below drive a lamp that goes dark for less than MERGE_S, and for less time than
- * it was lit either side, stays lit (a quick figure on one lamp is held light, while a trill's flicker, its
- * gaps as long as its flashes, stays a flicker); from drive up gaps under MIN_OFF get opened up. */
-function tidy(car: Car, an: Analysis) {
-  const n = car.nFrames, lv = an.level!, merge = Math.round(MERGE_S / an.step);
-  for (let ch = C.L_OUTER_MAIN; ch <= C.LICENSE_PLATE; ch++) {
-    const col = car.column(ch);
-    let [starts, ends] = onRuns(col);
-    if (!starts.length) continue;
-    starts.forEach((s0, k) => {                // stretch short flashes
-      if (ends[k] - s0 < MIN_ON) {
-        const v = col[s0];
-        for (let f = s0; f < Math.min(n, s0 + MIN_ON); f++) col[f] = Math.max(col[f], v);
-      }
-    });
-    [starts, ends] = onRuns(col);
-    for (let k = 0; k < ends.length - 1; k++) {
-      const e0 = ends[k], s1 = starts[k + 1], gap = s1 - e0;
-      const held = gap < merge && gap < e0 - starts[k] && gap < ends[k + 1] - s1
-        && lv[clip(e0, 0, n - 1)] < DRIVE;
-      if (held) col.fill(col[e0 - 1], e0, s1);
-      else if (gap < MIN_OFF) for (let f = s1; f < Math.min(n, e0 + MIN_OFF); f++) col[f] = 0;
-    }
-    for (let f = 0; f < n; f++) car.put(f, ch, col[f]);
   }
 }
 

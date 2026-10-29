@@ -10,6 +10,8 @@ import { u8 } from './np';
 import { lineupCars } from './vehicles';
 
 const LIGHT_LEAD_S = 0.02;   // lights fire one frame before the sound so they read as on the beat
+const MIN_ON = 5;            // frames: a lamp lit for less than 100 ms doesn't read
+const FADE = 25, PIXEL_FADE = 15;     // frames: a lamp fades out of a silence on Tesla's shortest ramp, a bar quicker
 
 export type Side = 'L' | 'R' | null | undefined;
 type Chs = number | readonly number[];
@@ -21,6 +23,8 @@ export class Car {
   readonly closureCounts = new Map<number, number>();
   /** Spans [t0, t1] in which the windows must not move (a Model X's doors are moving). */
   readonly windowsStill: [number, number][] = [];
+  /** Per frame, how long the music has been silent there (0 while it sounds): silence is dark. */
+  hush: Uint8Array | null = null;
 
   constructor(
     readonly kind: 'modely' | 'cybertruck',
@@ -40,7 +44,9 @@ export class Car {
 
   /** The same car with nothing on it. */
   blank(): Car {
-    return new Car(this.kind, this.name, this.x, this.nFrames, this.step, this.juniper, this.falcon);
+    const out = new Car(this.kind, this.name, this.x, this.nFrames, this.step, this.juniper, this.falcon);
+    out.hush = this.hush;
+    return out;
   }
 
   get isCt() {
@@ -68,16 +74,24 @@ export class Car {
     return Math.min(Math.max(Math.round((t - LIGHT_LEAD_S) / this.step), 0), this.nFrames);
   }
 
+  /** The lamps lit from t0 to t1 (a lit lamp at least MIN_ON frames, so it reads), never lit in a silence:
+   * one still lit as the music stops fades out on Tesla's shortest ramp. */
   light(chs: Chs, t0: number, t1: number, value = C.ON) {
-    const a = this.fr(t0), b = this.fr(t1);
-    const cs = list(chs);
+    const a = this.fr(t0), cs = list(chs);
+    let b = this.fr(t1);
     if (b <= a || !cs.length) return;
-    const F = this.frames, N = C.N_CHANNELS;
-    for (const ch of cs) for (let f = a; f < b; f++) if (F[f * N + ch] < value) F[f * N + ch] = value;
+    if (value >= 128) b = Math.min(this.nFrames, Math.max(b, a + MIN_ON));
+    const F = this.frames, N = C.N_CHANNELS, q = this.hush;
+    for (let f = a; f < b; f++) {
+      const v = q?.[f] && value >= 128 ? (q[f] <= FADE ? C.OFF_500 : 0) : value;
+      for (const ch of cs) if (F[f * N + ch] < v) F[f * N + ch] = v;
+    }
   }
 
-  flash(chs: Chs, t: number, dur: number, value = C.ON) {
-    this.light(chs, t, t + Math.max(dur, 0.1), value);
+  /** How much of a bar's or a cabin's light shows at frame f: it fades out quickly into a silence. */
+  private shows(f: number): number {
+    const q = this.hush?.[f] ?? 0;
+    return q ? Math.max(0, 1 - (q - 1) / PIXEL_FADE) : 1;
   }
 
   set(chs: Chs, t0: number, t1: number, value: number) {
@@ -93,9 +107,9 @@ export class Car {
     const flip = chs.length === C.FRONT_BAR.length && chs.every((c, i) => c === C.FRONT_BAR[i]);
     const n = chs.length, F = this.frames, N = C.N_CHANNELS;
     for (let f = a; f < b; f++) {
-      const row = values[f - a];
+      const row = values[f - a], shows = this.shows(f);
       for (let k = 0; k < n; k++) {
-        const v = u8(Math.min(Math.max(row[flip ? n - 1 - k : k] * 255, 0), 255));
+        const v = u8(Math.min(Math.max(row[flip ? n - 1 - k : k] * 255, 0), 255) * shows);
         const at = f * N + chs[k];
         if (F[at] < v) F[at] = v;
       }
@@ -104,11 +118,11 @@ export class Car {
 
   rgb(t0: number, t1: number, color: readonly number[], scale = 1.0) {
     const a = this.fr(t0), b = this.fr(t1);
-    for (const base of C.ALL_RGB) {
-      for (let i = 0; i < 3; i++) {
-        const v = Math.trunc(color[i] * scale);
-        for (let f = a; f < b; f++) {
-          const at = f * C.N_CHANNELS + base + i;
+    for (let f = a; f < b; f++) {
+      const shows = this.shows(f);
+      for (const base of C.ALL_RGB) {
+        for (let i = 0; i < 3; i++) {
+          const v = Math.trunc(Math.trunc(color[i] * scale) * shows), at = f * C.N_CHANNELS + base + i;
           if (this.frames[at] < v) this.frames[at] = v;
         }
       }
@@ -225,8 +239,11 @@ export class Car {
   }
 }
 
-/** One Car per letter, crowd-left to right (vehicles.ts). */
-export function makeLineup(layout: string, nFrames: number, step: number): Car[] {
-  return lineupCars(layout).map(([name, v], i) =>
-    new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon));
+/** One Car per letter, crowd-left to right (vehicles.ts), dark wherever `hush` says the music is silent. */
+export function makeLineup(layout: string, nFrames: number, step: number, hush: Uint8Array | null = null): Car[] {
+  return lineupCars(layout).map(([name, v], i) => {
+    const car = new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon);
+    car.hush = hush;
+    return car;
+  });
 }

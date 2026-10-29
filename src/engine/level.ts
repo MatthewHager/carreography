@@ -120,6 +120,22 @@ export function musicSpan(an: Analysis): [number, number] {
   return [first * an.step, (last + 1) * an.step];
 }
 
+const SILENT = 0.06, SILENT_S = 0.4;     // the loudness (an.loudness) of silence, and how long it must last
+
+/** Per frame, how many frames the music has been silent for (0 while it sounds, at most 255), wherever it
+ * stops for SILENT_S or more: silence is dark (Car.light). A frame's grace either side, as the lights lead
+ * the sound by one. */
+export function silence(an: Analysis): Uint8Array {
+  const x = an.loudness, n = an.nFrames, out = new Uint8Array(n), need = Math.round(SILENT_S / an.step);
+  for (let a = 0; a < n;) {
+    let b = a;
+    while (b < n && x[b] < SILENT) b++;
+    if (b - a >= need) for (let f = a + 2; f < b - 1; f++) out[f] = Math.min(255, f - a - 1);
+    a = Math.max(b, a + 1);
+  }
+  return out;
+}
+
 /** The level at t, 0..1 (choreograph sets an.level). */
 export function levelAt(an: Analysis, t: number): number {
   const lv = an.level!;
