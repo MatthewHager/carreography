@@ -130,12 +130,13 @@ function rows(n: number, fn: (f: number, k: number) => number, w = BAR): Rows {
 
 const frames = (car: Car, t: number, dur: number) => Math.max(2, car.fr(t + dur) - car.fr(t));
 
-/** A note as a comet at `pos` (0..1 along the bar), wider and brighter as the level rises (times `gain`): a
- * short note plucks and fades, a held one swells in over a third of its length and fades through the rest. */
-function comet(car: Car, t: number, pos: number, noteDur: number, s: number, gain = 1) {
+/** A note as a comet at `pos` (0..1 along the bar), wider and brighter as the level rises, and bright enough
+ * over the bar's glow to read even when quiet: a short note plucks and fades, a held one swells in over a
+ * third of its length and fades through the rest. */
+function comet(car: Car, t: number, pos: number, noteDur: number, s: number) {
   const held = noteDur >= HELD_NOTE_S;
   const dur = held ? Math.min(noteDur, SWELL_MAX_S) : clip(noteDur, 0.15, 0.5) + 0.15;
-  const width = 3 + 8 * s, amp = (0.55 + 0.45 * s) * gain, n = frames(car, t, dur);
+  const width = 3 + 8 * s, amp = 0.6 + 0.4 * s, n = frames(car, t, dur);
   const env = (f: number) => (held ? Math.min(1, (3 * f) / n) * (1 - f / n) ** 0.5 : (1 - f / n) ** 1.5);
   car.pixels(C.FRONT_BAR, t, rows(n, (f, k) => {
     const x = (k - pos * (BAR - 1)) / width;
@@ -424,7 +425,7 @@ export function barMelody(cars: Car[], an: Analysis, ph: Phrase, eighths = false
       if (Math.abs(g - t) > ON_GRID_S || g === last) continue;
       last = g;
     }
-    for (const c of trucks) comet(c, t, at, ev.dur[i], s, 0.6 + 0.4 * s);
+    for (const c of trucks) comet(c, t, at, ev.dur[i], s);
   }
 }
 
