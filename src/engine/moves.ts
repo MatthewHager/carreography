@@ -210,28 +210,49 @@ export function beatAt(an: Analysis, t: number): number {
 
 const within = (a: ArrayLike<number>, lo: number, hi: number) => Array.from(a).filter((x) => x >= lo && x < hi);
 
-/** Beats at the level's pace there: every one from drive up, every other in a groove, one a bar when calm,
- * so a calm passage swoops and every-beat hitting is kept for the climbs. */
-function paced(an: Analysis, beats: number[]): number[] {
-  const out: number[] = [];
-  for (let k = 0; k < beats.length; k++) {
-    const b = beats[k], st = stepOf(levelAt(an, b));
-    const gap = k + 1 < beats.length ? beats[k + 1] - b : k > 0 ? b - beats[k - 1] : 0.5;
-    const every = st >= 3 ? 1 : st === 2 ? 2 : 4;
-    if (!out.length || b - out[out.length - 1] >= every * gap * 0.9 - 0.02) out.push(b);
+const positions = new WeakMap<Analysis, Int32Array>();
+
+/** Every tracked beat's place in its bar (0 the downbeat), counted from the downbeat before it. */
+export function barPositions(an: Analysis): Int32Array {
+  let pos = positions.get(an);
+  if (pos) return pos;
+  const b = an.beats, downs = new Set<number>();
+  for (const x of an.downbeats) {
+    const k = clip(searchsorted(b, x - 0.01), 0, Math.max(0, b.length - 1));
+    if (b.length && Math.abs(b[k] - x) < 0.05) downs.add(k);
   }
-  return out;
+  pos = new Int32Array(b.length);
+  let last: number | null = null;
+  for (let i = 0; i < b.length; i++) {
+    if (downs.has(i)) last = i;
+    pos[i] = last !== null ? (i - last) % 4 : i % 4;
+  }
+  positions.set(an, pos);
+  return pos;
 }
 
-/** The beats (or downbeats) inside a phrase, carried on at the local pace where the tracker has none, and
- * thinned to the level's pace (paced). */
+/** Beats at the level's pace there, counted in the bar so none is lost where the performer's beats are
+ * uneven: every one from drive up, 1 and 3 in a groove, the downbeat when calm, so a calm passage swoops
+ * and every-beat hitting is kept for the climbs. */
+function paced(an: Analysis, beats: number[]): number[] {
+  const pos = barPositions(an), b = an.beats;
+  return beats.filter((t, k) => {
+    const st = stepOf(levelAt(an, t)), every = st >= 3 ? 1 : st === 2 ? 2 : 4;
+    const i = searchsorted(b, t - 0.01);
+    return (i < b.length && Math.abs(b[i] - t) < 0.02 ? pos[i] : k) % every === 0;
+  });
+}
+
+/** The beats (or downbeats) inside a phrase, thinned to the level's pace (paced). Where the tracker has
+ * none, the last beat's pace carries on for at most a bar: past that the music has stopped keeping time,
+ * and a grid drawn on would be a metronome of our own. */
 function grid(an: Analysis, ph: Span, kind: 'beats' | 'downbeats' = 'beats'): number[] {
   let g = within(kind === 'beats' ? an.beats : an.downbeats, ph.t0 - 0.02, ph.t1);
   if (g.length < 2) {
     const prev = an.beats.filter((x) => x <= ph.t0);
-    const start = prev.length ? prev[prev.length - 1] : ph.t0;
-    const period = (kind === 'beats' ? 1 : 4) * beatAt(an, start);
-    g = Array.from(arange(start, ph.t1, period)).filter((x) => x >= ph.t0 - 0.02);
+    const start = prev.length ? prev[prev.length - 1] : ph.t0, beat = beatAt(an, start);
+    const end = Math.min(ph.t1, Math.max(start, ph.t0) + 4 * beat);
+    g = Array.from(arange(start, end, (kind === 'beats' ? 1 : 4) * beat)).filter((x) => x >= ph.t0 - 0.02);
     if (!g.length) g = [ph.t0];
   }
   return kind === 'beats' ? paced(an, g) : g;
@@ -591,7 +612,7 @@ const converge: Move = (cars, an, ph) => {
  * through every car to both ends. */
 const shockwave: Move = (cars, an, ph) => {
   const all = slots(cars), n = all.length, rings = n / 2;
-  for (const d of grid(an, ph, levelAt(an, ph.t0) >= DRIVE ? 'beats' : 'downbeats')) {
+  for (const d of grid(an, ph)) {
     const s = levelAt(an, d), ring = beatAt(an, d) / 8;
     for (let r = 0; r < rings; r++) {                              // r = 0: the middle pair
       const t = d + r * ring;
