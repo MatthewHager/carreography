@@ -52,7 +52,7 @@ export function apply(cars: Car[], an: Analysis): void {
     const front: Float64Array[] = [], rear: Float64Array[] = [];
     for (let f = 0; f < an.nFrames; f++) {
       const flows = !Number.isNaN(B[f]), x = flows ? (lv[f] + B[f]) / 2 : lv[f];
-      const glow = (0.12 + 0.45 * x ** 1.5) * (0.6 + 0.4 * highMid[f]);
+      const glow = (0.15 + 0.5 * x ** 1.5) * (0.6 + 0.4 * highMid[f]);
       front.push(new Float64Array(C.FRONT_BAR.length).fill(glow));
       const meter = flows ? 0 : clip((lv[f] - CALM) / (1 - CALM), 0, 1) * METER * (0.3 + 0.7 * low[f]);
       rear.push(new Float64Array(C.REAR_BAR.length).fill(meter));
