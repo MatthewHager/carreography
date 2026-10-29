@@ -180,11 +180,11 @@ const familyOf = (move: string): Family =>
 const FIGURE_BARS = 8;     // a figure plays at most this long before the next phrase changes it: a period
 
 /** A run's phrases as figures of at most FIGURE_BARS bars (and at least half that), each cut where a phrase
- * starts: [t0, t1, its phrases]. Bars are counted on the tracked beats, so they follow the performer. */
+ * starts: [t0, t1, its phrases]. Bars are counted on the tracked downbeats, so they follow the performer. */
 function figures(an: Analysis, t0: number, t1: number, own: Phrase[]): [number, number, Phrase[]][] {
   const bars = (a: number, b: number) => {
-    const n = searchsorted(an.beats, b) - searchsorted(an.beats, a);
-    return n >= 2 ? n / 4 : (b - a) / barLen(an);
+    const n = searchsorted(an.downbeats, b - 0.1) - searchsorted(an.downbeats, a - 0.1);
+    return n >= 1 ? n : (b - a) / barLen(an);
   };
   const out: [number, number, Phrase[]][] = [[t0, t1, []]];
   for (const ph of own) {
