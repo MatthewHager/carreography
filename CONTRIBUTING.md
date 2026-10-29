@@ -34,7 +34,7 @@ gh release download examples --dir public/examples
 
 | Folder | What |
 |---|---|
-| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts` (with the breath where the music flows), `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, builds and drops), `motors.ts` (the closures), `lyrics.ts`, `car.ts` (one car's frames and lamp groups), `vehicles.ts` (the lineup letters), `lamps.ts` (the 2025+ Model Y), and the reading of the music (`feel.ts`, `phrases.ts`, `tempo.ts`). |
+| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts` (with the breath where the music flows), `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, builds, drops and accents), `motors.ts` (the closures), `lyrics.ts`, `car.ts` (one car's frames, lamp groups and the 2025+ Model Y's lamps), `vehicles.ts` (the lineup letters), and the reading of the music (`feel.ts`, `phrases.ts`, `tempo.ts`). |
 | `src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend), song tags, LRCLIB and lyric alignment. |
 | `src/viewer/` | The 3D preview (three.js), adapted from Tesla Lightshow Studio (AGPL-3.0): `core/` reads, writes and simulates show files, `car/appBody.ts` draws Tesla's app models. |
 | `src/app/` | The page: the 3D stage, the panels, the worker that makes a show (`show.worker.ts`), the WAV and the ZIP. |
@@ -61,9 +61,9 @@ and lineups (one car, the classic three, five mixed).
 1. **Write it** in `src/engine/moves.ts` as a function `(cars, an, ph) => void`.
    - `cars` is the lineup, crowd-left to right (`Car` objects); `an` is the analysis; `ph` is the phrase
      (`ph.t0`, `ph.t1`, and `ph.a` to `ph.b`, its notes in `an.events`).
-   - Size every hit by the level at its moment: `half(car, side, levelAt(an, t), owned(an, t))` gives what a
-     hit lights of a half car, from one lamp at a hush to both headlights from drive up, leaving the
-     headlights the beat layer rings on there to the beat; `note(...)` shapes a note's light like its
+   - Size every hit by the level at its moment: `half(car, side, levelAt(an, t))` gives what a hit lights
+     of a half car, from one lamp at a hush to both headlights from drive up (`Car.light` leaves the inner
+     beams to the beat while one of its hits rings); `note(...)` shapes a note's light like its
      sound. A truck's bar takes `car.pixels(C.FRONT_BAR, t, values)` (0–1 per LED, crowd-left to right).
      Everything takes the crowd's left and right. Light only the lamps the moves own (docs/HOW_IT_WORKS.md
      has the table): the fogs, turns and markers are the drums', the rear lamps the bed's.
@@ -99,11 +99,11 @@ what the motors do differ.
 
 1. **`src/engine/vehicles.ts`**: a letter, with the choreographer's body type, the folder name, a
    label, and the app model the preview draws. Add the letter to the test in `vehicles.test.ts`.
-2. **`src/engine/car.ts`**: the lamp groups, if the car's lamps differ. Every move uses them.
-3. **`src/engine/lamps.ts`**: if the hardware differs from the channel names (like the 2025+ Model Y,
-   whose bar is driven by channels 4 and 6), translate the frames at the end.
-4. **`src/engine/motors.ts`**: travel times, and anything the car lacks or adds.
-5. **The preview**: a profile in `src/viewer/core/vehicles.ts`, and the car's Tesla app model in
+2. **`src/engine/car.ts`**: the lamp groups, if the car's lamps differ. Every move uses them. If the
+   hardware differs from the channel names (like the 2025+ Model Y, whose bar is driven by channels 4 and
+   6), map each Model Y lamp to the car's own as it is written (`JUNIPER` and `Car.out`).
+3. **`src/engine/motors.ts`**: travel times, and anything the car lacks or adds.
+4. **The preview**: a profile in `src/viewer/core/vehicles.ts`, and the car's Tesla app model in
    `src/viewer/car/appBody.ts` (its rules map lamp meshes to channels and animation clips to closures)
    and in `tools/export_car_models.py`. Only Tesla's official models: no hand-built or approximated cars.
 

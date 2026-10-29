@@ -16,7 +16,7 @@
 //
 // Every car but the Cybertruck is choreographed in the Model Y's lamp vocabulary: Tesla's Model S, 3
 // and X take the same channels (its README, "Light Channel Locations"), and the cars with a front
-// light bar translate them at the end (lamps.ts).
+// light bar write them where they have them (car.ts).
 
 export const MAX_CARS = 5;
 
@@ -25,7 +25,7 @@ export interface Vehicle {
   kind: 'modely' | 'cybertruck'; // the choreographer's body type
   model: string;                 // used in folder names
   label: string;                 // for people
-  juniper: boolean;              // the 2025+ Model Y's front light bar lamp map (lamps.ts)
+  juniper: boolean;              // the 2025+ Model Y's front light bar lamp map (car.ts)
   body: string;                  // the 3D viewer's model from the Tesla app (viewer/car/appBody.ts)
   falcon?: boolean;              // Model X falcon doors (motors.ts)
 }
