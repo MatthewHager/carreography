@@ -4,8 +4,9 @@
 //   bed       what is lit steadily, and where the music flows the front lamps breathing with it (bed.ts)
 //   moves     the foreground: the song in passages, each cut into figures that play one move (moves.ts)
 //   drums     each drum voice on lamps of its own wherever it keeps time (drums.ts)
-//   pulse     the beat on the headlights, and the builds that speed up into a drop (pulse.ts)
-//   accents   the whole stage at once for what stands out most; what the lyrics say (lyrics.ts)
+//   pulse     the beat on the headlights, the builds that speed up into a drop, and the whole stage at once
+//             for what stands out most (pulse.ts)
+//   lyrics    what the words say (lyrics.ts)
 //   motors    lids, windows, mirrors, the charge port and a Model X's doors (motors.ts)
 //   the end   everything on at the music's last strong hit, then a fade
 //
@@ -18,9 +19,8 @@ import * as CAT from './catalog';
 import * as C from './channels';
 import * as DRUMS from './drums';
 import { feel, flowsAt, followable, held, kitAt } from './feel';
-import { DRIVE, GROOVE, levelAt, levelCurve, levelOver, musicSpan, silence, stepOf } from './level';
+import { levelCurve, levelOver, musicSpan, silence, stepOf } from './level';
 import * as LY from './lyrics';
-import type { Moment } from './lyrics';
 import * as motors from './motors';
 import * as M from './moves';
 import { clip, linspace, median, searchsorted } from './np';
@@ -56,7 +56,7 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
   DRUMS.apply(cars, an);
   PULSE.apply(cars, an);
   LY.apply(cars, an, said);
-  accents(cars, an, said);
+  PULSE.accents(cars, an, said);
   motors.choreograph(cars, an);
   finale(cars, an);
   for (const car of cars) {
@@ -188,17 +188,12 @@ function figures(an: Analysis, t0: number, t1: number, own: Phrase[]): [number, 
   return out;
 }
 
-/** Every figure's move, and every phrase's: a phrase whose shape asks for its own move (chords, a trill, a
- * cadence, the motif) plays that, but where the music flows; the rest play their figure's. A passage's runs
- * at one level are cut into figures at phrase starts (figures), each taking the least used move of its
- * family, so the look changes with the music's periods; material heard again at the same level replays its
- * figures' moves. A note move plays each phrase's notes; any other plays across its whole figure, rests
- * included, a beat move around the phrases that play their own and with the melody riding the trucks' bars
- * on top. */
+/** Every figure's move, and every phrase's. A passage's runs at one level are cut into figures at phrase
+ * starts (figures), each with its family (a chord held on into the next figure is one swell), each playing
+ * the move chooseMove gives it; material heard again at the same level replays its figures' moves. */
 function playPassages(cars: Car[], an: Analysis) {
-  const used = new Map<string, number>();
-  const byKey = new Map<string, string[]>();
-  let prev: string | null = null, prevFamily: Family | null = null;
+  const used = new Map<string, number>(), byKey = new Map<string, string[]>();
+  let prev: string | null = null;
   for (const p of passages(an)) {
     const mine = an.phrases!.filter((ph) => ph.t0 >= p.t0 - 0.01 && ph.t0 < p.t1);
     if (!mine.length) continue;
@@ -207,11 +202,10 @@ function playPassages(cars: Car[], an: Analysis) {
       const t0 = r === 0 ? p.t0 : own[0].t0, t1 = r === runs.length - 1 ? p.t1 : runs[r + 1][1][0].t0;
       const keys = p.letters.map((letter) => `${letter}:${p.piece}:${step}`);  // heard again at this level
       const moves = byKey.get(keys[0]) ?? [];
-      // each figure's family; a chord held on into the next figure is one swell
       const figs: [number, number, Phrase[], Family][] = [];
       for (const [g0, g1, group] of figures(an, t0, t1, own)) {
         const last = figs[figs.length - 1];
-        const fam = family(an, g0, g1, step, last ? last[3] : prevFamily);
+        const fam = family(an, g0, g1, step, last ? last[3] : prev === null ? null : familyOf(prev));
         if (last && fam === 'held' && last[3] === 'held') {
           last[1] = g1;
           last[2].push(...group);
@@ -220,50 +214,59 @@ function playPassages(cars: Car[], an: Analysis) {
         }
       }
       figs.forEach(([g0, g1, group, fam], j) => {
-        let move = moves[j];
-        const peak = stepOf(levelOver(an, g0, g1)) === 4;      // no sparse move at the peak
-        // a replay keeps its move where the music still allows it (a beat to follow for a beat move, a held
-        // chord for a swell, flowing music for a flowing move) and the figure before didn't just play it:
-        // material repeated back to back changes its figure rather than playing one move for half a minute
-        const fits = (m: string) => {
-          const f = familyOf(m);
-          return (f === 'held') === (fam === 'held') && (f === 'flow') === (fam === 'flow')
-            && (m !== prev || m === 'swell') && (f !== 'beat' || fam === 'beat' || followable(an, g0, g1))
-            && !(peak && CAT.SPARSE_MOVES.includes(m));
-        };
-        if (move === undefined || !fits(move)) {
-          // the least used of the family, and of those the one the figure's register points to, so songs and
-          // figures don't all walk the catalogue in the same order
-          const pool = POOLS[fam].filter((m) => !peak || !CAT.SPARSE_MOVES.includes(m));
-          const fresh = pool.length > 1 ? pool.filter((m) => m !== prev) : pool;
-          const least = Math.min(...fresh.map((m) => used.get(m) ?? 0));
-          const ties = fresh.filter((m) => (used.get(m) ?? 0) === least);
-          move = ties[Math.min(ties.length - 1, Math.floor(register(an, g0, g1) * ties.length))];
-          moves[j] ??= move;
-        }
+        const move = chooseMove(an, fam, g0, g1, moves[j], prev, used);
+        moves[j] ??= move;
         used.set(move, (used.get(move) ?? 0) + 1);
         prev = move;
-        prevFamily = familyOf(move);
-        for (const ph of group) ph.move = (prevFamily !== 'flow' && CAT.FOR_GESTURE[ph.gesture]) || move;
-        const own = group.filter((q) => q.move !== move || prevFamily === 'note');
-        if (prevFamily !== 'note') {
-          // across the figure, so a beat move carries on over the phrases' rests and around those that play
-          // their own; a swell or a flowing move holds on under them
-          const around = prevFamily === 'beat' ? own : [];
-          let a = g0;
-          for (const q of [...around, { t0: g1, t1: g1 }]) {
-            if (q.t0 - a >= 1.0) {
-              M.MOVES[move](cars, an, stretch(an, a, q.t0));
-              if (prevFamily === 'beat') M.barMelody(cars, an, stretch(an, a, q.t0), true);
-            }
-            a = Math.max(a, q.t1);
-          }
-        }
-        for (const ph of own) M.MOVES[ph.move!](cars, an, ph);
+        drawFigure(cars, an, move, group, g0, g1);
       });
       for (const k of keys) if (!byKey.has(k)) byKey.set(k, moves);
     });
   }
+}
+
+/** The move a figure of family `fam` plays: its material's move from before (`replay`) where the music still
+ * allows it (a beat to follow for a beat move, a held chord for a swell, flowing music for a flowing move)
+ * and the figure before didn't just play it (material repeated back to back changes its figure rather than
+ * playing one move for half a minute), else the least used of the family, and of those the one the figure's
+ * register points to, so songs and figures don't all walk the catalogue in the same order. No sparse move
+ * at the peak. */
+function chooseMove(an: Analysis, fam: Family, g0: number, g1: number, replay: string | undefined,
+  prev: string | null, used: Map<string, number>): string {
+  const peak = stepOf(levelOver(an, g0, g1)) === 4;
+  const allowed = (m: string) => !(peak && CAT.SPARSE_MOVES.includes(m));
+  const fits = (m: string) => {
+    const f = familyOf(m);
+    return (f === 'held') === (fam === 'held') && (f === 'flow') === (fam === 'flow') && allowed(m)
+      && (m !== prev || POOLS[f].length === 1) && (f !== 'beat' || fam === 'beat' || followable(an, g0, g1));
+  };
+  if (replay !== undefined && fits(replay)) return replay;
+  const pool = POOLS[fam].filter(allowed);
+  const fresh = pool.length > 1 ? pool.filter((m) => m !== prev) : pool;
+  const least = Math.min(...fresh.map((m) => used.get(m) ?? 0));
+  const ties = fresh.filter((m) => (used.get(m) ?? 0) === least);
+  return ties[Math.min(ties.length - 1, Math.floor(register(an, g0, g1) * ties.length))];
+}
+
+/** A figure drawn with its move. A phrase whose shape asks for its own move (chords, a trill, a cadence, the
+ * motif) plays that, but where the music flows. A note move plays each phrase's notes; any other plays
+ * across the whole figure, rests included: a beat move around the phrases that play their own, with the
+ * melody riding the trucks' bars on top, and a swell or a flowing move holding on under them. */
+function drawFigure(cars: Car[], an: Analysis, move: string, group: Phrase[], g0: number, g1: number) {
+  const fam = familyOf(move);
+  for (const ph of group) ph.move = (fam !== 'flow' && CAT.FOR_GESTURE[ph.gesture]) || move;
+  const own = group.filter((q) => q.move !== move || fam === 'note');
+  if (fam !== 'note') {
+    let a = g0;
+    for (const q of [...(fam === 'beat' ? own : []), { t0: g1, t1: g1 }]) {
+      if (q.t0 - a >= 1.0) {
+        M.MOVES[move](cars, an, stretch(an, a, q.t0));
+        if (fam === 'beat') M.barMelody(cars, an, stretch(an, a, q.t0), true);
+      }
+      a = Math.max(a, q.t1);
+    }
+  }
+  for (const ph of own) M.MOVES[ph.move!](cars, an, ph);
 }
 
 /** Where the melody of [t0, t1) sits in the song's range, 0 (low) to 1 (high); the middle with no notes. */
@@ -283,98 +286,39 @@ function stretch(an: Analysis, t0: number, t1: number): Phrase {
     level: levelOver(an, t0, t1) };
 }
 
-// ---- Accents ----------------------------------------------------------------------------------
-// The whole stage at once is the show's exclamation mark, so it is kept for the moments that stand out most.
-// Besides the drops (pulse.ts), the cadences' closing chords (the cadence move) and a sung line's lightning
-// (lyrics.ts), the strongest of
-//   arrivals   a phrase's arrival chord in lively music where the music steps up: its level LIFT over the
-//              seconds before, or a jump of BLAST
-//   blasts     a strike out of a breath that lands loud (LOUD: within 16 dB of the song's loud end, the show
-//              at a groove or more as it rings, RING_S on): BLAST (16 dB) louder than the quietest moment of
-//              the BREATH_S before (an orchestra's tutti after a rest, a band's hit after a stop)
-// light the whole stage, at most one for every ACCENT_EVERY_S of the song, strongest first: a strike out of
-// silence (the breath before it at REST: 30 dB under the loud end) at least STRIKE_GAP_S after another, as
-// the Toccata's opening calls are, anything else ACCENT_GAP_S clear of every other, a drop, a cadence or
-// lightning.
-
-const BLAST = 0.4, LIFT = 0.08, LOUD = 0.6, REST = 0.25, RING_S = 0.8;
-const ACCENT_EVERY_S = 40, ACCENT_GAP_S = 10, STRIKE_GAP_S = 4;
-const BREATH_S = 0.4, ATTACK_S = 0.15;     // the breath before a strike, and its attack (the loudest moment)
-const LIFT_WEIGHT = 2;     // a step up in the level counts twice a jump in loudness: it lasts
-const STRIKE_HOLD_S = 0.3;     // a strike holds the whole stage this long at most, and under a beat
-
-function accents(cars: Car[], an: Analysis, said: Moment[]) {
-  const x = an.loudness, ev = an.events, at = (t: number) => clip(Math.round(t / an.step), 0, an.nFrames - 1);
-  /** [the quietest moment of the breath before t (silence before the song), the loudest of its attack] */
-  const around = (t: number): [number, number] => {
-    let before = Infinity, after = 0;
-    for (let f = at(t - BREATH_S); f < at(t - 0.05); f++) before = Math.min(before, x[f]);
-    for (let f = at(t); f <= at(t + ATTACK_S); f++) after = Math.max(after, x[f]);
-    return [before === Infinity ? 0 : before, after];
-  };
-  const lift = (t: number) => levelOver(an, t, t + 2) - levelOver(an, t - 4, t - 0.3);
-  const strength = (t: number, [before, after]: [number, number]) =>
-    after - before + LIFT_WEIGHT * Math.max(0, lift(t));
-  const taken = [...PULSE.drops(an),
-    ...said.filter((m) => m.do === 'lightning').map((m) => LY.onGrid(an, m.t0))];
-  const phrases = an.phrases!.filter((ph) => !flowsAt(an, ph.t0));
-  for (const ph of phrases) if (ph.move === 'cadence') for (let i = ph.a; i < ph.b; i++) taken.push(ev.t[i]);
-  const cands: { t: number; strength: number; hold: number; strike: boolean }[] = [];
-  for (const h of an.hits) {
-    const [before, after] = around(h);
-    if (after < LOUD || after - before < BLAST || levelAt(an, h + RING_S) < GROOVE || flowsAt(an, h)) continue;
-    const hold = Math.min(STRIKE_HOLD_S, TEMPO.beatAt(an, h) * 0.6);
-    cands.push({ t: h, strength: strength(h, [before, after]), hold, strike: before <= REST });
-  }
-  for (const ph of phrases) {
-    for (let i = ph.a; i < ph.b; i++) {
-      const t = ev.t[i], [before, after] = around(t);
-      if (!ev.arrival[i] || ph.move === 'cadence' || levelAt(an, t) < DRIVE
-        || (lift(t) < LIFT && after - before < BLAST)) continue;
-      cands.push({ t, strength: strength(t, [before, after]), hold: clip(ev.dur[i], 0.3, 1.2), strike: false });
-    }
-  }
-  let most = Math.round(an.duration / ACCENT_EVERY_S);
-  const kept: typeof cands = [];
-  for (const c of cands.sort((p, q) => q.strength - p.strength)) {
-    const near = (u: number, gap: number) => Math.abs(u - c.t) < gap;
-    if (most <= 0 || taken.some((u) => near(u, c.strike ? 1 : ACCENT_GAP_S))
-      || kept.some((k) => near(k.t, c.strike && k.strike ? STRIKE_GAP_S : ACCENT_GAP_S))) continue;
-    most--;
-    kept.push(c);
-    M.allOn(cars, c.t, c.hold);
-  }
-}
-
 // ---- The end ------------------------------------------------------------------------------------
 
-/** The music's last strong beat: the last beat in the final 12 s whose attack is at least 60 % of the
+const END_S = 12;          // the ending's hit is looked for this far before the music stops ...
+const STRONG = 0.6;        // ... the last beat at least this strong against the strongest there
+const BAR_HOLD = 1.15;     // the bars hold full for the fade's first eighth, then go with the lamps
+
+/** The music's last strong beat: the last beat in the final END_S whose attack is at least STRONG of the
  * strongest there. */
 function finalBeat(an: Analysis, end: number): number | null {
   const env = an.pulseEnv;
-  const b = an.beats.filter((x) => x > end - 12 && x < end - 0.6);
+  const b = an.beats.filter((x) => x > end - END_S && x < end - 0.6);
   if (!env || !b.length) return null;
   const hop = an.pulseHop;
   const strength = b.map((x) => {
     const i = clip(Math.round(x / hop), 1, env.length - 2);
     return Math.max(env[i - 1], env[i], env[i + 1]);
   });
-  const threshold = 0.6 * Math.max(...strength);
+  const threshold = STRONG * Math.max(...strength);
   const strong = b.filter((_, k) => strength[k] >= threshold);
   return strong.length ? strong[strong.length - 1] : null;
 }
 
-/** The ending: everything on at the music's last strong hit in its final 12 s (or its last strong beat),
+/** The ending: everything on at the music's last strong hit in its final END_S (or its last strong beat),
  * then a 2 s fade to dark, the bars with it. Music that ends flowing fades slowly instead, whatever is lit
  * as it ends going out over 2 s, unless it ends on a loud strike (a band's last hit after a quiet outro). */
 function finale(cars: Car[], an: Analysis) {
   const end = musicSpan(an)[1];
-  const late = an.hits.filter((h) => h > end - 12 && h < end);
+  const late = an.hits.filter((h) => h > end - END_S && h < end);
   let t = late.length ? late[late.length - 1] : Math.max(end - 1.5, 0);
   const last = finalBeat(an, end);
   if (last !== null && last > t) t = last;
   const ring = an.loudness.subarray(cars[0].fr(t), cars[0].fr(t + 0.2) + 1);
-  if (flowsAt(an, end - 0.25) && !(late.includes(t) && Math.max(...ring) >= LOUD)) {
+  if (flowsAt(an, end - 0.25) && !(late.includes(t) && Math.max(...ring) >= PULSE.LOUD)) {
     for (const c of cars) {
       const row = clip(c.fr(end) - 1, 0, c.nFrames - 1);
       const lit = c.out(c.everything()).filter((ch) => c.get(row, ch) > 0);
@@ -391,11 +335,10 @@ function finale(cars: Car[], an: Analysis) {
       c.set(ch, t, t + 0.3, C.ON);
       c.set(ch, t + 0.3, fadeEnd, C.OFF_2000);
     }
-    c.set(bars, t, fadeEnd, 0);
-    c.set(bars, fadeEnd, an.duration, 0);
+    c.set(bars, t, an.duration, 0);
     if (c.isCt) {
       const n = c.fr(fadeEnd) - c.fr(t);
-      const env = Array.from(linspace(1.15, 0, n), (v) => clip(v, 0, 1));
+      const env = Array.from(linspace(BAR_HOLD, 0, n), (v) => clip(v, 0, 1));
       c.pixels(C.FRONT_BAR, t, env.map((v) => new Array(C.FRONT_BAR.length).fill(v)));
       c.pixels(C.REAR_BAR, t, env.map((v) => new Array(C.REAR_BAR.length).fill(v)));
     }
