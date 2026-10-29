@@ -161,8 +161,8 @@ An accent, a drop, the peak's downbeat, lightning and the end light every lamp f
   silence 4 s, as the Toccata's three opening calls are); everything on at the music's last strong hit, then
   a 2 s fade, or a slow fade where the song ends flowing.
 - **Shaped as it is written** (`Car.light`): a lit lamp stays on at least 100 ms (a shorter flash doesn't
-  read), and silence is dark: a lamp still lit as the music stops fades on Tesla's shortest ramp, the bars
-  and cabins quicker. The one pass after the layers translates a 2025+ Model Y's lamps (`lamps.ts`,
+  read), two lightings of a lamp under 60 ms apart join (so short a dark reads as a flicker), and silence
+  is dark: a lamp still lit as the music stops fades on Tesla's shortest ramp, the bars and cabins quicker. The one pass after the layers translates a 2025+ Model Y's lamps (`lamps.ts`,
   [below](#the-2025-model-ys-lamps)), since its hardware reads only those.
 
 ### Output
@@ -272,7 +272,7 @@ the last of five cars still moves within it.
 - **Windows stay down.** The music plays from the cabin speakers, so the crowd hears it through the open
   windows. They go down as the music starts, a relay car by car from the crowd's left, the fronts and then
   the rears, and dance in about 4.5 s bursts rolling across the cars on up to four of the other big
-  moments (about 18 s per window), then go down again.
+  moments (and the peak, where it has no room for the lids), about 18 s per window, then go down again.
 - **Mirrors** pulse to the tempo in the steadiest loud section (the crowd-left mirrors, then the
   crowd-right ones, car after car a beat apart), and fold in patterns (a wave, outside-in, every other
   mirror) in the middle of each lively stretch where nothing has moved for 12 s.

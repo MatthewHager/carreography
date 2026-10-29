@@ -10,8 +10,8 @@ import { u8 } from './np';
 import { lineupCars } from './vehicles';
 
 const LIGHT_LEAD_S = 0.02;   // lights fire one frame before the sound so they read as on the beat
-const MIN_ON = 5;            // frames: a lamp lit for less than 100 ms doesn't read
-const FADE = 25, PIXEL_FADE = 15;     // frames: a lamp fades out of a silence on Tesla's shortest ramp, a bar quicker
+const MIN_ON = 5, MIN_OFF = 3;   // frames: a lamp lit under 100 ms doesn't read, nor one dark under 60 ms
+const FADE = 25, PIXEL_FADE = 15;   // frames: a lamp fades out of a silence on the shortest ramp, a bar quicker
 
 export type Side = 'L' | 'R' | null | undefined;
 type Chs = number | readonly number[];
@@ -65,17 +65,23 @@ export class Car {
     return Math.min(Math.max(Math.round((t - LIGHT_LEAD_S) / this.step), 0), this.nFrames);
   }
 
-  /** The lamps lit from t0 to t1 (a lit lamp at least MIN_ON frames, so it reads), never lit in a silence:
-   * one still lit as the music stops fades out on Tesla's shortest ramp. */
+  /** The lamps lit from t0 to t1, shaped so the lighting reads: lit at least MIN_ON frames, joined to another
+   * lighting under MIN_OFF frames away (so short a dark is a flicker, not a pause), and never lit in a
+   * silence: one still lit as the music stops fades out on Tesla's shortest ramp. */
   light(chs: Chs, t0: number, t1: number, value = C.ON) {
-    const a = this.fr(t0), cs = list(chs);
+    const a = this.fr(t0), cs = list(chs), on = value >= 128, n = this.nFrames;
     let b = this.fr(t1);
     if (b <= a || !cs.length) return;
-    if (value >= 128) b = Math.min(this.nFrames, Math.max(b, a + MIN_ON));
+    if (on) b = Math.min(n, Math.max(b, a + MIN_ON));
     const F = this.frames, N = C.N_CHANNELS, q = this.hush;
-    for (let f = a; f < b; f++) {
-      const v = q?.[f] && value >= 128 ? (q[f] <= FADE ? C.OFF_500 : 0) : value;
-      for (const ch of cs) if (F[f * N + ch] < v) F[f * N + ch] = v;
+    for (const ch of cs) {
+      let from = a, to = b;
+      for (let g = a - 1; on && g >= Math.max(0, a - MIN_OFF); g--) if (F[g * N + ch] >= 128) [from, g] = [g + 1, -1];
+      for (let g = b; on && g < Math.min(n, b + MIN_OFF); g++) if (F[g * N + ch] >= 128) [to, g] = [g, n];
+      for (let f = from; f < to; f++) {
+        const v = q?.[f] && on ? (q[f] <= FADE ? C.OFF_500 : 0) : value;
+        if (F[f * N + ch] < v) F[f * N + ch] = v;
+      }
     }
   }
 
