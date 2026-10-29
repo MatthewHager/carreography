@@ -122,7 +122,7 @@ function melodyPath(an: Analysis): Float64Array {
   if (!ev?.t.length) return pos;
   const song = { lo: percentile(ev.top, 5), hi: percentile(ev.top, 95) };
   const range = new Array<[number, number]>(ev.t.length).fill(M.phraseRange(song));
-  for (const ph of an.phrases ?? []) range.fill(M.phraseRange(ph), ph.a, ph.b);
+  for (const ph of an.phrases ?? []) range.splice(ph.a, ph.b - ph.a, ...M.localRanges(an, ph));
   const ampCut = percentile(ev.amp, 35);
   const kept: number[] = [];
   for (let i = 0; i < ev.t.length; i++) if (ev.amp[i] >= ampCut) kept.push(i);
@@ -166,12 +166,12 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
     }
   }
 
-  // 2. the swoop: the melody gliding across the stage on the inner beams
+  // 2. the swoop: the melody gliding across the stage on the inner beams, placed as the moves place it
   const path = melodyPath(an).map((v, i) => (flows(i * step) ? v : NaN));
+  const at = Array.from(path, (v) => (Number.isNaN(v) ? null : M.slotAt(cars, v)));
   for (let slot = 0; slot < 2 * cars.length; slot++) {
     const car = cars[Math.floor(slot / 2)], side = slot % 2 === 0 ? 'L' : 'R';
-    const slotOf = (v: number) => Math.min(2 * cars.length - 1, Math.floor(v * 2 * cars.length));
-    const on = Array.from(path, (v) => !Number.isNaN(v) && slotOf(v) === slot);
+    const on = at.map((p) => p !== null && p[0] === car && p[1] === side);
     for (const [a, b] of runs(on)) {
       const held = (b - a) * step >= HELD_S;
       glow(car, car.inner(side), a * step, b * step + (held ? 0.25 : 0.1), held ? C.ON_1000 : C.ON,
@@ -182,11 +182,10 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
   // the car end, centre, end
   const bar = C.FRONT_BAR.length, sections = [[0, END_LEDS], [END_LEDS, bar - END_LEDS], [bar - END_LEDS, bar]];
   for (const car of cars.filter((c) => c.juniper)) {
-    const x = cars.indexOf(car);
     for (let k = 0; k < 3; k++) {
-      const on = Array.from(path, (v) => !Number.isNaN(v) && Math.floor((v * cars.length - x) * 3) === k);
+      const on = at.map((p) => p !== null && p[0] === car && Math.min(2, Math.floor(p[2] * 3)) === k);
       for (const [a, b] of runs(on)) {
-        const [lo, hi] = sections[k], tail = (b - a) * step >= HELD_S ? 12 : 5;
+        const [lo, hi] = sections[k], tail = Math.round(((b - a) * step >= HELD_S ? 0.25 : 0.1) / step);
         car.pixels(C.FRONT_BAR, a * step, Array.from({ length: b - a + tail }, () =>
           Float64Array.from(C.FRONT_BAR, (_, j) => (j >= lo && j < hi ? 1 : 0))));
       }
@@ -195,14 +194,13 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
 
   // 3. the trucks' bars: the breath, the voice, the melody's spot and every note
   for (const c of cars.filter((q) => q.isCt)) {
-    const nLed = C.FRONT_BAR.length, k = 2 * cars.indexOf(c);       // the truck's two slots: k and k + 1
+    const nLed = C.FRONT_BAR.length;
     for (const [a, b] of runs(Array.from({ length: n }, (_, f) => flows(f * step)))) {
       const t0 = a * step, t1 = b * step, rows: Float64Array[] = [];
       for (let f = a; f < b; f++) {
         const t = f * step, fade = clip((t - t0) / 2.0, 0, 1) * clip((t1 - t) / 2.0, 0, 1);
         const glowAt = fade * (0.08 + 0.6 * B[f] ** 1.5) * (0.6 + 0.4 * an.bands.highMid[f]);
-        const spot = path[f] * 2 * cars.length - k, centre = clip(spot / 2, 0, 1) * (nLed - 1);
-        const onTruck = c === ct && spot >= -0.5 && spot <= 2.5;
+        const p = at[f], onTruck = c === ct && p !== null && p[0] === c, centre = onTruck ? p[2] * (nLed - 1) : 0;
         const row = new Float64Array(nLed);
         for (let j = 0; j < nLed; j++) {
           const z = (j - centre) / 6.0;
@@ -217,12 +215,12 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
   const quiet = percentile(ev.amp, 30), loud = Math.max(percentile(ev.amp, 95), quiet + 1e-6);
   for (const ph of trucks.length ? an.phrases ?? [] : []) {
     if (!flows(ph.t0)) continue;
-    const [lo, hi] = M.phraseRange(ph);
+    const ranges = M.localRanges(an, ph);
     for (let i = ph.a; i < ph.b; i++) {
-      const t = ev.t[i], strength = clip((ev.amp[i] - quiet) / (loud - quiet), 0, 1);
+      const t = ev.t[i], strength = clip((ev.amp[i] - quiet) / (loud - quiet), 0, 1), [lo, hi] = ranges[i - ph.a];
       const s = 0.25 + 0.75 * strength * Math.max(B[clip(Math.round(t / step), 0, n - 1)], 0.3);
-      const at = clip((ev.top[i] - lo) / Math.max(hi - lo, 1), 0, 1);
-      for (const c of trucks) M.comet(c, t, at, clip(ev.dur[i], 0.15, 0.5) + 0.15, s);
+      const pos = clip((ev.top[i] - lo) / Math.max(hi - lo, 1), 0, 1);
+      for (const c of trucks) M.comet(c, t, pos, clip(ev.dur[i], 0.15, 0.5) + 0.15, s);
     }
   }
 

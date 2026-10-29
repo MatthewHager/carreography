@@ -4,7 +4,7 @@
 //   rear       the tail lights from groove up, the number plates, rear fogs and a truck's bed lights from
 //              drive up; a truck's rear bar (its tail light) pumps with the bass, a level meter, brighter as
 //              the level rises
-//   front bar  a truck's front bar glows under the comets, from a groove up, to nearly half at the peak,
+//   front bar  a truck's front bar glows under the comets, from calm up, to over a third at the peak,
 //              breathing with the voice and the lead (the 600 Hz-4 kHz band)
 //   cabins     the interiors take the harmony's colour, bar by bar (the pitch class leading the bar, round
 //              the circle of fifths, so related keys sit near each other), else the sound's own (purple when
@@ -58,7 +58,7 @@ export function apply(cars: Car[], an: Analysis): void {
     const front: Float64Array[] = [], rear: Float64Array[] = [];
     for (let f = 0; f < an.nFrames; f++) {
       const on = !flowsAt(an, f * step);
-      const lead = (glow(f, STEPS[1], 0.2) + glow(f, STEPS[3], 0.25)) * (0.5 + 0.5 * highMid[f]);
+      const lead = (glow(f, STEPS[0], 0.35) + glow(f, STEPS[3], 0.2)) * (0.5 + 0.5 * highMid[f]);
       front.push(new Float64Array(C.FRONT_BAR.length).fill(on ? lead : 0));
       rear.push(new Float64Array(C.REAR_BAR.length).fill(on ? glow(f, STEPS[0], 0.7) * (0.3 + 0.7 * low[f]) : 0));
     }

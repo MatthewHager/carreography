@@ -15,7 +15,7 @@ import type { Car } from './car';
 import * as C from './channels';
 import { levelAt, STEPS } from './level';
 import { paced } from './mood';
-import { arange, clip, cumsum, diff, linspace, searchsorted, sum } from './np';
+import { arange, clip, cumsum, diff, linspace, quantiles, searchsorted, sum } from './np';
 import { beatLen } from './tempo';
 
 const ON_500 = C.ON_500, OFF_500 = C.OFF_500, OFF_1000 = C.OFF_1000;
@@ -55,24 +55,44 @@ function slots(cars: Car[]): [Car, LR][] {
 
 const CENTRE_SHARE = 4 / 3;   // the centrepiece's share of the pitch range against another car's
 
-/** Pitch -> (car, half, position along a truck's bar or null): low notes on the crowd's left, high on the
- * right; the centre truck takes a wider share so a run sweeps visibly along its bar. */
-function slotFor(cars: Car[], pitch: number, lo: number, hi: number): [Car, LR, number | null] {
-  const pos = clip((pitch - lo) / Math.max(hi - lo, 1e-9), 0, 1);
+/** A place on the stage (0 the crowd's left end, 1 the right) -> (car, half, place across that car 0..1):
+ * the centre truck takes a wider share, so a run sweeps visibly along its bar. Every style places the
+ * melody this way, so a note sits in the same place whether the music beats or flows. */
+export function slotAt(cars: Car[], pos: number): [Car, LR, number] {
   const ct = centreTruck(cars);
   const widths = cars.map((c) => (c === ct ? CENTRE_SHARE : 1.0));
   const edges = [0.0, ...Array.from(cumsum(widths), (v) => v / sum(widths))];
-  const idx = Math.min(cars.length - 1, searchsorted(edges, pos, 'right') - 1);
-  const w = (pos - edges[idx]) / (edges[idx + 1] - edges[idx]);
+  const idx = Math.min(cars.length - 1, searchsorted(edges, clip(pos, 0, 1), 'right') - 1);
+  const w = clip((pos - edges[idx]) / (edges[idx + 1] - edges[idx]), 0, 1);
   const car = cars[idx];
-  return [car, w < 0.5 ? 'L' : 'R', car.isCt ? w : null];
+  return [car, w < 0.5 ? 'L' : 'R', w];
 }
+
+/** Pitch -> (car, half, place across it): low notes on the crowd's left, high on the right. */
+const slotFor = (cars: Car[], pitch: number, lo: number, hi: number) => slotAt(cars, posOf(pitch, lo, hi));
 
 /** The pitch range a phrase spreads across the stage: its own, at least an octave wide. */
 export function phraseRange(ph: Pick<Phrase, 'lo' | 'hi'>): [number, number] {
   if (ph.hi - ph.lo >= 12) return [ph.lo, ph.hi];
   const mid = (ph.lo + ph.hi) / 2;
   return [mid - 6, mid + 6];
+}
+
+const LOCAL_S = 3;
+
+/** Per note of a phrase, the pitch range the stage spreads over around it: the range (phraseRange) of the
+ * phrase's top notes within LOCAL_S of it, so wherever the melody wanders it uses the whole stage and
+ * neither end sits idle for long. */
+export function localRanges(an: Analysis, ph: Pick<Phrase, 'a' | 'b'>): [number, number][] {
+  const ev = an.events, out: [number, number][] = [];
+  let a = ph.a, b = ph.a;
+  for (let i = ph.a; i < ph.b; i++) {
+    while (ev.t[a] < ev.t[i] - LOCAL_S) a++;
+    while (b < ph.b && ev.t[b] <= ev.t[i] + LOCAL_S) b++;
+    const [lo, hi] = quantiles(ev.top.slice(a, b), [0.1, 0.9]);
+    out.push(phraseRange({ lo, hi }));
+  }
+  return out;
 }
 
 const posOf = (p: number, lo: number, hi: number) => clip((p - lo) / Math.max(hi - lo, 1e-9), 0, 1);
@@ -138,9 +158,10 @@ function rows(n: number, fn: (f: number, k: number) => number, w = BAR): Rows {
 
 const frames = (car: Car, t: number, dur: number) => Math.max(2, car.fr(t + dur) - car.fr(t));
 
-/** A comet at `pos` (0..1 along the bar) fading over `dur`: wider and brighter as the level rises. */
-export function comet(car: Car, t: number, pos: number, dur: number, s: number) {
-  const width = 3 + 8 * s, amp = 0.55 + 0.45 * s, n = frames(car, t, dur);
+/** A comet at `pos` (0..1 along the bar) fading over `dur`: wider and brighter as the level rises (times
+ * `gain`). */
+export function comet(car: Car, t: number, pos: number, dur: number, s: number, gain = 1) {
+  const width = 3 + 8 * s, amp = (0.55 + 0.45 * s) * gain, n = frames(car, t, dur);
   const fade = linspace(1, 0, n);
   car.pixels(C.FRONT_BAR, t, rows(n, (f, k) => {
     const x = (k - pos * (BAR - 1)) / width;
@@ -253,12 +274,13 @@ const holdFor = (gap: number, share = 0.85, most = 0.6) => clip(gap * share, 0.1
 
 type Move = (cars: Car[], an: Analysis, ph: Phrase) => void;
 
-/** Notes across the stage like a keyboard, low on the crowd's left; a note on the truck is a comet at its
- * pitch along the bar. Loud chords span from their lowest note's slot to their highest. */
+/** Notes across the stage like a keyboard, low on the crowd's left, with the melody along the trucks' bars.
+ * Loud chords span from their lowest note's slot to their highest. */
 const keyboard: Move = (cars, an, ph) => {
-  const ev = an.events, [lo, hi] = phraseRange(ph), all = slots(cars);
+  const ev = an.events, ranges = localRanges(an, ph), all = slots(cars);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], s = levelAt(an, t), own = owned(an, t), nxt = ev.t[i + 1] ?? Infinity;
+    const [lo, hi] = ranges[i - ph.a];
     const top = slotFor(cars, ev.top[i], lo, hi);
     let span: [Car, LR][] = [[top[0], top[1]]];
     if (ev.kind[i] >= 2 && s >= STEPS[2]) {
@@ -268,15 +290,10 @@ const keyboard: Move = (cars, an, ph) => {
       span = all.slice(Math.min(a, b), Math.max(a, b) + 1);
     }
     for (const [car, side] of span) {
-      if (car.isCt) {
-        const w = car === top[0] && top[2] !== null ? top[2] : side === 'L' ? 0.25 : 0.75;
-        comet(car, t, w, clip(ev.dur[i], 0.15, 0.6) + 0.2, s);
-        if (s >= STEPS[1]) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
-      } else {
-        note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
-      }
+      if (!car.isCt || s >= STEPS[1]) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
     }
   }
+  barMelody(cars, an, ph);
 };
 
 /** A light runs the stage note by note, through every lamp and along the bar, turning when the melody
@@ -310,24 +327,27 @@ const relay: Move = (cars, an, ph) => {
       pos = clip(pos + 2 * dir, 0, n - 1);
     }
   }
+  barMelody(cars, an, ph);
 };
 
 /** Pitch is the distance from the middle: low notes light the centre, high notes both ends at once, so a
- * rising line opens out from the middle and a falling one closes in; the truck's bar fills from its
- * centre to match. */
+ * rising line opens out from the middle and a falling one closes in; on the truck's bar two comets as far
+ * out from its centre. */
 const mirror: Move = (cars, an, ph) => {
-  const ev = an.events, [lo, hi] = phraseRange(ph), all = slots(cars), n = all.length;
+  const ev = an.events, ranges = localRanges(an, ph), all = slots(cars), n = all.length;
   const rings = n / 2;
   const ct = centreTruck(cars);
   for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t), own = owned(an, t), p = posOf(ev.top[i], lo, hi);
+    const t = ev.t[i], s = levelAt(an, t), own = owned(an, t), p = posOf(ev.top[i], ...ranges[i - ph.a]);
     const nxt = ev.t[i + 1] ?? Infinity;
     const r = Math.min(rings - 1, Math.trunc(p * rings));          // 0: the middle pair
     for (const k of new Set([rings - 1 - r, rings + r])) {
       const [car, side] = all[k];
       if (!car.isCt || s >= STEPS[1]) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
     }
-    if (ct !== null) barFill(ct, t, clip(ev.dur[i], 0.15, 0.5) + 0.15, 0.15 + 0.85 * p, true);
+    if (ct !== null) {
+      for (const at of [0.5 - 0.45 * p, 0.5 + 0.45 * p]) comet(ct, t, at, clip(ev.dur[i], 0.15, 0.5) + 0.15, s);
+    }
   }
 };
 
@@ -340,37 +360,38 @@ function halves(cars: Car[]): [[Car, LR][], [Car, LR][]] {
 
 /** Notes alternate between the left and right halves of the stage; loud, each takes its whole half. */
 const lrNotes: Move = (cars, an, ph) => {
-  const ev = an.events, [lo, hi] = phraseRange(ph), sidesOf = halves(cars);
+  const ev = an.events, ranges = localRanges(an, ph), sidesOf = halves(cars);
   for (let k = 0, i = ph.a; i < ph.b; k++, i++) {
     const t = ev.t[i], s = levelAt(an, t), group = sidesOf[k % 2];
-    const at = Math.min(group.length - 1, Math.trunc(posOf(ev.top[i], lo, hi) * group.length));
+    const at = Math.min(group.length - 1, Math.trunc(posOf(ev.top[i], ...ranges[i - ph.a]) * group.length));
     const pick = s >= STEPS[2] ? group : [group[at]];
     const d = clip(ev.dur[i], 0.1, 0.25);
     for (const [car, side] of pick) slotHit(car, side, t, d, s, owned(an, t));
   }
+  barMelody(cars, an, ph);
 };
 
 /** Call and response: bar by bar the phrase passes between the left and the right half of the stage, and
  * within the half that has it each note sits where its pitch puts it. */
 const antiphony: Move = (cars, an, ph) => {
-  const ev = an.events, [lo, hi] = phraseRange(ph), sidesOf = halves(cars);
+  const ev = an.events, ranges = localRanges(an, ph), sidesOf = halves(cars);
   const downs = an.downbeats.filter((d) => d > ph.t0 + 0.3 && d < ph.t1);
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], s = levelAt(an, t), nxt = ev.t[i + 1] ?? Infinity;
     const turn = downs.filter((d) => d <= t + 0.02).length % 2;
-    const group = sidesOf[turn];
-    const [car, side] = group[Math.min(group.length - 1, Math.trunc(posOf(ev.top[i], lo, hi) * group.length))];
-    if (car.isCt) comet(car, t, side === 'L' ? 0.25 : 0.75, 0.3, s);
+    const group = sidesOf[turn], p = posOf(ev.top[i], ...ranges[i - ph.a]);
+    const [car, side] = group[Math.min(group.length - 1, Math.trunc(p * group.length))];
     note(car, half(car, side, s, owned(an, t)), t, ev.dur[i], s, nxt);
   }
+  barMelody(cars, an, ph);
 };
 
 /** Chords as blocks of light across the slots between their lowest and highest notes, held as long as the
  * chord; a big chord fills the stage. Quiet chords swell in and fade, loud ones are struck. */
 const block: Move = (cars, an, ph) => {
-  const ev = an.events, [lo, hi] = phraseRange(ph), all = slots(cars);
+  const ev = an.events, ranges = localRanges(an, ph), all = slots(cars);
   for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t), nxt = ev.t[i + 1] ?? Infinity;
+    const t = ev.t[i], s = levelAt(an, t), nxt = ev.t[i + 1] ?? Infinity, [lo, hi] = ranges[i - ph.a];
     const a = slotFor(cars, ev.low[i], lo, hi), b = slotFor(cars, ev.high[i], lo, hi);
     const ia = all.findIndex(([c, d]) => c === a[0] && d === a[1]);
     const ib = all.findIndex(([c, d]) => c === b[0] && d === b[1]);
@@ -433,14 +454,16 @@ const cadence: Move = (cars, an, ph) => {
   for (let i = ph.a; i < ph.b; i++) allOn(cars, ev.t[i], clip(ev.dur[i], 0.3, 1.5), i === ph.a);
 };
 
-/** The melody along every truck's bar while a beat move plays: a comet at each note's pitch, so the notes
- * still show over the figure on the beat. */
+/** The melody along every truck's bar: a comet at each note's pitch, faint when the music is quiet, so the
+ * truck carries the tune under whatever the move does (a beat move, or a note move whose notes are on other
+ * cars). */
 export const barMelody: Move = (cars, an, ph) => {
-  const trucks = cars.filter((c) => c.isCt), ev = an.events, [lo, hi] = phraseRange(ph);
+  const trucks = cars.filter((c) => c.isCt), ev = an.events;
   if (!trucks.length) return;
+  const ranges = localRanges(an, ph);
   for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t);
-    for (const c of trucks) comet(c, t, posOf(ev.top[i], lo, hi), clip(ev.dur[i], 0.15, 0.5) + 0.15, 0.8 * s);
+    const t = ev.t[i], s = levelAt(an, t), at = posOf(ev.top[i], ...ranges[i - ph.a]);
+    for (const c of trucks) comet(c, t, at, clip(ev.dur[i], 0.15, 0.5) + 0.15, s, 0.4 + 0.5 * s);
   }
 };
 
