@@ -96,9 +96,11 @@ class Plan {
 /** Every closure's part in the show. */
 export function choreograph(cars: Car[], an: Analysis): void {
   const plan = new Plan(cars, an), peak = thePeak(an), big = moments(an, peak);
-  const waved = lids(plan, peak, big);
+  const taken = lids(plan, peak, big);
   doors(plan, peak);
-  windows(plan, big.filter((t) => !waved.includes(t)));
+  // the windows take the other moments, and the peak too where it had no room for the lids
+  const rest = big.filter((t) => !taken.includes(t));
+  windows(plan, peak && !taken.includes(peak[0]) && !flowsAt(an, peak[0]) ? [peak[0], ...rest] : rest);
   port(plan);
   mirrors(plan);
 }
@@ -133,10 +135,12 @@ function moments(an: Analysis, peak: [number, number] | null): number[] {
   return out;
 }
 
-/** The lids (see the module notes). Returns the moments their waves took. */
+/** The lids (see the module notes). Returns the moments they took: the peak, if it had room, and the
+ * waves'. */
 function lids(plan: Plan, peak: [number, number] | null, big: number[]): number[] {
   const { cars, an } = plan, n = cars.length, end = an.duration - SHUT_BY_S - LIFTGATE_CLOSE_S;
   const lead = Math.max(...cars.map((c) => LIFTGATE_OPEN_S[c.kind])) + OPEN_MARGIN_S;
+  const taken: number[] = [];
   let left = C.CLOSURE_LIMITS[C.LIFTGATE], busy: [number, number] = [-1, -1];
   if (peak) {
     const dance = !flowsAt(an, peak[0]);       // music that flows gets the slow opening alone
@@ -152,12 +156,12 @@ function lids(plan: Plan, peak: [number, number] | null, big: number[]): number[
       });
       left -= dance ? 3 : 2;
       busy = [lands[0] - lead - 1, lands[n - 1] + len + LIFTGATE_CLOSE_S + 2];
+      taken.push(peak[0]);
     }
   }
   // a wave: each lid lifts for RISE_S and stops on its beat, the cars WAVE_S apart, the centrepiece (or the
   // middle car) on the moment, and closes again two beats later in the same order
   const mid = centreTruck(cars) ? cars.indexOf(centreTruck(cars)!) : Math.floor(n / 2);
-  const waved: number[] = [];
   for (const m of big) {
     if (left < 2) break;
     const stops = cars.map((_, i) => onBeat(an, m + (i - mid) * WAVE_S));
@@ -170,9 +174,9 @@ function lids(plan: Plan, peak: [number, number] | null, big: number[]): number[
       plan.cmd(c, C.LIFTGATE, close, close + 0.5, C.CLOSURE_CLOSE, LIFTGATE_CLOSE_S);
     });
     left -= 2;
-    waved.push(m);
+    taken.push(m);
   }
-  return waved;
+  return taken;
 }
 
 /** A Model X's falcon doors (see the module notes): they land on the peak a relay after the car before,
