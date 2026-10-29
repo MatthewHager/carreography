@@ -53,8 +53,7 @@ describe('every lineup keeps the rules', () => {
             expect(cmds.filter(([, , v]) => COMMANDS.has(v)).length, what).toBeLessThanOrEqual(limit);
             const dances = cmds.filter(([, , v]) => v === C.CLOSURE_DANCE);
             const dancing = dances.reduce((s, [a, b]) => s + (b - a) * step, 0);
-            // (the charge port's Dance is its rainbow light, not a motor)
-            if (Number(ch) !== C.CHARGE_PORT) expect(dancing, `${what} dances`).toBeLessThanOrEqual(30);
+            expect(dancing, `${what} dances`).toBeLessThanOrEqual(30);
           }
           let opened = -Infinity;
           for (const [a, , v] of commands(car.frames, n, C.LIFTGATE)) {

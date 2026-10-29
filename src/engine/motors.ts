@@ -9,21 +9,21 @@
 //     dance        the biggest builds: every lid opens fully, lands on the peak a beat after its
 //                  neighbour, dances through the loud stretch and closes (Open + Dance + Close)
 //     relay / alternate / wave   part-way lifts (a Stop on the peak) for the rest (Open + Close)
-//   Windows (6 commands per window; all down at the start, left down at the end):
+//   Windows (6 commands per window; down at the start as a relay across the cars, left down at the end):
 //     travelling dance   fronts then rears dance ~4.5 s, car after car, direction alternating
 //     peak dance         every window dances 10 s on the biggest peak (about 24 s per window in all)
 //   Mirrors (20 commands per mirror, six mirrors across the lineup), on their own musical timing:
 //     a tempo pulse in the steadiest section; figures on the biggest landings (wave left-right, wave
 //     right-left, outside-in, inside-out, alternate, Ys-vs-truck, together); and wherever nothing
 //     has moved for 12 s of lively music (30 s of calm), another figure on the next downbeat.
-//   Charge port (3 commands): its Dance is a rainbow light, so it opens for the most exciting ~2
-//     minutes of the song and flashes throughout, closing before the door's own 2-minute auto-close.
+//   Charge port (3 commands): its Dance is a rainbow light, so it opens for the most exciting stretch of
+//     the song, at most PORT_DANCE_MAX_S, the cars one beat apart: a relay of rainbows over the peak.
 
 import type { Analysis, Section } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
 import { flowsAt } from './feel';
-import { levelAt, levelOver, STEPS } from './level';
+import { levelAt, levelOver, STEPS, stepOf } from './level';
 import * as np from './np';
 import { builds, drops } from './pulse';
 import { barLen, beatLen } from './tempo';
@@ -37,8 +37,9 @@ export const WINDOW_S = 4.0, PORT_S = 2.0, MIRROR_S = 2.0;
 const WINDOW_BURST_S = 4.5, WINDOW_PEAK_DANCE_S = 10.0;   // window dances: ~3 x 4.5 + 10 = 24 s, under Tesla's ~30 s
 const LID_DANCE_MIN_S = 4.0, LID_DANCE_MAX_S = 9.0, LID_DANCE_BUDGET_S = 20.0;   // a lid's dance on a peak
 const LID_OPEN_MARGIN_S = 0.8;          // a lid only dances once fully open: land a little early
-const PORT_DANCE_MAX_S = 112.0;         // the port's rainbow, closed before its own 2-minute auto-close
+const PORT_DANCE_MAX_S = 30.0;          // the port's rainbow: about 30 s of dancing a show, as for the motors
 const STILL_LIVELY_S = 12.0, STILL_CALM_S = 30.0;   // longest stretch with no motor moving, loud and in a groove
+const ARRIVE_S = 0.5, BUILT = 0.55, HOLDS = 0.8, HOLD_MAX_S = 16, SPACING_S = 24;   // crescendos()
 const MIRROR_PULSE_CYCLES = 4;          // the steady mirror pulse, leaving commands for the rest of the song
 
 /** (peak_time, build_length, hold_until, score) */
@@ -66,12 +67,12 @@ function anyIn(car: Car, ch: number, f0: number, f1: number): boolean {
  * the rest by size.
  *
  * A moment is where the music arrives somewhere loud: the start of the peak (the level's top step), each
- * build's landing and drop (pulse.ts), and the arrival chords. Its build length is how long the level had
- * been rising to it (back to where it was under 55 % of it), and it holds while the level stays up, at most
- * 16 s (the peak: as long as it lasts). Moments are ranked by their level and build, kept at least 24 s apart.
+ * build's landing and drop (pulse.ts), and the arrival chords. Its size is the level it reaches within
+ * ARRIVE_S. Its build length is how long the level had been rising to it (back to where it was under BUILT of
+ * that), and it holds while the level stays over HOLDS of it, at most HOLD_MAX_S (the peak: while the music
+ * stays at drive or above). Moments are ranked by their size and build, kept at least SPACING_S apart.
  */
 function crescendos(an: Analysis, lead: number): Crescendo[] {
-  const spacing = 24.0;
   const step = an.step, lv = an.level!;
   const cands: [number, number | null, number][] = [];
   let top = -1;
@@ -83,22 +84,22 @@ function crescendos(an: Analysis, lead: number): Crescendo[] {
   const peaks: Crescendo[] = [];
   for (const [t, blen0, bonus] of cands) {
     const f = Math.min(Math.trunc(t / step), lv.length - 1);
-    const pk = np.max(lv, f, Math.min(f + 25, lv.length));
+    const pk = np.max(lv, f, Math.min(f + Math.round(ARRIVE_S / step), lv.length));
     let blen = blen0;
     if (blen === null) {
       let g = f;
-      while (g > 0 && lv[g] > 0.55 * pk) g--;
+      while (g > 0 && lv[g] > BUILT * pk) g--;
       blen = Math.max((f - g) * step, 3.0);
     }
     let h = f;
-    while (h < lv.length - 1 && lv[h] > 0.8 * pk && (h - f) * step < 16) h++;
+    while (h < lv.length - 1 && lv[h] > HOLDS * pk && (h - f) * step < HOLD_MAX_S) h++;
     peaks.push([t, np.clip(blen, 1.0, lead), h * step, pk + bonus]);
   }
   if (top >= 0) {                                   // the peak: the moment the show was saving its top for
     let h = top;
-    while (h < lv.length - 1 && lv[h] >= STEPS[3] - 0.1) h++;
+    while (h < lv.length - 1 && stepOf(lv[h]) >= 3) h++;
     let g = top;
-    while (g > 0 && lv[g] > 0.55 * lv[top]) g--;
+    while (g > 0 && lv[g] > BUILT * lv[top]) g--;
     peaks.push([onBeat(an, top * step), np.clip((top - g) * step, 1.0, lead), h * step, 3.0]);
   }
   if (!peaks.length) return [];
@@ -115,7 +116,7 @@ function crescendos(an: Analysis, lead: number): Crescendo[] {
   }
   const ranked: Crescendo[] = [];
   const byScore = merged.slice().sort((p, q) => q[3] * (0.5 + q[1] / lead) - p[3] * (0.5 + p[1] / lead));
-  for (const p of byScore) if (ranked.every((q) => Math.abs(p[0] - q[0]) >= spacing)) ranked.push(p);
+  for (const p of byScore) if (ranked.every((q) => Math.abs(p[0] - q[0]) >= SPACING_S)) ranked.push(p);
   return ranked;
 }
 
@@ -146,17 +147,23 @@ export function choreograph(cars: Car[], an: Analysis): void {
 }
 
 /** Windows: 6 commands *per window*, and they never close during the show - Tesla's README notes the
- * music only plays from the cabin speakers, so the crowd hears it through the open windows. All four go
- * down at the start. The waves are Dance bursts instead (a lowered window dancing bobs up a little and
- * back): fronts first, rears half a burst later, rolling across the cars - left to right, then right to
- * left, then Ys-then-truck. The biggest peak gets a longer dance from every window; a final Open puts
- * every window fully down again (finishWindows). Dancing stays well under Tesla's ~30 s per show
- * recommendation (thermal limits). */
+ * music only plays from the cabin speakers, so the crowd hears it through the open windows. They go down as
+ * the music starts, a relay: car by car from the crowd's left a beat apart, the fronts and then the rears.
+ * The waves are Dance bursts instead (a lowered window dancing bobs up a little and back): fronts first,
+ * rears half a burst later, rolling across the cars - left to right, then right to left, then
+ * Ys-then-truck. The biggest peak gets a longer dance from every window; a final Open puts every window
+ * fully down again (finishWindows). Dancing stays well under Tesla's ~30 s per show recommendation
+ * (thermal limits). */
 function windows(cars: Car[], an: Analysis): void {
   const end = an.duration;
+  const first = an.beats.find((b) => b >= 0.2) ?? 0.2, opening = Math.min(beatLen(an), 1.0);
   for (const c of cars) {
-    for (const w of C.WINDOWS) c.closure(w, 0.2, 0.7, C.CLOSURE_OPEN);
     const idx = cars.indexOf(c);
+    for (const w of C.WINDOWS) {
+      const rear = w === C.L_REAR_WINDOW || w === C.R_REAR_WINDOW;
+      const t = first + opening * (idx + (rear ? cars.length : 0));
+      c.closure(w, t, t + 0.5, C.CLOSURE_OPEN);
+    }
     const nCars = cars.length;
     const secs = an.sections ?? [];
     const peaks = crescendos(an, LIFTGATE_OPEN_S[c.kind]).sort((p, q) => -p[3] - -q[3]);
@@ -200,13 +207,14 @@ function windows(cars: Car[], an: Analysis): void {
 }
 
 /** Charge port: its Dance is the rainbow light, so it joins the colours for the most exciting stretch of
- * the song - Open, Dance, Close (its 3 commands), closed again before the door's own 2-minute
- * auto-close. */
+ * the song - Open, Dance, Close (its 3 commands) - the cars a beat apart from the crowd's left, so the
+ * rainbows arrive as a relay and leave the same way. */
 function chargePort(cars: Car[], an: Analysis): void {
   const port = portWindow(an);
   if (port !== null) {
-    const [danceFrom, danceEnd] = port;
+    const beat = Math.min(beatLen(an), 1.0);
     for (const c of cars) {
+      const lag = beat * cars.indexOf(c), danceFrom = port[0] + lag, danceEnd = port[1] + lag;
       const openAt = danceFrom - PORT_S - 0.5;
       c.closure(C.CHARGE_PORT, openAt, openAt + 0.5, C.CLOSURE_OPEN);
       c.closure(C.CHARGE_PORT, danceFrom, danceEnd, C.CLOSURE_DANCE);
