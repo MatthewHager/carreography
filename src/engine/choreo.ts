@@ -295,8 +295,7 @@ function stretch(an: Analysis, t0: number, t1: number): Phrase {
 // light the whole stage, at most one for every ACCENT_EVERY_S of the song, strongest first: a strike out of
 // silence (the breath before it at REST: 30 dB under the loud end) at least STRIKE_GAP_S after another, as
 // the Toccata's opening calls are, anything else ACCENT_GAP_S clear of every other, a drop, a cadence or
-// lightning. Every other arrival is punctuation on its own: the accents and the bars flash in lively
-// music, the inner beams glow in calm.
+// lightning.
 
 const BLAST = 0.4, LIFT = 0.08, LOUD = 0.6, REST = 0.25, RING_S = 0.8;
 const ACCENT_EVERY_S = 40, ACCENT_GAP_S = 10, STRIKE_GAP_S = 4;
@@ -326,15 +325,11 @@ function accents(cars: Car[], an: Analysis, said: Moment[]) {
     const hold = Math.min(STRIKE_HOLD_S, M.beatAt(an, h) * 0.6);
     cands.push({ t: h, strength: strength(h, [before, after]), hold, strike: before <= REST });
   }
-  const arrivals: number[] = [];
   for (const ph of phrases) {
-    if (ph.move === 'cadence') continue;
     for (let i = ph.a; i < ph.b; i++) {
-      const t = ev.t[i];
-      if (!ev.arrival[i]) continue;
-      arrivals.push(i);
-      const [before, after] = around(t);
-      if (levelAt(an, t) < DRIVE || (lift(t) < LIFT && after - before < BLAST)) continue;
+      const t = ev.t[i], [before, after] = around(t);
+      if (!ev.arrival[i] || ph.move === 'cadence' || levelAt(an, t) < DRIVE
+        || (lift(t) < LIFT && after - before < BLAST)) continue;
       cands.push({ t, strength: strength(t, [before, after]), hold: clip(ev.dur[i], 0.3, 1.2), strike: false });
     }
   }
@@ -347,22 +342,6 @@ function accents(cars: Car[], an: Analysis, said: Moment[]) {
     most--;
     kept.push(c);
     M.allOn(cars, c.t, c.hold);
-  }
-  for (const i of arrivals) {
-    const t = ev.t[i];
-    if (kept.some((k) => k.t === t)) continue;
-    if (levelAt(an, t) < GROOVE) {
-      for (const c of cars) {
-        c.light(c.inner(), t, t + 0.8, C.ON_500);
-        c.light(c.inner(), t + 0.8, t + 1.8, C.OFF_1000);
-      }
-    } else {
-      const hold = clip(ev.dur[i], 0.15, 0.4);
-      for (const c of cars) {
-        c.light(c.accents(), t, t + hold);
-        if (c.hasBar) M.barFlash(c, t, hold + 0.2, 0.9);
-      }
-    }
   }
 }
 

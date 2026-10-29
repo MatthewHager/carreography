@@ -40,13 +40,6 @@ export function centreTruck(cars: Car[]): Car | null {
   return best;
 }
 
-/** Every car but the centrepiece, crowd-left to right (a lone truck plays both parts). */
-export function sides(cars: Car[]): Car[] {
-  const ct = centreTruck(cars);
-  const out = cars.filter((c) => c !== ct);
-  return out.length ? out : [...cars];
-}
-
 /** Every (car, half) on the stage, crowd-left to right. */
 function slots(cars: Car[]): [Car, LR][] {
   return cars.flatMap((c) => [[c, 'L'], [c, 'R']] as [Car, LR][]);

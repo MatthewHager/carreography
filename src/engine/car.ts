@@ -40,13 +40,6 @@ export class Car {
     this.frames = new Uint8Array(nFrames * C.N_CHANNELS);
   }
 
-  /** The same car with nothing on it. */
-  blank(): Car {
-    const out = new Car(this.kind, this.name, this.x, this.nFrames, this.step, this.juniper, this.falcon);
-    out.hush = this.hush;
-    return out;
-  }
-
   get isCt() {
     return this.kind === 'cybertruck';
   }
@@ -227,13 +220,6 @@ export class Car {
   everything() {
     return [...this.heads(), ...this.accents(), ...this.turns(), ...this.markers(), ...this.fogs(),
       ...this.rear()];
-  }
-
-  /** One channel's column, frame by frame (a copy). */
-  column(ch: number): Uint8Array {
-    const out = new Uint8Array(this.nFrames);
-    for (let f = 0; f < this.nFrames; f++) out[f] = this.frames[f * C.N_CHANNELS + ch];
-    return out;
   }
 }
 

@@ -120,7 +120,7 @@ function cabins(cars: Car[], an: Analysis): void {
 // for the climax). The lamps that can ramp do so over 2 s; the fogs, markers and tails switch. Car lamps
 // can't hold a dim level, so the breath is how many are lit:
 //                Model Y       2025+ Model Y            Cybertruck
-//     1          signatures    the bar's outer ends     -
+//     1          signatures    the bar's outer ends     the frunk light
 //     2          DRLs          the fender repeaters     side markers         and the tails (a truck's rear bar)
 //     3          fogs          the bar's centre         -
 //     4          outer beams   outer beams              outer beams
@@ -163,7 +163,7 @@ function breath(an: Analysis): Float64Array {
 
 /** A car's breathing lamps, layer 1 to 5 (see above). */
 function layerLamps(c: Car): number[][] {
-  if (c.isCt) return [[], c.sig(), [], c.outer(), c.heads()];
+  if (c.isCt) return [c.frunk(), c.sig(), [], c.outer(), c.heads()];
   if (c.juniper) return [c.drl(), c.markers(), c.fogs(), c.outer(), c.heads()];
   return [c.sig(), c.drl(), c.fogs(), c.outer(), c.heads()];
 }
@@ -178,8 +178,8 @@ function breathe(cars: Car[], an: Analysis, B: Float64Array): void {
   const lay = Int8Array.from({ length: steps }, (_, i) => {
     const v = B[i * stride], s = lv[i * stride];
     if (Number.isNaN(v)) return (cur = 0) - 1;
-    const loud = clip((s - CALM) / (FULL - CALM), 0, 1.4);
-    const cap = clip(1 + 3 * loud, 1, 4) + (s >= PEAK ? 1 : 0), fill = v ** (1.6 - loud) * (cap + 1);
+    const loud = clip((s - CALM) / (FULL - CALM), 0, 1);
+    const cap = 1 + 3 * loud + (s >= PEAK ? 1 : 0), fill = v ** (1.6 - loud) * (cap + 1);
     let want = cur;
     while (want < Math.floor(cap) && fill >= want + 1) want += 1;
     while (want > 0 && (fill < want - HYST || want > cap)) want -= 1;
