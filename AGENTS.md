@@ -56,7 +56,7 @@ gh release download car-models --dir public/models/tesla-app           # Tesla's
   `centreTruck(cars)` (may be `null`) and `sides(cars)` from `moves.ts`.
 - **Tesla's motor limits** (`CLOSURE_LIMITS` in `channels.ts`): liftgate 6, each window 6, each mirror
   20, charge port 3, a Model X's doors 6 each. Dance only once a lid is fully open; about 30 s of dancing
-  per show. `Car.closure()` refuses commands past the limits, and `vehicles.test.ts` checks every letter.
+  per closure per show (each motor's own thermal limit). `Car.closure()` refuses commands past the limits, and `vehicles.test.ts` checks every letter.
 - **Deterministic, byte-identical output.** The same input gives the same FSEQ: nothing random, no
   `Math.random()` or clock time in the engine (`choreo.test.ts` checks). Refactors must keep shows
   identical: make a song's show before and after with the review tool and compare the files.

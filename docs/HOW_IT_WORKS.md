@@ -249,7 +249,8 @@ Moves are planned backwards from the travel times, so a lid is fully open exactl
 | charge port | 2 s | 3 | its Dance is the rainbow light; closes itself 2 min after opening |
 | Model X falcon doors | open 20 s, close 8 s | 6 each | |
 
-Only Open, Close and Dance count. Dancing more than about 30 s per show risks a thermal cut-out. Tesla's
+Only Open, Close and Dance count. A motor dancing more than about 30 s in a show risks a thermal cut-out,
+so the budget is per closure: a car's windows, lids and charge port each dance up to about 30 s. Tesla's
 README is the only published source for these; the Cybertruck's frunk isn't in it and was timed on a 2024
 truck. Some older Model Ys open their liftgates only part way until the opening height is reset to its
 default.
@@ -278,7 +279,7 @@ against the limits.
 ## Rules every show keeps
 
 - Tesla's per-show command limits for every closure, Dance only once a lid is fully open, and about 30 s
-  of motor dancing at most.
+  of dancing at most for each closure.
 - 200 channels, 20 ms frames, FSEQ v2 uncompressed.
 - Choreography in the crowd's left and right; car 1 is the crowd's left.
 - **Deterministic**: the same song and code give byte-identical files. Nothing is random.
