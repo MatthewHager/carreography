@@ -672,10 +672,13 @@ function mirrorGesture(
 
 
 /** Per frame: is any motor on any car visibly moving (travelling or dancing), or does the music not want one
- * (below a groove, or flowing)? The charge port's dance is a light, not movement, so it doesn't count. */
+ * (below a groove, flowing, or in the song's first quarter, so the budget isn't spent before the song has
+ * built)? The charge port's dance is a light, not movement, so it doesn't count. */
 function motion(cars: Car[], an: Analysis): Uint8Array {
-  const mask = new Uint8Array(an.nFrames);
-  for (let f = 0; f < mask.length; f++) if (an.level![f] < LIVELY || flowsAt(an, f * an.step)) mask[f] = 1;
+  const mask = new Uint8Array(an.nFrames), early = Math.trunc((0.25 * an.duration) / an.step);
+  for (let f = 0; f < mask.length; f++) {
+    if (f < early || an.level![f] < LIVELY || flowsAt(an, f * an.step)) mask[f] = 1;
+  }
   const spans: [number, number | null][] = [[C.LIFTGATE, null], [C.L_MIRROR, MIRROR_S], [C.R_MIRROR, MIRROR_S]];
   for (const w of C.WINDOWS) spans.push([w, WINDOW_S]);
   for (const c of cars) {

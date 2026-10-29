@@ -9,9 +9,8 @@
 //              seconds, ranked): a pop song's verse is only a few decibels under its chorus, but it is
 //              the quieter part of the song, and the show should say so
 //   activity   a tenth: the notes and drum hits a second, as a rank within the song
-//   the top    step 4 only in the peak: the loudest section in the second half of the song, with the
-//              as-loud sections just before it and any as loud after it; everywhere else the level stops
-//              just under it
+//   the top    step 4 only in the peak: the loudest twenty seconds of the second half of the song and the
+//              nearly as loud music either side (reserveTop); everywhere else the level stops just under it
 //
 // Five steps, each with a pace (mood.ts) and a size:
 //   0  hush     single soft lamps, no pulse, no motors
@@ -73,24 +72,32 @@ export function levelCurve(an: Analysis): Float32Array {
   const act = activity(an), lo = quantile(act, 0.1), hi = Math.max(quantile(act, 0.95), lo + 1e-6);
   const out = loud.map((v, i) => clip(0.5 * v ** 1.5 + 0.4 * rankIn(heard, slow[i])
     + 0.1 * clip((act[i] - lo) / (hi - lo), 0, 1), 0, 1));
-  // the top step is the peak's alone
-  const secs = an.sections?.length ? an.sections : [{ t0: 0, t1: an.duration }];
-  const mean = secs.map((s) => {
-    const a = Math.trunc(s.t0 / an.step), b = Math.min(n, Math.max(a + 1, Math.trunc(s.t1 / an.step)));
-    let m = 0;
-    for (let i = a; i < b; i++) m += out[i];
-    return m / Math.max(1, b - a);
-  });
-  const late = secs.map((_, i) => i).filter((i) => secs[i].t0 >= 0.45 * an.duration);
-  const pool = late.length ? late : secs.map((_, i) => i);
-  const peak = pool.reduce((best, i) => (mean[i] > mean[best] ? i : best), pool[0]);
-  let first = peak;                                  // the peak takes in the as-loud sections just before it
-  while (first > 0 && mean[first - 1] >= 0.95 * mean[peak]) first--;
-  secs.forEach((sec, i) => {
-    if ((i >= first && i <= peak) || (i > peak && mean[i] >= 0.95 * mean[peak])) return;
-    const a = Math.trunc(sec.t0 / an.step), b = Math.min(n, Math.trunc(sec.t1 / an.step));
-    for (let f = a; f < b; f++) out[f] = Math.min(out[f], TOP - 0.01);
-  });
+  return reserveTop(an, out);
+}
+
+const PEAK_S = 20;          // the peak is found as the loudest stretch this long in the second half
+
+/** The top step is the peak's alone: the loudest PEAK_S of the song's second half (by the mean level),
+ * stretched both ways while the music stays nearly as loud, and any later stretch as loud (an outro that
+ * repeats the last chorus). Everywhere else the level stops just under the top; a peak that falls short of
+ * the top is lifted to it. */
+function reserveTop(an: Analysis, out: Float32Array): Float32Array {
+  const n = out.length, w = Math.min(n, Math.round(PEAK_S / an.step)), cs = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) cs[i + 1] = cs[i] + out[i];
+  const mean = (a: number, b: number) => (cs[b] - cs[a]) / Math.max(1, b - a);
+  let best = Math.min(Math.trunc(0.45 * n), n - w);
+  for (let a = best; a + w <= n; a++) if (mean(a, a + w) > mean(best, best + w)) best = a;
+  const top = mean(best, best + w), r = Math.round(2 / an.step);
+  const near = (i: number) => mean(Math.max(0, i - r), Math.min(n, i + r + 1));      // over four seconds
+  let a = best, b = best + w;
+  while (a > 0 && near(a - 1) >= 0.9 * top) a--;
+  while (b < n && near(b) >= 0.9 * top) b++;
+  const peak = new Uint8Array(n).fill(1, a, b);
+  for (let i = b; i < n; i++) if (near(i) >= 0.95 * top) peak[i] = 1;
+  const lift = Math.max(0, TOP + 0.06 - top);
+  for (let i = 0; i < n; i++) {
+    out[i] = peak[i] ? Math.min(1, out[i] + lift * clip((out[i] - 0.4) / 0.4, 0, 1)) : Math.min(out[i], TOP - 0.01);
+  }
   return out;
 }
 

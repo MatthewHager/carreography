@@ -23,7 +23,7 @@ import type { Car } from './car';
 import { clarity, flowsAt } from './feel';
 import { levelAt, levelOver, stepOf } from './level';
 import * as M from './moves';
-import { clip, runs, searchsorted } from './np';
+import { clip, searchsorted } from './np';
 import { beatLen } from './tempo';
 
 const HEADS = [C.L_OUTER_MAIN, C.R_OUTER_MAIN, C.L_INNER_MAIN, C.R_INNER_MAIN];
@@ -31,6 +31,7 @@ const INNER = [C.L_INNER_MAIN, C.R_INNER_MAIN];
 const OWNERS = new Set(['cadence', 'motif']);     // moves that own the whole stage while they play
 const CLEAR = 1.6, FAINT = 1.25;                  // clarity (feel.ts) for a full pulse, for downbeats only
 const STRUCK = 1.3;
+const DROP_GAP_S = 15, BUILD_S = 4;
 
 /** Beat index within its bar (0 = downbeat) for every tracked beat. */
 function position(an: Analysis): Int32Array {
@@ -48,32 +49,38 @@ function position(an: Analysis): Int32Array {
   return pos;
 }
 
-/** [start, landing] of every build: a climb of the loudness (an.build) for 4 s or more that lands, on the
- * next downbeat, in a drive or the peak at least a step above where it started. */
-export function builds(an: Analysis): [number, number][] {
-  const out: [number, number][] = [];
-  for (const [a, b] of runs(an.build.map((v) => v > 0))) {
-    const t0 = a * an.step, end = b * an.step;
-    if (flowsAt(an, end)) continue;
-    const land = an.downbeats.find((d) => d >= end - 0.6) ?? an.beats.find((x) => x >= end) ?? end;
-    if (land - end > 2.5 || land >= an.duration - 1) continue;
-    const after = levelOver(an, land, land + 1.0);
-    if (stepOf(after) >= 3 && after - levelOver(an, t0, t0 + 1.0) >= 0.15) out.push([t0, land]);
+const cached = new WeakMap<Analysis, { drops: number[]; builds: [number, number][] }>();
+
+/** The drops: the downbeats where the music lands a step higher and stays there - the level over the four
+ * seconds after a step above the two before, into a drive or the peak - the biggest jump of any close
+ * together, at most one every DROP_GAP_S, none where the music flows. And the builds: the climb into a
+ * drop, where the level has been rising for BUILD_S or more (a crescendo, a riser). */
+function plan(an: Analysis) {
+  let out = cached.get(an);
+  if (out) return out;
+  const jump = (d: number) => levelOver(an, d + 0.1, d + 1.5) - levelOver(an, d - 2, d - 0.1);
+  const cands = an.downbeats.filter((d) => {
+    const before = stepOf(levelOver(an, d - 2, d - 0.1)), after = stepOf(levelOver(an, d + 0.1, d + 4));
+    return d > 2 && after >= 3 && after > before && jump(d) >= 0.08 && !flowsAt(an, d);
+  });
+  const drops: number[] = [];
+  for (const d of cands) {
+    if (cands.some((e) => Math.abs(e - d) < 6 && e !== d && jump(e) > jump(d))) continue;
+    if (!drops.length || d - drops[drops.length - 1] >= DROP_GAP_S) drops.push(d);
   }
+  const builds: [number, number][] = [];
+  const smooth = (t: number) => levelOver(an, t - 2, t);
+  for (const d of drops) {
+    let t0 = d;                                      // back while the level keeps falling the earlier we look
+    while (t0 > 2 && d - t0 < 16 && smooth(t0 - 2) <= smooth(t0) + 0.02) t0 -= 2;
+    if (d - t0 >= BUILD_S && smooth(d) - smooth(t0) >= 0.1) builds.push([Math.max(0, t0 - 2), d]);
+  }
+  cached.set(an, (out = { drops, builds }));
   return out;
 }
 
-/** The drops: each build's landing, and every downbeat where the music jumps into a drive or the peak
- * from well below (at least 0.3 of the level up within half a second); not where the music flows. */
-export function drops(an: Analysis): number[] {
-  const out = builds(an).map(([, land]) => land).filter((d) => !flowsAt(an, d));
-  for (const d of an.downbeats) {
-    if (d < 2 || out.some((x) => Math.abs(x - d) < 4) || flowsAt(an, d)) continue;
-    const before = levelOver(an, d - 1.5, d - 0.1), after = levelOver(an, d + 0.1, d + 0.6);
-    if (after - before >= 0.3 && stepOf(after) >= 3) out.push(d);
-  }
-  return out.sort((x, y) => x - y);
-}
+export const drops = (an: Analysis) => plan(an).drops;
+export const builds = (an: Analysis) => plan(an).builds;
 
 /** Whether the music strikes on the beat at t: the onset curve within 30 ms of it at least STRUCK times its
  * mean over the two seconds around. A beat the tracker carried on through a held chord or a free passage
@@ -152,7 +159,7 @@ function buildPulse(cars: Car[], an: Analysis, t0: number, land: number): void {
     const gap = (beats[k + 1] ?? land) - x, left = land - x, u = (x - t0) / span;
     const bar = 4 * gap;
     const ticks = left <= bar + 0.01 ? [x, x + gap / 2] : left <= 3 * bar ? [x] : k % 2 === 0 ? [x] : [];
-    const reach = Math.max(1, Math.ceil(order.length * clip(0.34 + u, 0, 1)));
+    const reach = clip(Math.floor(order.length * (0.34 + u)), 1, order.length);
     for (const t of ticks) {
       if (t >= land - gap - 0.01) continue;                             // the beat of black before the landing
       const s = levelAt(an, t), hold = clip(gap * 0.3, 0.08, 0.14);
