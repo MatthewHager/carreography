@@ -40,19 +40,62 @@ interface AnalyzeOptions {
   neuralBeats?: NeuralBeats | null;
 }
 
-/** Beats and downbeats from the neural tracker, but only when its grid is steady - at least `minSteady`
- * of the beat gaps within 10 % of the median gap - which is where it is reliable (songs with a drum kit).
- * A share rather than a standard deviation, so one long gap (a break, the fade-out) doesn't disqualify a
- * steady song. Otherwise null. */
-function neuralBeats(d: NeuralBeats | null | undefined, minSteady = 0.9): [number[], number[]] | null {
+const BREAK = 2.5;        // a gap this many times the usual one is a break in the music, not a beat
+
+/** Each beat gap over the median of the eight around it (1 = in step with its neighbours). */
+function localRatio(g: ArrayLike<number>): Float64Array {
+  return Float64Array.from(g, (x, i) => x / median(Array.from(g).slice(Math.max(0, i - 4), i + 5)));
+}
+
+/** Beats and downbeats from the neural tracker, where its grid keeps a pulse: at least `minSteady` of the
+ * beat gaps within 10 % of the gaps around them. Measured locally, so a performer who speeds up (Hall of
+ * the Mountain King doubles its tempo) or holds back keeps the tracker's beats; an erratic grid, which is
+ * where the tracker is guessing, gives null. Breaks (gaps over BREAK times the usual) don't count. Where
+ * it slips into half time for a while, the missing beats are put back (mendHalves). */
+function neuralBeats(d: NeuralBeats | null | undefined, env: Float32Array, minSteady = 0.85)
+  : [number[], number[]] | null {
   if (!d) return null;
   const b = d.beats, db = d.downbeats;
   if (b.length < 16) return null;
-  const g = diff(b), med = median(g);
+  const all = diff(b), usual = median(all);
+  const g = all.filter((x) => x < BREAK * usual);
+  if (g.length < 8) return null;
   let steady = 0;
-  for (const x of g) if (Math.abs(x / med - 1) < 0.1) steady++;
+  for (const r of localRatio(g)) if (Math.abs(r - 1) < 0.1) steady++;
   if (steady / g.length < minSteady) return null;
-  return [b.slice(), db.slice()];
+  return [mendHalves(b, env), db.slice()];
+}
+
+/** The beats with the tracker's half-time slips mended: where a run of beat gaps is twice the steady gaps
+ * just before it and the music still hits halfway between (the onset curve `env` there at least half as
+ * strong as on the beats), the halfway beats go back in. */
+function mendHalves(b: number[], env: Float32Array): number[] {
+  const at = (t: number) => {
+    const i = Math.round(t / (HOP / SR));
+    let m = 0;
+    for (let k = Math.max(0, i - 2); k <= Math.min(env.length - 1, i + 2); k++) m = Math.max(m, env[k]);
+    return m;
+  };
+  const g = diff(b), out: number[] = [b[0]], brk = BREAK * median(g);
+  let ref = median(Array.from(g).slice(0, 8));
+  for (let i = 0; i < g.length; i++) {
+    const r = g[i] / ref;
+    if (r > 1.75 && r < 2.3 && g[i] < brk) {
+      let j = i + 1;      // the slow beats run on while each gap is in step with the one before
+      while (j < g.length && Math.abs(g[j] / g[j - 1] - 1) < 0.15) j++;
+      const mids = [];
+      for (let k = i; k < j; k++) mids.push((b[k] + b[k + 1]) / 2);
+      const onBeats = median(b.slice(i, j + 1).map(at)), between = median(mids.map(at));
+      if (j - i >= 2 && between >= 0.5 * onBeats) {
+        for (let k = i; k < j; k++) out.push(mids[k - i], b[k + 1]);
+        i = j - 1;
+        continue;
+      }
+    }
+    out.push(b[i + 1]);
+    if (g[i] < brk && Math.abs(r - 1) < 0.15) ref = 0.75 * ref + 0.25 * g[i];   // follows the tempo
+  }
+  return out;
 }
 
 function toGrid(values: ArrayLike<number>, times: ArrayLike<number>, grid: ArrayLike<number>): Float64Array {
@@ -217,10 +260,10 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
       secBeats.push(sec.beats.filter((b) => b >= sec.t0 && b < sec.t1));
     }
   }
-  const neural = neuralBeats(opts.neuralBeats);
+  const neural = neuralBeats(opts.neuralBeats, fullEnv);
   if (neural !== null) {
-    // a steady grid from the neural tracker (band songs): it reads swing, shuffles and fills
-    // far better than onset autocorrelation, so it replaces the per-section tracking below
+    // the neural tracker's grid wherever it keeps a pulse: it reads swing, shuffles, fills and a
+    // performer's tempo far better than onset autocorrelation, so it replaces the per-section tracking below
     [beats, downbeats] = neural;
     tempo = 60.0 / median(diff(beats));
     secBeats = [];
