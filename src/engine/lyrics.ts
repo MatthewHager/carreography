@@ -99,21 +99,12 @@ export function onGrid(an: Analysis, t: number): number {
   return near !== t ? near : M.snap(an, t, 2);
 }
 
-/** The moments on the stage: a line's colour in every cabin while it is sung; its lightning strike or chant
- * pings on the music's grid, where the music has a beat (a chant's words one car's whole front each, across
- * the lineup). */
+/** The moments on the stage (a line's colour is the cabins', bed.ts): its lightning strike or chant pings on
+ * the music's grid, where the music has a beat (a chant's words one car's whole front each, across the
+ * lineup). */
 export function apply(cars: Car[], an: Analysis, said: Moment[]) {
   for (const m of said) {
-    if (m.do === 'color') {
-      const a = cars[0].fr(m.t0), b = cars[0].fr(m.t1);
-      for (const car of cars) {
-        for (const base of C.ALL_RGB) {
-          for (let i = 0; i < 3; i++) for (let f = a; f < b; f++) car.put(f, base + i, Math.trunc(m.color![i]));
-        }
-      }
-      continue;
-    }
-    if (flowsAt(an, m.t0)) continue;
+    if (m.do === 'color' || flowsAt(an, m.t0)) continue;
     const t = onGrid(an, m.t0);
     if (m.do === 'lightning') {
       M.lightning(cars, t);

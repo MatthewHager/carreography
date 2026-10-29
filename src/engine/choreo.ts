@@ -51,7 +51,7 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
   for (const ph of an.phrases) ph.level = levelOver(an, ph.t0, ph.t1);
   const cars = makeLineup(layout, an.nFrames, an.step, silence(an), PULSE.ownership(an));
   const said = sung ? LY.moments(sung, an) : [];
-  BED.apply(cars, an);
+  BED.apply(cars, an, said);
   playPassages(cars, an);
   DRUMS.apply(cars, an);
   PULSE.apply(cars, an);

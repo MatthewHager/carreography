@@ -8,8 +8,9 @@
 //              600 Hz-4 kHz band), so the centrepiece is there even in a pianissimo
 //   cabins     the interiors take the harmony's colour, bar by bar (the pitch class leading the bar, round
 //              the circle of fifths, so related keys sit near each other), else the sound's own (purple when
-//              dull, amber when bright), brighter as the level rises; a white flash on each big accent from a
-//              groove up, and on each downbeat from drive up, where there is a beat
+//              dull, amber when bright), brighter as the level rises (and, where the music flows, as it
+//              breathes), or the colour a sung line names while it is sung (lyrics.ts); a white flash on each
+//              big accent from a groove up, and on each downbeat from drive up, where there is a beat
 //   breath     where the music flows (feel.ts) the front lamps the moves leave free come in by the breath:
 //              one layer at a time as a phrase swells, all leaving together as it ends (below)
 
@@ -18,6 +19,7 @@ import * as C from './channels';
 import type { Car } from './car';
 import { flowsAt } from './feel';
 import { CALM, DRIVE, GROOVE, musicSpan, PEAK } from './level';
+import type { Moment } from './lyrics';
 import { clip, runs } from './np';
 
 const DWELL_S = 4.0;          // a lamp of the bed stays at least this long once it changes
@@ -40,7 +42,7 @@ function above(an: Analysis, at: number): boolean[] {
   return out;
 }
 
-export function apply(cars: Car[], an: Analysis): void {
+export function apply(cars: Car[], an: Analysis, said: Moment[]): void {
   const lv = an.level!, step = an.step;
   const lit: [number, (c: Car) => number[]][] = [
     [GROOVE, (c) => c.tails()],
@@ -63,7 +65,7 @@ export function apply(cars: Car[], an: Analysis): void {
     c.pixels(C.FRONT_BAR, 0, front);
     c.pixels(C.REAR_BAR, 0, rear);
   }
-  cabins(cars, an);
+  cabins(cars, an, B, said);
   breathe(cars, an, B);
 }
 
@@ -90,8 +92,8 @@ function bars(an: Analysis): [number, number][] {
 }
 
 /** The interiors (see the module notes). */
-function cabins(cars: Car[], an: Analysis): void {
-  const lv = an.level!, step = an.step, votes = new Float64Array(12);
+function cabins(cars: Car[], an: Analysis, B: Float64Array, said: Moment[]): void {
+  const lv = an.level!, step = an.step, votes = new Float64Array(12), sung = said.filter((m) => m.do === 'color');
   for (const [t0, t1] of bars(an)) {
     const a = Math.trunc(t0 / step), b = Math.min(an.nFrames, Math.trunc(t1 / step));
     votes.fill(0);
@@ -101,8 +103,10 @@ function cabins(cars: Car[], an: Analysis): void {
     const sure = clip(votes[pc] / Math.max(1, b - a), 0, 1);
     for (let f = a; f < b; f += 5) {
       const s = lv[f], base = DULL.map((d, i) => d + (BRIGHT[i] - d) * an.brightness[f]);
-      const colour = hueOf(pc).map((h, i) => h * sure + base[i] * (1 - sure));
-      for (const c of cars) c.rgb(f * step, Math.min(f + 5, b) * step, colour, 0.1 + 0.9 * s * s);
+      const word = sung.find((m) => f * step >= m.t0 && f * step < m.t1);
+      const colour = word?.color ?? hueOf(pc).map((h, i) => h * sure + base[i] * (1 - sure));
+      const scale = word ? 1 : Number.isNaN(B[f]) ? 0.1 + 0.9 * s * s : 0.2 + 0.4 * B[f] + 0.4 * s;
+      for (const c of cars) c.rgb(f * step, Math.min(f + 5, b) * step, colour, scale);
     }
   }
   const loud = (t: number) => lv[clip(Math.trunc(t / step), 0, lv.length - 1)];
