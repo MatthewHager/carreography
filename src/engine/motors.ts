@@ -37,7 +37,7 @@ const LOUD = DRIVE;                  // ... and spend the most where it is loud 
 
 // the Cybertruck's frunk timed on the truck, Oct 2026
 export const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };
-const LIFTGATE_CLOSE_S = 4.0;
+export const LIFTGATE_CLOSE_S = 4.0;
 export const WINDOW_S = 4.0, PORT_S = 2.0, MIRROR_S = 2.0;
 const WINDOW_BURST_S = 4.5, WINDOW_PEAK_DANCE_S = 10.0;   // window dances: ~3 x 4.5 + 10 = 24 s, under 30 s
 const LID_DANCE_MIN_S = 4.0, LID_DANCE_MAX_S = 9.0, LID_DANCE_BUDGET_S = 20.0;   // a lid's dance on a peak
@@ -46,6 +46,7 @@ const PORT_DANCE_MAX_S = 30.0;          // the port's rainbow: about 30 s of dan
 const STILL_LIVELY_S = 12.0, STILL_CALM_S = 30.0;   // longest still stretch, loud and in a groove
 const ARRIVE_S = 0.5, BUILT = 0.55, HOLDS = 0.8, HOLD_MAX_S = 16, SPACING_S = 24;   // crescendos()
 const MIRROR_PULSE_CYCLES = 4;          // the steady mirror pulse, leaving commands for the rest of the song
+const SHUT_BY_S = 1.0;                  // every lid is shut this long before the show ends
 const RELAY_MAX_S = 4.0;                // the longest a car waits for the one before it (a lid's close)
 
 /** How long after the car before it a car starts a motor's figure: that motor's travel time (at most
@@ -305,12 +306,14 @@ function lids(cars: Car[], an: Analysis): void {
   const dancePlan = (k: number, peak: number, holdUntil: number): LidPlan => {
     const most = k === 0 ? LID_DANCE_BUDGET_S : Math.min(LID_DANCE_MAX_S, LID_DANCE_BUDGET_S - danced);
     const danceLen = np.clip(holdUntil - peak, LID_DANCE_MIN_S, most);
+    // the last car still lands inside the loud stretch, and every lid is shut before the show ends
+    const each = Math.min(...cars.map((c) => relay(LIFTGATE_OPEN_S[c.kind])), danceLen / Math.max(n - 1, 1));
     const plan: LidPlan = new Map();
     cars.forEach((c, idx) => {
-      const lag = relay(LIFTGATE_OPEN_S[c.kind]) * (k % 2 ? (n - 1 - idx) : idx);
-      const land = onBeat(an, peak + lag);
+      const land = onBeat(an, peak + each * (k % 2 ? (n - 1 - idx) : idx));
       const openAt = land - LIFTGATE_OPEN_S[c.kind] - LID_OPEN_MARGIN_S;
-      plan.set(c, [openAt, null, land + danceLen + 0.3, [land, land + danceLen]]);
+      const len = Math.min(danceLen, end - SHUT_BY_S - LIFTGATE_CLOSE_S - 0.3 - land);
+      plan.set(c, [openAt, null, land + len + 0.3, [land, land + len]]);
     });
     return plan;
   };
@@ -327,7 +330,9 @@ function lids(cars: Car[], an: Analysis): void {
     for (const c of cars) {
       const [openAt, , closeAt] = plan.get(c)!;
       const win = [openAt - 1.0, closeAt + LIFTGATE_CLOSE_S + 1.0];
-      if (openAt < 0.8 || closeAt <= openAt + 2.0
+      const dance = plan.get(c)![3];
+      if (openAt < 0.8 || closeAt <= openAt + 2.0 || closeAt + LIFTGATE_CLOSE_S > end - SHUT_BY_S
+        || (dance && dance[1] - dance[0] < LID_DANCE_MIN_S)
         || busyBy.get(c)!.some(([a, b]) => !(win[1] < a || win[0] > b))) {
         ok = false;
       }

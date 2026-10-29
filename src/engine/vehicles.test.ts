@@ -1,12 +1,13 @@
 // Every lineup makes a show within Tesla's rules, on every test song: the closure command limits, lids
-// that dance only once fully open, at most about 30 s of dancing per closure, a Model X's falcon doors
-// with its windows still while they move, the lights dark at the end, and one file per car in order.
+// that dance only once fully open and are shut when the show ends, at most about 30 s of dancing per
+// closure, a Model X's falcon doors with its windows still while they move, the lights dark at the end,
+// and one file per car in order.
 
 import { describe, expect, it } from 'vitest';
 import * as C from './channels';
 import { choreograph } from './choreo';
 import { FIXTURES, fixture } from './fixtures';
-import { FALCON_CLOSE_S, LIFTGATE_OPEN_S, WINDOW_S } from './motors';
+import { FALCON_CLOSE_S, LIFTGATE_CLOSE_S, LIFTGATE_OPEN_S, WINDOW_S } from './motors';
 import { lineupCars, parseLineup, VEHICLES } from './vehicles';
 
 // one to five cars, every letter, no truck, one truck in the middle or at either end, several trucks
@@ -58,12 +59,17 @@ describe('every lineup keeps the rules', () => {
           let opened = -Infinity;
           for (const [a, , v] of commands(car.frames, n, C.LIFTGATE)) {
             if (v === C.CLOSURE_OPEN) opened = a * step;
-            if (v === C.CLOSURE_CLOSE) opened = -Infinity;
+            if (v === C.CLOSURE_CLOSE) {
+              opened = -Infinity;
+              expect(a * step + LIFTGATE_CLOSE_S, `${car.name} lid still closing at the end`)
+                .toBeLessThanOrEqual(n * step);
+            }
             if (v === C.CLOSURE_DANCE) {
               expect(a * step - opened, `${car.name} lid dances before it is open`)
                 .toBeGreaterThanOrEqual(LIFTGATE_OPEN_S[car.kind]);
             }
           }
+          expect(opened, `${car.name} lid left open at the end`).toBe(-Infinity);
           for (let ch = 0; ch < C.L_FALCON; ch++) expect(car.get(n - 1, ch), `${car.name} lamp ${ch}`).toBe(0);
           // the doors need a peak with 20 s before it and room after (the build has one): all or nothing
           const falcon = commands(car.frames, n, C.L_FALCON);
