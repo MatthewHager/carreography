@@ -520,9 +520,11 @@ const beam: Move = (cars, an, ph) => {
   });
 };
 
-/** Every beat the light runs in from both ends of the stage and meets in the middle, on the "and". */
+/** Every beat the light runs in from both ends of the stage, car by car (half by half for one or two cars),
+ * and meets in the middle on the "and". */
 const converge: Move = (cars, an, ph) => {
-  const all = slots(cars), n = all.length, rings = n / 2, beats = grid(an, ph);
+  const all = cars.length > 2 ? units(cars) : slots(cars), n = all.length, rings = Math.ceil(n / 2);
+  const beats = grid(an, ph);
   beats.forEach((b, k) => {
     const s = levelAt(an, b), half8 = beatAt(an, b) / 2, end = b + holdFor(next(beats, k, 2 * half8) - b, s);
     for (let r = 0; r < rings; r++) {                     // r = 0: the two ends; the middle on the "and"
@@ -557,12 +559,12 @@ const shockwave: Move = (cars, an, ph) => {
   });
 };
 
-/** A slot of a travelling figure lit from t until `end` (most of the way to the next beat), then fading, so
- * the stage fills as the figure travels and breathes out before the next beat rather than blinking. */
-function ring([car, side]: [Car, LR], t: number, end: number, s: number) {
-  const chs = car.half(side, s);
+/** A slot of a travelling figure lit from t until `end` (holdFor), then dark before the next beat, so each
+ * hit lands crisply; at the peak it fades instead, so the stage fills as the figure travels. */
+function ring([car, side]: [Car, LR | null], t: number, end: number, s: number) {
+  const chs = side ? car.half(side, s) : car.whole(s);
   car.light(chs, t, end);
-  car.light(chs, end, end + 0.5, OFF_500);
+  if (s >= PEAK) car.light(chs, end, end + 0.5, OFF_500);
 }
 
 // --- flowing moves ---------------------------------------------------------------------------------

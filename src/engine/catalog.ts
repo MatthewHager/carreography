@@ -43,7 +43,8 @@ export const MOVES: Record<string, Move> = {
   checker: mv('a checkerboard: every other car on one beat, the others on the next, the bar in blocks', 'beat'),
   tug_of_war: mv('the light fills the stage slot by slot on the beat, from one end, then drains back; the next '
     + 'time from the other end', 'beat'),
-  converge: mv('on the beat the light runs in from both ends and meets in the middle on the "and"', 'beat'),
+  converge: mv('on the beat the light runs in from both ends, car by car, and meets in the middle on the "and"',
+    'beat'),
   beam: mv('a searchlight two slots wide sweeps the stage over each bar, and back the next', 'bar'),
   shockwave: mv('on the beat a ring of light leaves the middle and runs out to both ends, the stage held lit '
     + 'until the next', 'beat'),
