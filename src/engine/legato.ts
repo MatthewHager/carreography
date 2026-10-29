@@ -4,27 +4,31 @@
 // The rest of the generator finds its timing in beats and drums; music that flows gives it no beat to hit.
 // Here the light follows the music's breath and its melody instead:
 //
-//   breath   where the music is in its own breathing: half the swell of each phrase (rising from its start,
-//            falling into its end) and half its loudness against the music around it (BREATH_S either side)
-//   bed      lamps join and leave in layers as the breath rises and falls, on 2 s ramps, one layer at a
-//            time with a short dwell so none flickers, so the stage inhales with each sung phrase and exhales
-//            after it; how many layers a phrase can reach grows with the show's level (level.ts: one when
-//            calm, four at the peak), so the song's arc shows too. Each car uses lamps that read on it:
+//   breath   where the music is in its own breathing: mostly the swell of each phrase (rising from its
+//            start, falling into its end), and its loudness against the music around it (BREATH_S either
+//            side)
+//   bed      lamps join in layers as the breath rises, one layer at a time on 2 s ramps, and leave together
+//            as it falls, with a short dwell so none flickers, so the stage inhales with each sung phrase and
+//            exhales after it; how many layers a phrase can reach grows with the show's level (level.ts: one
+//            when calm, all four well into drive), so the song's arc shows too. Each car uses lamps that read
+//            on it:
 //                          Model Y            2025+ Model Y            Cybertruck
-//              1           signatures         the fender repeaters     side markers
-//              2           DRLs               -                        frunk light
+//              1           signatures         -                        -
+//              2           DRLs               the fender repeaters     side markers
 //              3           fogs               the bar's centre         -
 //              4           outer beams        outer beams              outer beams     (the bloom)
 //            from layer 2 the tail lights glow too
-//   truck    a Cybertruck's bar breathes: all of it glows with the breath (it dims, as no lamp can), brighter
-//            with the voice and the lead (the 600 Hz-4 kHz band), with the melody as a bright spot gliding
-//            along it and every note a comet at its pitch, faint for a quiet accompaniment, bright for a run
+//   truck    a Cybertruck's bar breathes: all of it glows with the breath and the song's arc (it dims, as no
+//            lamp can), brighter with the voice and the lead (the 600 Hz-4 kHz band), with the melody as a
+//            bright spot gliding along it and every note a comet at its pitch, faint for a quiet
+//            accompaniment, bright for a run
 //   swoop    the melody gliding across the stage by pitch (low = crowd's left) on the inner beams, and across
 //            a 2025+ Model Y's bar section by section (the bed adds its centre only from layer 3), each
 //            phrase spread over the whole stage, smoothed over half a second: an arpeggio's turns cancel
 //            out and the line moves slowly, while a run keeps its direction and sweeps the stage car to
 //            car as fast as it is played. A passing run lights each beam crisply; a held note swells
-//   colour   the interiors glow from deep blue toward warm gold as the breath swells
+//   colour   the interiors glow from deep blue toward warm gold as the breath swells, brighter as the song
+//            builds
 //   ending   a slow fade to dark as the music ends (no closing flash), when the song ends flowing
 //
 // Each flowing stretch fades in and out on the same ramps, so the beat sections around it take over
@@ -37,13 +41,14 @@ import type { Car } from './car';
 import type { Feel } from './feel';
 import { END_LEDS } from './lamps';
 import * as M from './moves';
-import { stepOf } from './level';
+import { CALM, DRIVE } from './level';
 import { clip, percentile, runs } from './np';
 
 const RES = 0.25;                                  // seconds per step of the bed
 const HYST = 0.2;                                  // a layer goes out this far (in layers) below its way in
 const MIN_DWELL = 0.75;                            // seconds a layer stays once it changes
 const BREATH_S = 6;                                // the breath is the loudness against this much either side
+const FULL = DRIVE + 0.1;                          // the level from which a phrase can reach every layer
 const GLIDE_S = 0.5;                               // the melody's smoothing
 const HELD_S = 0.6;                                // a beam lit this long swells in; shorter, a run passing
 
@@ -71,7 +76,7 @@ function breath(an: Analysis, here: (t: number) => boolean): Float64Array {
   const swell = new Float64Array(n);
   for (const ph of an.phrases ?? []) {
     const a = Math.trunc(ph.t0 / an.step), b = Math.min(n, Math.trunc(ph.t1 / an.step));
-    for (let f = a; f < b; f++) swell[f] = Math.sin((Math.PI * (f - a)) / Math.max(1, b - a)) ** 0.7;
+    for (let f = a; f < b; f++) swell[f] = Math.sin((Math.PI * (f - a)) / Math.max(1, b - a)) ** 1.2;
   }
   const out = new Float64Array(n), reach = Math.round(BREATH_S / an.step), stride = 5;
   for (let i = 0; i < n; i += stride) {
@@ -83,24 +88,25 @@ function breath(an: Analysis, here: (t: number) => boolean): Float64Array {
       hi = Math.max(hi, loud[j]);
     }
     for (let f = i; f < Math.min(n, i + stride); f++) {
-      out[f] = 0.5 * swell[f] + 0.5 * clip((loud[f] - lo) / Math.max(hi - lo, 0.1), 0, 1);
+      out[f] = 0.6 * swell[f] + 0.4 * clip((loud[f] - lo) / Math.max(hi - lo, 0.1), 0, 1);
     }
   }
   return out;
 }
 
-/** Layer count (0-4) per RES step: of the `cap` layers the level allows there, as many as the breath fills,
- * with hysteresis and a minimum dwell, one layer at a time. */
+/** Layer count (0-4) per RES step: of the `cap` layers the level allows there (1 to 4, growing smoothly from
+ * calm to FULL), as many as the breath fills, with hysteresis and a minimum dwell: they come in one at a
+ * time and go out together. */
 function layers(L: ArrayLike<number>, cap: ArrayLike<number>): Int32Array {
   const out = new Int32Array(L.length);
   let cur = 0, since = -1e9;
   for (let i = 0; i < L.length; i++) {
     const v = L[i] * (cap[i] + 1), t = i * RES;
     let want = cur;
-    while (want < cap[i] && v >= want + 1) want += 1;
+    while (want < Math.floor(cap[i]) && v >= want + 1) want += 1;
     while (want > 0 && (v < want - HYST || want > cap[i])) want -= 1;
     if (want !== cur && t - since >= MIN_DWELL) {
-      cur = cur + (want > cur ? 1 : -1);       // one layer at a time
+      cur = want > cur ? cur + 1 : want;       // in one layer at a time, out at once: a breath out
       since = t;
     }
     out[i] = cur;
@@ -110,8 +116,8 @@ function layers(L: ArrayLike<number>, cap: ArrayLike<number>): Int32Array {
 
 /** The lamps of a car's bed, layer 1 to 4 (see the module notes). */
 function bedLamps(c: Car): number[][] {
-  if (c.isCt) return [c.sig(), c.frunk(), [], c.outer()];
-  if (c.juniper) return [c.markers(), [], c.fogs(), c.outer()];
+  if (c.isCt) return [[], c.sig(), [], c.outer()];
+  if (c.juniper) return [[], c.markers(), c.fogs(), c.outer()];
   return [c.sig(), c.drl(), c.fogs(), c.outer()];
 }
 
@@ -168,8 +174,11 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
   // 1. the bed, layer by layer, and the tail lights from layer 2
   const stride = Math.max(1, Math.round(RES / step));
   const coarse = Array.from({ length: Math.ceil(n / stride) }, (_, i) => B[i * stride]);
-  const cap = coarse.map((_, i) => Math.max(1, stepOf(an.level![Math.min(n - 1, i * stride)])));
-  const lay = layers(coarse, cap).map((v, i) => (flows(i * RES) ? v : -1));
+  const lvAt = (i: number) => an.level![Math.min(n - 1, i * stride)];
+  const cap = coarse.map((_, i) => clip(1 + (3 * (lvAt(i) - CALM)) / (FULL - CALM), 1, 4));
+  // the louder the song is here, the sooner each phrase fills its layers and the longer it holds them
+  const fill = coarse.map((v, i) => v ** (1.6 - clip((lvAt(i) - CALM) / (FULL - CALM), 0, 1)));
+  const lay = layers(fill, cap).map((v, i) => (flows(i * RES) ? v : -1));
   for (let k = 1; k <= 4; k++) {
     for (const [a, b] of runs(Array.from(lay, (v) => v >= k))) {
       for (const c of cars) {
@@ -213,7 +222,8 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
       const t0 = a * step, t1 = b * step, rows: Float64Array[] = [];
       for (let f = a; f < b; f++) {
         const t = f * step, fade = clip((t - t0) / 2.0, 0, 1) * clip((t1 - t) / 2.0, 0, 1);
-        const glowAt = fade * (0.08 + 0.6 * B[f] ** 1.5) * (0.6 + 0.4 * an.bands.highMid[f]);
+        const full = 0.5 * an.level![f] + 0.5 * B[f];               // the song's arc and the breath
+        const glowAt = fade * (0.08 + 0.6 * full ** 1.5) * (0.6 + 0.4 * an.bands.highMid[f]);
         const p = at[f], onTruck = c === ct && p !== null && p[0] === c;
         const centre = onTruck ? p[2] * (nLed - 1) : 0;
         const row = new Float64Array(nLed);
@@ -245,7 +255,8 @@ export function choreograph(cars: Car[], an: Analysis, spans: Feel[]): boolean {
   for (let i = 0; i < coarse.length; i++) {
     if (!flows(i * RES)) continue;
     const v = coarse[i], colour = cold.map((c0, j) => Math.trunc(c0 + (warm[j] - c0) * v));
-    for (const c of cars) c.rgb(i * RES, (i + 1) * RES, colour, 0.3 + 0.7 * v);
+    const lv = an.level![Math.min(n - 1, i * stride)];
+    for (const c of cars) c.rgb(i * RES, (i + 1) * RES, colour, 0.2 + 0.4 * v + 0.4 * lv);
   }
 
   // 5. the ending, when the song ends flowing: everything that's lit fades out slowly as the music ends
