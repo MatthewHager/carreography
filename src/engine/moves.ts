@@ -617,35 +617,30 @@ const beam: Move = (cars, an, ph) => {
 
 /** Every beat the light runs in from both ends of the stage and meets in the middle, on the "and". */
 const converge: Move = (cars, an, ph) => {
-  const all = slots(cars), n = all.length, rings = n / 2;
-  for (const b of grid(an, ph)) {
-    const s = levelAt(an, b), half8 = beatAt(an, b) / 2;
-    for (let r = 0; r < rings; r++) {                              // r = 0: the two ends
-      const t = b + (half8 * r) / rings;
-      for (const k of new Set([r, n - 1 - r])) {
-        const [car, side] = all[k];
-        car.light(half(car, side, s, owned(an, t)), t, t + 0.12);
-      }
+  const all = slots(cars), n = all.length, rings = n / 2, beats = grid(an, ph);
+  beats.forEach((b, k) => {
+    const s = levelAt(an, b), half8 = beatAt(an, b) / 2, end = b + holdFor(next(beats, k, 2 * half8) - b);
+    for (let r = 0; r < rings; r++) {                     // r = 0: the two ends; the middle on the "and"
+      const t = b + (half8 * r) / Math.max(1, rings - 1);
+      for (const j of new Set([r, n - 1 - r])) ring(all[j], t, Math.max(end, t + 0.12), s, owned(an, t));
     }
     for (const car of cars.filter((c) => c.isCt)) {
       const m = frames(car, b, half8);
       barFill(car, b, half8, linspace(0, 1, m), false);
     }
-  }
+  });
 };
 
-/** On each downbeat (each beat from drive up) a ring of light leaves the middle of the stage and travels out
- * through every car to both ends. */
+/** On the beat (at the level's pace) a ring of light leaves the middle of the stage and travels out through
+ * every car to both ends. */
 const shockwave: Move = (cars, an, ph) => {
-  const all = slots(cars), n = all.length, rings = n / 2;
-  for (const d of grid(an, ph)) {
-    const s = levelAt(an, d), ring = beatAt(an, d) / 8;
+  const all = slots(cars), n = all.length, rings = n / 2, beats = grid(an, ph);
+  beats.forEach((d, k) => {
+    const s = Math.max(levelAt(an, d), GROOVE), step = beatAt(an, d) / 8;
+    const end = d + holdFor(next(beats, k, 0.5) - d);
     for (let r = 0; r < rings; r++) {                              // r = 0: the middle pair
-      const t = d + r * ring;
-      for (const k of new Set([rings - 1 - r, rings + r])) {
-        const [car, side] = all[k];
-        car.light(half(car, side, Math.max(s, GROOVE), owned(an, t)), t, t + 0.14);
-      }
+      const t = d + r * step;
+      for (const j of new Set([rings - 1 - r, rings + r])) ring(all[j], t, Math.max(end, t + 0.14), s, owned(an, t));
     }
     for (const car of cars.filter((c) => c.isCt)) {
       const m = frames(car, d, 0.45);
@@ -654,8 +649,16 @@ const shockwave: Move = (cars, an, ph) => {
         return Math.abs(q / (BAR - 1) - 0.5) * 2 <= reach ? fade : 0;
       }));
     }
-  }
+  });
 };
+
+/** A slot of a travelling figure lit from t until `end` (most of the way to the next beat), then fading, so
+ * the stage fills as the figure travels and breathes out before the next beat rather than blinking. */
+function ring([car, side]: [Car, LR], t: number, end: number, s: number, own: number) {
+  const chs = half(car, side, s, own);
+  car.light(chs, t, end);
+  car.light(chs, end, end + 0.5, OFF_500);
+}
 
 // --- hits ------------------------------------------------------------------------------------------
 
