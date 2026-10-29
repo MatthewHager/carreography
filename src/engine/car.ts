@@ -21,9 +21,6 @@ export class Car {
   readonly closureCounts = new Map<number, number>();
   /** Spans [t0, t1] in which the windows must not move (a Model X's doors are moving). */
   readonly windowsStill: [number, number][] = [];
-  /** Calm passages set this to [ramp-on value, ramp-off value, off seconds]: every full-on light of
-   * 0.35 s or more glows up and fades out instead of snapping. */
-  soft: [number, number, number] | null = null;
 
   constructor(
     readonly kind: 'modely' | 'cybertruck',
@@ -75,17 +72,8 @@ export class Car {
     const a = this.fr(t0), b = this.fr(t1);
     const cs = list(chs);
     if (b <= a || !cs.length) return;
-    let tail = 0, off = 0;
-    if (this.soft && value === C.ON && t1 - t0 >= 0.35) {
-      let offS: number;
-      [value, off, offS] = this.soft;
-      tail = Math.min(this.nFrames, b + Math.trunc(offS / this.step));
-    }
     const F = this.frames, N = C.N_CHANNELS;
-    for (const ch of cs) {
-      for (let f = a; f < b; f++) if (F[f * N + ch] < value) F[f * N + ch] = value;
-      if (tail) for (let f = b; f < tail; f++) if (F[f * N + ch] === 0) F[f * N + ch] = off;
-    }
+    for (const ch of cs) for (let f = a; f < b; f++) if (F[f * N + ch] < value) F[f * N + ch] = value;
   }
 
   flash(chs: Chs, t: number, dur: number, value = C.ON) {
