@@ -166,7 +166,8 @@ export function apply(cars: Car[], an: Analysis): void {
     for (const c of cars) {
       hit(c, peak ? c.outer() : c.inner(), kind === 'big' ? hold * 1.25 : hold);
       if (kind === 'big' && peak) hit(c, c.everything(), hold, t + hold + 1, C.OFF_1000);   // flashes, fades
-      if (kind === 'big' && c.hasBar) M.barFlash(c, t, Math.min(0.3, end - t), peak ? 1.0 : 0.5);
+      if (kind === 'big' && c.isCt) M.barFlash(c, t, Math.min(0.3, end - t), peak ? 1.0 : 0.5);
+      if (kind === 'big' && c.juniper) c.light(c.sig(), t, t + 0.1);       // its whole bar
     }
   }
   for (const [s0, land] of builds(an)) buildPulse(cars, an, s0, land);
@@ -200,7 +201,7 @@ function dropHits(cars: Car[], an: Analysis): void {
   for (const d of drops(an)) {
     const beat = M.beatAt(an, d), gap = clip(beat, 0.25, 0.6);
     for (const c of cars) {
-      c.set(c.everything(), d - gap, d, 0);
+      c.dark(c.everything(), d - gap, d);
       c.set([...C.FRONT_BAR, ...C.REAR_BAR, ...C.OFFROAD_BAR], d - gap, d, 0);
       c.set(C.ALL_RGB.flatMap((ch) => [ch, ch + 1, ch + 2]), d - gap, d, 0);
     }

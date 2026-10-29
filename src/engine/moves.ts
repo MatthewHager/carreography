@@ -726,16 +726,12 @@ const flowing = (places: (p: number) => number[]): Move => (cars, an, ph) => {
   }
   for (const [key, on] of lit) {
     const [k, part] = key.split(' '), car = cars[Number(k)];
+    const chs = part === 'L' || part === 'R' ? car.inner(part) : [car.drl('L'), car.fogs(), car.drl('R')][+part];
     for (const [f0, f1] of runs(on)) {
       const held = (f1 - f0) * step >= HELD_NOTE_S, t0 = (a + f0) * step;
       const t1 = (a + f1) * step + (held ? 0.25 : 0.1);
-      if (part === 'L' || part === 'R') {
-        car.light(car.inner(part), t0, t1, held ? C.ON_1000 : C.ON);
-        car.light(car.inner(part), t1, t1 + (held ? 1 : 0.5), held ? OFF_1000 : OFF_500);
-      } else {
-        const [lo, hi] = [[0, 0.25], [0.25, 0.75], [0.75, 1]][Number(part)];
-        barSpan(car, t0, t1 - t0, lo, hi);
-      }
+      car.light(chs, t0, t1, held ? C.ON_1000 : C.ON);
+      car.light(chs, t1, t1 + (held ? 1 : 0.5), held ? OFF_1000 : OFF_500);
     }
   }
   for (const [car, r] of spot) car.pixels(C.FRONT_BAR, ph.t0, r);
@@ -770,7 +766,8 @@ export function lightning(cars: Car[], t: number) {
       const t0 = t + k * 0.18;
       c.light(c.everything(), t0, t0 + 0.1);
       if (c.isCt) barFlash(c, t0, 0.1, 1.0);
-      c.set([...c.everything(), ...C.FRONT_BAR], t0 + 0.1, t0 + (k < 2 ? 0.18 : 0.45), 0);
+      c.dark(c.everything(), t0 + 0.1, t0 + (k < 2 ? 0.18 : 0.45));
+      c.set(C.FRONT_BAR, t0 + 0.1, t0 + (k < 2 ? 0.18 : 0.45), 0);
     }
   }
 }

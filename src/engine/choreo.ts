@@ -18,7 +18,6 @@ import * as CAT from './catalog';
 import * as C from './channels';
 import * as DRUMS from './drums';
 import { feel, flowsAt, followable, held, kitAt } from './feel';
-import * as LAMPS from './lamps';
 import { DRIVE, GROOVE, levelAt, levelCurve, levelOver, musicSpan, silence, stepOf } from './level';
 import * as LY from './lyrics';
 import type { Moment } from './lyrics';
@@ -62,7 +61,6 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
   motors.choreograph(cars, an);
   finale(cars, an);
   for (const car of cars) {
-    if (car.juniper) LAMPS.juniperOutput(car);
     for (let f = Math.max(0, car.nFrames - 3); f < car.nFrames; f++) {
       for (let ch = 0; ch < C.L_FALCON; ch++) car.put(f, ch, 0);
       for (let ch = C.FRONT_BAR[0]; ch < C.N_CHANNELS; ch++) car.put(f, ch, 0);
@@ -380,8 +378,8 @@ function finale(cars: Car[], an: Analysis) {
   if (flowsAt(an, end - 0.25) && !(late.includes(t) && Math.max(...ring) >= LOUD)) {
     for (const c of cars) {
       const row = clip(c.fr(end) - 1, 0, c.nFrames - 1);
-      const lit = c.everything().filter((ch) => c.get(row, ch) > 0);
-      c.set(c.everything(), end, an.duration, 0);
+      const lit = c.out(c.everything()).filter((ch) => c.get(row, ch) > 0);
+      c.dark(c.everything(), end, an.duration);
       c.light(lit, end, Math.min(an.duration, end + 2.0), C.OFF_2000);
     }
     return;

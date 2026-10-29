@@ -4,6 +4,15 @@
 // channels are the vehicle's left (driver's side), which is on the crowd's right, so every group
 // method flips, and the front bar's pixels are written crowd-left to crowd-right (Tesla numbers the
 // LEDs from the vehicle's left).
+//
+// The 2025+ Model Y ("Juniper") came out after Tesla's last light show documentation (Dec 2024). Two
+// on-car tests in Oct 2026 (teslamotors/light-show issue #183, and github.com/Nghtmare7509/
+// tesla-lightshow-juniper, every channel tested alone) agree on what it has: the headlights, the lower
+// white lamps and the amber turns as before; channel 4 (7/8) lights the front bar's outer end on its side;
+// channel 6 (11/12, either) the bar's whole centre; the side repeaters (21/22) are on its front fenders.
+// Its signature, channel 5, fogs, aux park, side markers and channels 47-174 do nothing (the bar is not 60
+// LEDs). The choreography speaks the Model Y's lamps, and such a car writes them where it has them
+// (JUNIPER), as it writes, so every lighting is shaped on the lamp the crowd sees.
 
 import * as C from './channels';
 import { u8 } from './np';
@@ -18,11 +27,20 @@ type Chs = number | readonly number[];
 
 const list = (chs: Chs): readonly number[] => (typeof chs === 'number' ? [chs] : chs);
 
+const CENTRE = [C.L_CH6, C.R_CH6], REPEATERS = [C.L_SIDE_REPEATER, C.R_SIDE_REPEATER];
+/** A Model Y lamp -> the 2025+ Model Y lamps that show it: a signature is its side's end of the bar and the
+ * centre (a side's accents read as end and centre, both sides as the whole bar), channel 5 that end alone,
+ * the fogs (low glow, the kick) the centre, the markers the fender repeaters. */
+const JUNIPER: Record<number, number[]> = {
+  [C.L_SIGNATURE]: [C.L_CH4, ...CENTRE], [C.R_SIGNATURE]: [C.R_CH4, ...CENTRE],
+  [C.L_CH5]: [C.L_CH4], [C.R_CH5]: [C.R_CH4], [C.L_FRONT_FOG]: CENTRE, [C.R_FRONT_FOG]: CENTRE,
+  [C.L_SIDE_MARKER]: REPEATERS, [C.R_SIDE_MARKER]: REPEATERS, [C.L_AUX_PARK]: REPEATERS,
+  [C.R_AUX_PARK]: REPEATERS,
+};
+
 export class Car {
   readonly frames: Uint8Array;
   readonly closureCounts = new Map<number, number>();
-  /** Per frame, how long the music has been silent there (0 while it sounds): silence is dark. */
-  hush: Uint8Array | null = null;
 
   constructor(
     readonly kind: 'modely' | 'cybertruck',
@@ -31,22 +49,18 @@ export class Car {
     readonly x: number,
     readonly nFrames: number,
     readonly step: number,
-    /** A 2025+ Model Y: what a Model Y shows on its signature strips and fogs goes to the light bar
-     * (lamps.ts). */
+    /** A 2025+ Model Y: the Model Y's lamps go where it has them (JUNIPER). */
     readonly juniper: boolean,
     /** A Model X: falcon doors (motors.ts). */
     readonly falcon: boolean,
+    /** Per frame, how long the music has been silent there (0 while it sounds): silence is dark. */
+    readonly hush: Uint8Array | null = null,
   ) {
     this.frames = new Uint8Array(nFrames * C.N_CHANNELS);
   }
 
   get isCt() {
     return this.kind === 'cybertruck';
-  }
-
-  /** A front light bar across the nose: the Cybertruck, and the 2025+ Model Y. */
-  get hasBar() {
-    return this.isCt || this.juniper;
   }
 
   static veh(side: Side): Side {
@@ -65,11 +79,17 @@ export class Car {
     return Math.min(Math.max(Math.round((t - LIGHT_LEAD_S) / this.step), 0), this.nFrames);
   }
 
+  /** The channels that show `chs` on this car (JUNIPER on a 2025+ Model Y). */
+  out(chs: Chs): readonly number[] {
+    const cs = list(chs);
+    return this.juniper ? [...new Set(cs.flatMap((ch) => JUNIPER[ch] ?? [ch]))] : cs;
+  }
+
   /** The lamps lit from t0 to t1, shaped so the lighting reads: lit at least MIN_ON frames, joined to another
    * lighting under MIN_OFF frames away (so short a dark is a flicker, not a pause), and never lit in a
    * silence: one still lit as the music stops fades out on Tesla's shortest ramp. */
   light(chs: Chs, t0: number, t1: number, value = C.ON) {
-    const a = this.fr(t0), cs = list(chs), on = value >= 128, n = this.nFrames;
+    const a = this.fr(t0), cs = this.out(chs), on = value >= 128, n = this.nFrames;
     let b = this.fr(t1);
     if (b <= a || !cs.length) return;
     if (on) b = Math.min(n, Math.max(b, a + MIN_ON));
@@ -87,15 +107,31 @@ export class Car {
     }
   }
 
+  /** The lamps dark from t0 to t1 (a pull-back, a strobe's off): a lighting cut there to a stub under MIN_ON
+   * frames either side goes dark with it, so a cut never leaves a flash too short to read. */
+  dark(chs: Chs, t0: number, t1: number) {
+    const a = this.fr(t0), b = this.fr(t1), F = this.frames, N = C.N_CHANNELS, n = this.nFrames;
+    if (b <= a) return;
+    for (const ch of this.out(chs)) {
+      let lo = a, hi = b;
+      while (lo > 0 && a - lo < MIN_ON && F[(lo - 1) * N + ch] >= 128) lo--;
+      if (a - lo >= MIN_ON) lo = a;
+      while (hi < n && hi - b < MIN_ON && F[hi * N + ch] >= 128) hi++;
+      if (hi - b >= MIN_ON) hi = b;
+      for (let f = lo; f < hi; f++) F[f * N + ch] = 0;
+    }
+  }
+
   /** How much of a bar's or a cabin's light shows at frame f: it fades out quickly into a silence. */
   private shows(f: number): number {
     const q = this.hush?.[f] ?? 0;
     return q ? Math.max(0, 1 - (q - 1) / PIXEL_FADE) : 1;
   }
 
+  /** Channels held at `value` from t0 to t1 as they are: a closure's command, the ending's ramps. */
   set(chs: Chs, t0: number, t1: number, value: number) {
     const a = this.fr(t0), b = this.fr(t1);
-    for (const ch of list(chs)) for (let f = a; f < b; f++) this.frames[f * C.N_CHANNELS + ch] = value;
+    for (const ch of this.out(chs)) for (let f = a; f < b; f++) this.frames[f * C.N_CHANNELS + ch] = value;
   }
 
   /** values: one row per frame from t0, one 0..1 value per channel in `chs` (crowd order for the bar). */
@@ -163,8 +199,8 @@ export class Car {
       : this.pick(side, [C.L_SIGNATURE], [C.R_SIGNATURE]);
   }
 
-  /** Model Y channels 4-6 (one combined output per side, ramping); on a 2025+ Model Y channel 6 is the
-   * whole front bar, so only 4-5 (the outer strips). Cybertruck: front turn. */
+  /** Model Y channels 4-6 (one combined output per side, ramping); on a 2025+ Model Y 4-5, its bar's end on
+   * that side (channel 6 is the bar's centre). Cybertruck: front turn. */
   drl(side?: Side) {
     return this.isCt
       ? this.pick(side, [C.L_FRONT_TURN], [C.R_FRONT_TURN])
@@ -177,8 +213,8 @@ export class Car {
       this.inner('R'), this.outer('R'), this.drl('R'), this.sig('R')];
   }
 
-  /** Model Y signature + channels 4-6 (4-5 on a 2025+ Model Y, whose bar then shows them; see
-   * lamps.ts). Cybertruck: front side markers. */
+  /** Model Y signature + channels 4-6 (on a 2025+ Model Y its bar's end on that side and the centre).
+   * Cybertruck: front side markers. */
   accents(side?: Side) {
     return this.isCt
       ? this.pick(side, [C.L_SIDE_MARKER], [C.R_SIDE_MARKER])
@@ -233,9 +269,6 @@ export class Car {
 
 /** One Car per letter, crowd-left to right (vehicles.ts), dark wherever `hush` says the music is silent. */
 export function makeLineup(layout: string, nFrames: number, step: number, hush: Uint8Array | null): Car[] {
-  return lineupCars(layout).map(([name, v], i) => {
-    const car = new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon);
-    car.hush = hush;
-    return car;
-  });
+  return lineupCars(layout).map(([name, v], i) => new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon,
+    hush));
 }
