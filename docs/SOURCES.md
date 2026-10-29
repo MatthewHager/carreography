@@ -46,8 +46,8 @@ lights, and the wet-ground mirror is optional. The cars themselves are Tesla's m
 ## Recordings
 
 The shows were tuned on the twelve songs of a Halloween 2026 show for two Model Ys and a Cybertruck. They
-are not in the repository; several are commercial recordings. A file named as below gets that song's own
-cue sheet (`src/engine/cues.ts`).
+are not in the repository; several are commercial recordings. No song gets settings of its own: every show
+comes from the music alone.
 
 | File name | Piece | Recording | Source |
 |---|---|---|---|

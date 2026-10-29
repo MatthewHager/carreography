@@ -33,61 +33,56 @@ gh release download car-models --dir public/models/tesla-app
 
 | Folder | What |
 |---|---|
-| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. A port of the Python generator, module for module: `choreo.ts` (the pipeline and the move chooser), `moves.ts` (every move), `catalog.ts` (the move catalogue), `car.ts` (one car's frames and lamp groups), `vehicles.ts` (the lineup letters), `pulse.ts` (the beat layer), `motors.ts` (the closures), `lamps.ts` (the 2025+ Model Y), `legato.ts`, `cues.ts`, `lyrics.ts`, and the reading of the music (`texture.ts`, `form.ts`, `phrases.ts`, `mood.ts`, `tempo.ts`, `arc.ts`). |
+| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts`, `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, builds and drops), `motors.ts` (the closures), `legato.ts` (music with no beat), `lyrics.ts`, `car.ts` (one car's frames and lamp groups), `vehicles.ts` (the lineup letters), `lamps.ts` (the 2025+ Model Y), and the reading of the music (`feel.ts`, `texture.ts`, `form.ts`, `phrases.ts`, `mood.ts`, `tempo.ts`). |
 | `src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend), song tags, LRCLIB and lyric alignment. |
 | `src/viewer/` | The 3D preview (three.js), adapted from Tesla Lightshow Studio (AGPL-3.0): `core/` reads, writes and simulates show files, `car/appBody.ts` draws Tesla's app models. |
 | `src/app/` | The page: the 3D stage, the panels, the worker that makes a show (`show.worker.ts`), the WAV and the ZIP. |
 | `src/components/ui/` | shadcn/ui components, as the shadcn CLI writes them. Don't edit them; restyle through the theme in `src/index.css`. |
-| `tools/` | The two scripts that make the releases (below). |
+| `tools/` | The two scripts that make the releases (below), and the show review tool (`tools/review/`). |
 | `MOVES.md` | The move catalogue, generated from `catalog.ts`. |
 
-## The bridge test
+## Looking at a show
 
-The engine is a faithful port of the Python choreographer (tag `python-final`), and
-`src/engine/bridge.test.ts` proves it: it choreographs 24 shows (12 songs, some in several lineups)
-from the Python version's own analyses and compares every car's frames with the Python version's, byte
-for byte. `vehicles.test.ts` uses the same analyses to check every car letter against Tesla's motor
-limits.
+Tests check rules (Tesla's limits, the same show from the same input, the music's feel), never a look. To
+see what a change does, make the show and look at it with the review tool ([tools/review/README.md](tools/review/README.md)):
 
-The analyses and frames live in `cache/bridge/`, made by `tools/export_bridge.py` at `python-final`. They
-describe copyrighted recordings, so they stay on the machines that have them and out of the repository.
-Without `cache/bridge/` both tests are skipped, as they are in CI; everything else runs.
+```bash
+npm run review -- song.wav --lineup YCY                       # timeline pictures and a summary
+npm run review -- song.wav --lineup YCY --from 60 --to 90 --video
+```
 
-Refactors must keep the bridge test passing: the same input gives byte-identical shows. If you have the
-cache, run it before and after; if you don't, say so in the pull request.
+It draws every lamp of every car against the loudness, the level, the beats, the drums and the notes, sums
+up how the light follows the song's arc, and films the 3D preview. Look before and after, on a few songs
+and lineups (one car, the classic three, five mixed).
 
 ## Adding a move
 
 1. **Write it** in `src/engine/moves.ts` as a function `(cars, an, ph) => void`.
    - `cars` is the lineup, crowd-left to right (`Car` objects); `an` is the analysis; `ph` is the phrase
      (`ph.t0`, `ph.t1`, and `ph.a` to `ph.b`, its notes in `an.events`).
-   - Light lamps with the `Car` methods: `car.flash(car.heads('L'), t, 0.12)`,
-     `car.light(car.accents(), t0, t1)`, `car.pixels(C.FRONT_BAR, t, values)` (a truck's bar, 0–1 per LED,
-     crowd-left to right). They take the crowd's left and right.
-   - Use `sides(cars)` and `centreTruck(cars)` (which may be `null`) for the two roles. Never assume
-     three cars, and never take `cars[1]` as the truck.
-   - Take times from the music: `an.events.t`, `an.beats`, `an.downbeats`, and the helpers in `moves.ts`.
-     Never use a fixed tempo.
-2. **Name it** in the `UNISON` table at the end of `moves.ts`, under the name the catalogue uses.
-3. **Catalogue it** in `catalog.UNISON`: what the crowd sees, the moods, the phrase gestures it fits,
-   what it locks to (`note`, `beat`, `bar`, `build`, `self`), and `false` last if the cars pass nothing
-   between them. That's enough for the choreographer to choose it. If it needs extra arguments, wrap
-   it in the `UNISON` table, as `keyboard` and `block` are.
-4. **Classify it** (optional) in the sets in `choreo.ts`: `BEAT_MOVES` makes it need a clear beat, `CALM`
-   allows it in calm passages, `QUIET` keeps it out of full-power sections, `BIG` gives it a breath of
-   black before it.
-5. **Watch it** in the 3D preview in at least a one-car, the classic three-car and a five-car lineup, and
-   regenerate `MOVES.md` with `UPDATE_MOVES=1 npx vitest run catalog` (the tests fail while it's stale).
-
-A split move (the side cars and the centrepiece doing different things) is two functions, one for each
-role, named in `SIDE` and `CENTRE` at the end of `moves.ts` and paired in `catalog.SPLIT`.
+   - Size every hit by the level at its moment: `half(car, side, levelAt(an, t))` gives what a hit lights of
+     a half car, from one lamp at a hush to both headlights at the peak; `note(...)` shapes a note's light
+     like its sound. A truck's bar takes `car.pixels(C.FRONT_BAR, t, values)` (0–1 per LED, crowd-left to
+     right). Everything takes the crowd's left and right.
+   - Light the whole lineup. Use `sides(cars)` and `centreTruck(cars)` (which may be `null`); never
+     assume three cars, and never take `cars[1]` as the truck.
+   - Take times from the music: `an.events.t`, `an.beats`, `an.downbeats`, and the helpers in `moves.ts`
+     (`grid` thins beats to the level's pace). Never use a fixed tempo.
+2. **Name it** in the `MOVES` table at the end of `moves.ts`.
+3. **Catalogue it** in `catalog.MOVES`: what the crowd sees, the phrase gestures it fits, and what it
+   locks to (`note`, `beat`, `bar`, `self`). Put it in `NOTE_MOVES` or `BEAT_MOVES` for passages to take
+   it, or in `FOR_GESTURE` if a phrase shape should always get it.
+4. **Watch it** in the review tool or the 3D preview in at least a one-car, the classic three-car and a
+   five-car lineup, and regenerate `MOVES.md` with `UPDATE_MOVES=1 npx vitest run catalog` (the tests fail
+   while it's stale).
 
 What makes a move good:
 
 - **Readable from 30 m.** A crowd sees lamps, not LEDs. Use whole lamps and big contrasts; an effect that
   needs the bar's 60 LEDs belongs on the centrepiece.
 - **Locked to the music**, never to a clock.
-- **Darkness between hits.** Flash for about 100–160 ms, not the whole beat.
+- **Darkness between hits** in all but the loudest music, where held light gives the peak its mass.
+- **Fewer, better moves.** A new move earns its place by reading differently from the sixteen there are.
 - **One idea per move.** If it needs a paragraph to describe, it's two moves.
 
 ## Adding a car
@@ -135,7 +130,8 @@ the Model Y L are especially welcome, since Tesla hasn't documented them.
 - Keep a pull request to one thing (one move, one fix).
 - The type check, lint and tests must pass; CI runs them on every push.
 - Say what you watched in the preview, and on which lineups.
-- If your change alters shows on purpose, say so. If it shouldn't, check it doesn't (see the bridge test).
+- If your change alters shows on purpose, say so and say what you looked at. If it shouldn't, check it
+  doesn't: build a song before and after with the review tool and compare the `show/*.fseq` files.
 - Match the code around you: docstrings say what the audience or the user experiences, comments are
   sparse and say why, lines are up to about 110 columns, and sides are the crowd's, never the vehicle's.
 

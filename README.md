@@ -2,10 +2,11 @@
 
 A light show for one to five Teslas, made from your song in your browser. You line up the cars as the
 crowd will see them, drop in a song, and Carreography listens to it (the beat, the notes, the loudness,
-the shape of the song, and the lyrics when it can find them) and choreographs every car's lights and
-motors to the music. The lineup plays as one instrument: notes run across the cars like a keyboard, the
-beat thumps through every headlight, builds sweep in from the ends and land on the peak, and the
-liftgates, frunks, windows, mirrors and charge ports move on the big moments. You watch it on Tesla's own
+the drums, the harmony, the shape of the song, and the lyrics when it can find them) and choreographs
+every car's lights and motors to the music. The lineup plays as one instrument that grows with the song:
+a pianissimo is a lamp at a time, notes run across the cars like a keyboard, the beat thumps through every
+headlight, each drum has lamps of its own, builds speed up into a beat of black before the drop hits every
+lamp at once, and the liftgates, frunks, windows, mirrors and charge ports move on the big moments. You watch it on Tesla's own
 3D models before it goes anywhere near a car.
 
 ![Three cars mid-show in the 3D preview](docs/images/preview.jpg)
