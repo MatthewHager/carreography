@@ -311,7 +311,8 @@ function hush(cars: Car[], an: Analysis) {
   const x = an.loudness, n = an.nFrames, need = Math.round(SILENT_S / an.step), fade = Math.round(0.5 / an.step);
   const lamps: number[] = [];
   for (let ch = 0; ch < C.L_FALCON; ch++) lamps.push(ch);
-  const pixels = [...C.FRONT_BAR, ...C.REAR_BAR, ...C.OFFROAD_BAR, ...C.ALL_RGB.flatMap((ch) => [ch, ch + 1, ch + 2])];
+  const rgb = C.ALL_RGB.flatMap((ch) => [ch, ch + 1, ch + 2]);
+  const pixels = [...C.FRONT_BAR, ...C.REAR_BAR, ...C.OFFROAD_BAR, ...rgb];
   for (let a = 0; a < n;) {
     if (x[a] >= SILENT) {
       a++;

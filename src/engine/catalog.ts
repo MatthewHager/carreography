@@ -43,8 +43,8 @@ export const MOVES: Record<string, Move> = {
   cadence: mv('a big closing chord: a breath of black, then the whole stage', ['cadence'], 'self'),
   march: mv('one light marches car to car on the beat, left, centre, right, centre', ['figuration', 'recitative'],
     'beat'),
-  lr_channel: mv('left channel, right channel: the whole left half of the stage on one beat, the right on the next',
-    ['figuration', 'recitative'], 'beat'),
+  lr_channel: mv('left channel, right channel: the whole left half of the stage on one beat, the right on the '
+    + 'next', ['figuration', 'recitative'], 'beat'),
   checker: mv('a checkerboard across the slots and the bar, flipping every beat', ['figuration', 'recitative'],
     'beat'),
   tug_of_war: mv('the light fills the stage slot by slot on the beat, crowd-left to right, then drains back',
@@ -79,6 +79,8 @@ export function markdown(): string {
     '| move | what you see | fits | locks to |',
     '|---|---|---|---|',
   ];
-  for (const [name, m] of Object.entries(MOVES)) rows.push(`| ${name} | ${m.what} | ${m.fits.join(', ')} | ${m.grid} |`);
+  for (const [name, m] of Object.entries(MOVES)) {
+    rows.push(`| ${name} | ${m.what} | ${m.fits.join(', ')} | ${m.grid} |`);
+  }
   return rows.join('\n') + '\n';
 }

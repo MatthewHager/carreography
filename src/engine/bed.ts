@@ -36,8 +36,8 @@ function above(an: Analysis, at: number): boolean[] {
 /** A colour for pitch class `pc` (0 C .. 11 B): its place on the circle of fifths as a hue. */
 export function hueOf(pc: number): number[] {
   const h = (((pc * 7) % 12) / 12) * 6, x = 1 - Math.abs((h % 2) - 1);
-  const [r, g, b] = h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x] : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1]
-    : [1, 0, x];
+  const [r, g, b] = h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x]
+    : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1] : [1, 0, x];
   return [r * 255, g * 255, b * 255];
 }
 

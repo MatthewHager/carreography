@@ -333,7 +333,8 @@ const lrNotes: Move = (cars, an, ph) => {
   const ev = an.events, [lo, hi] = phraseRange(ph), sidesOf = halves(cars);
   for (let k = 0, i = ph.a; i < ph.b; k++, i++) {
     const t = ev.t[i], s = levelAt(an, t), group = sidesOf[k % 2];
-    const pick = s >= 0.6 ? group : [group[Math.min(group.length - 1, Math.trunc(posOf(ev.top[i], lo, hi) * group.length))]];
+    const at = Math.min(group.length - 1, Math.trunc(posOf(ev.top[i], lo, hi) * group.length));
+    const pick = s >= 0.6 ? group : [group[at]];
     const d = clip(ev.dur[i], 0.1, 0.25);
     for (const [car, side] of pick) slotHit(car, side, t, d, s);
   }

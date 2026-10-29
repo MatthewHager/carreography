@@ -96,7 +96,8 @@ function reserveTop(an: Analysis, out: Float32Array): Float32Array {
   for (let i = b; i < n; i++) if (near(i) >= 0.95 * top) peak[i] = 1;
   const lift = Math.max(0, TOP + 0.06 - top);
   for (let i = 0; i < n; i++) {
-    out[i] = peak[i] ? Math.min(1, out[i] + lift * clip((out[i] - 0.4) / 0.4, 0, 1)) : Math.min(out[i], TOP - 0.01);
+    out[i] = peak[i] ? Math.min(1, out[i] + lift * clip((out[i] - 0.4) / 0.4, 0, 1))
+      : Math.min(out[i], TOP - 0.01);
   }
   return out;
 }

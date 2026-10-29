@@ -11,7 +11,9 @@ import type { Analysis } from '../analysis';
 import { analyzeForm } from '../form';
 import { argmax, diff, mean, median, quantile, sum } from '../np';
 import { groupEvents, labelPhrases, pitchScale } from '../texture';
-import { beatTrack, framesToTime, HOP, localTempo, onsetDetect, onsetStrength, powerToDb, spectrum, SR } from './dsp';
+import {
+  beatTrack, framesToTime, HOP, localTempo, onsetDetect, onsetStrength, powerToDb, spectrum, SR,
+} from './dsp';
 import { visuals } from './visual';
 
 interface NeuralBeats {

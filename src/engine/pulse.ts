@@ -151,7 +151,8 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): void {
 /** The pulse through a build: half notes, then every beat, then eighths in the last bar - the middle car
  * first, its neighbours joining, every car by the last third - and a beat of black before the landing. */
 function buildPulse(cars: Car[], an: Analysis, t0: number, land: number): void {
-  const order = [...cars].sort((p, q) => Math.abs(p.x - (cars.length - 1) / 2) - Math.abs(q.x - (cars.length - 1) / 2));
+  const fromMiddle = (c: Car) => Math.abs(c.x - (cars.length - 1) / 2);
+  const order = [...cars].sort((p, q) => fromMiddle(p) - fromMiddle(q));
   const beats = an.beats.filter((x) => x >= t0 - 0.01 && x < land);
   for (const c of cars) c.set(HEADS, t0, land, 0);
   if (beats.length < 2) return;
