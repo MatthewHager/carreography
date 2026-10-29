@@ -32,10 +32,10 @@ const INNER = [C.L_INNER_MAIN, C.R_INNER_MAIN], OUTER = [C.L_OUTER_MAIN, C.R_OUT
 const CENTRE = [C.L_CH6, C.R_CH6], REPEATERS = [C.L_SIDE_REPEATER, C.R_SIDE_REPEATER];
 /** A Model Y lamp -> the 2025+ Model Y lamps that show it: a signature is its side's end of the bar and the
  * centre (a side's accents read as end and centre, both sides as the whole bar), channel 5 that end alone,
- * the fogs (low glow, the kick) the centre, the markers the fender repeaters. */
+ * the markers the fender repeaters. It has no fogs, so the kick leaves its bar to the moves. */
 const JUNIPER: Record<number, number[]> = {
   [C.L_SIGNATURE]: [C.L_CH4, ...CENTRE], [C.R_SIGNATURE]: [C.R_CH4, ...CENTRE],
-  [C.L_CH5]: [C.L_CH4], [C.R_CH5]: [C.R_CH4], [C.L_FRONT_FOG]: CENTRE, [C.R_FRONT_FOG]: CENTRE,
+  [C.L_CH5]: [C.L_CH4], [C.R_CH5]: [C.R_CH4], [C.L_FRONT_FOG]: [], [C.R_FRONT_FOG]: [],
   [C.L_SIDE_MARKER]: REPEATERS, [C.R_SIDE_MARKER]: REPEATERS, [C.L_AUX_PARK]: REPEATERS,
   [C.R_AUX_PARK]: REPEATERS,
 };
@@ -271,7 +271,7 @@ export class Car {
    * to every headlight. */
   layers(): number[][] {
     if (this.isCt) return [this.frunk(), this.sig(), [], this.outer(), this.heads()];
-    if (this.juniper) return [this.drl(), this.markers(), this.fogs(), this.outer(), this.heads()];
+    if (this.juniper) return [this.drl(), this.markers(), CENTRE, this.outer(), this.heads()];
     return [this.sig(), this.drl(), this.fogs(), this.outer(), this.heads()];
   }
 
