@@ -39,7 +39,8 @@ const USAGE = `npm run review -- SONG [options]
   --out DIR        where to write (default review-out/<song>/ at the top of the checkout)
   --video          film the 3D preview with the sound (video.mp4), from --from to --to
   --fps N          the video's frame rate (default 30)
-  --camera NAME    Front (the crowd's view, the default), 3/4, Rear or Top
+  --camera NAME    Stage (the crowd's view of the whole lineup, close up: the default), Front, 3/4, Rear
+                   or Top
   --lyrics         look the lyrics up on LRCLIB, as the page does (needs the network)
   --fresh          listen again rather than reuse the beats and notes heard last time`;
 
@@ -104,7 +105,7 @@ export async function main(argv: string[]): Promise<number> {
     args: argv, allowPositionals: true, options: {
       lineup: { type: 'string', default: 'YCY' }, from: { type: 'string' }, to: { type: 'string' },
       stretch: { type: 'string', default: '30' }, out: { type: 'string' }, video: { type: 'boolean' },
-      fps: { type: 'string', default: '30' }, camera: { type: 'string', default: 'Front' },
+      fps: { type: 'string', default: '30' }, camera: { type: 'string', default: 'Stage' },
       lyrics: { type: 'boolean' }, fresh: { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     },
   });

@@ -16,7 +16,7 @@ npm run review -- song.mp3 --lineup YCY --from 60 --to 90 --video
 | `--stretch S` | seconds per timeline picture (default 30) |
 | `--out DIR` | where to write (default `review-out/<song>_<lineup>/` at the top of the checkout) |
 | `--video` | film the 3D preview with the sound, from `--from` to `--to` |
-| `--fps N`, `--camera NAME` | the film's frame rate (30) and camera: `Front` (the crowd's view, default), `3/4`, `Rear`, `Top` |
+| `--fps N`, `--camera NAME` | the film's frame rate (30) and camera: `Stage` (the default: the crowd's view, close and low enough that the whole lineup fills the frame), or the app's `Front`, `3/4`, `Rear`, `Top` |
 | `--lyrics` | look the lyrics up on LRCLIB, as the page does (needs the network; off by default) |
 | `--fresh` | listen again instead of reusing the beats and notes heard last time |
 
