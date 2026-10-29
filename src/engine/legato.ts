@@ -50,6 +50,7 @@ const MIN_DWELL = 0.75;                            // seconds a layer stays once
 const BREATH_S = 6;                                // the breath is the loudness against this much either side
 const FULL = DRIVE + 0.1;                          // the level from which a phrase can reach every layer
 const GLIDE_S = 0.5;                               // the melody's smoothing
+const SPREAD_S = 3;                                // ... and the stretch its glide is spread over the stage by
 const HELD_S = 0.6;                                // a beam lit this long swells in; shorter, a run passing
 const TAIL_BAR = 0.6;                              // a truck's rear bar at the tails' layer: red, not a flash
 
@@ -129,7 +130,7 @@ function tailBar(car: Car, t0: number, t1: number): void {
 /**
  * Stage position 0-1 (crowd's left to right) of the melody per frame, NaN where no melody sounds: the top
  * notes of the transcription (the louder two thirds), each phrase spreading its own range across the stage
- * as the moves do, smoothed over GLIDE_S.
+ * as the moves do, smoothed over GLIDE_S and spread again over the stage by its range within SPREAD_S.
  */
 function melodyPath(an: Analysis): Float64Array {
   const ev = an.events, n = an.nFrames, step = an.step;
@@ -156,7 +157,19 @@ function melodyPath(an: Analysis): Float64Array {
     if (drop >= 0 && !Number.isNaN(pos[drop])) [sum, cnt] = [sum - pos[drop], cnt - 1];
     if (i >= 0 && !Number.isNaN(pos[i]) && cnt) out[i] = sum / cnt;
   }
-  return out;
+  // smoothing pulls a running figure toward its middle: spread what it leaves over the stage again, by the
+  // path's own range over the SPREAD_S around (a fugue's quiet entry still passes from end to end)
+  const r = Math.round(SPREAD_S / step), stride = 5, spread = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < n; i += stride) {
+    let lo = Infinity, hi = -Infinity;
+    for (let j = Math.max(0, i - r); j < Math.min(n, i + r); j += stride) {
+      if (!Number.isNaN(out[j])) [lo, hi] = [Math.min(lo, out[j]), Math.max(hi, out[j])];
+    }
+    for (let f = i; f < Math.min(n, i + stride); f++) {
+      if (!Number.isNaN(out[f])) spread[f] = hi - lo > 0.1 ? (out[f] - lo) / (hi - lo) : out[f];
+    }
+  }
+  return spread;
 }
 
 /** The lights for the stretches that flow (the motors are scheduled separately, as for any song). Says
