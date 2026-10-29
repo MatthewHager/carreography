@@ -23,21 +23,21 @@ gh release download examples --dir public/examples                      # the ex
 - `src/engine/`: the choreographer.
   - `vehicles.ts`: the lineup letters (`S`, `M`, `m`, `X`, `Y`, `y`, `B`, `L`, `C`), folder names and
     places.
-  - `car.ts`: `Car` (one car's frames, the lamp groups, crowd-side flipping, closure command counting).
+  - `car.ts`: `Car` (one car's frames, the lamp groups, crowd-side flipping, closure command counting, and
+    each lighting shaped as it is written: at least 100 ms, dark in a silence).
   - `choreo.ts`: `choreograph()` (the pipeline: the layers in order), the passages, their figures and the
-    move each plays.
+    move each plays, the accents and the end.
   - `level.ts`: one level per frame from the loudness, its top kept for the peak; every layer sizes by it.
-  - `bed.ts` (steady lamps, the trucks' bars, the cabins' colour), `moves.ts` (every move as
-    `(cars, an, ph) => void`, sized by the level, the `MOVES` table, `centreTruck`, `sides`, `slotFor`),
-    `catalog.ts` (the catalogue; `MOVES.md` is generated from it), `drums.ts` (kick, snare, hats),
-    `pulse.ts` (the beat, builds and drops), `motors.ts` (closures), `legato.ts` (music with no beat),
-    `lyrics.ts` (lyric moments), `lamps.ts` (2025+ Model Y output), `channels.ts` (Tesla's channel map and
-    limits).
-  - `feel.ts` (flow or beat, kit), `texture.ts`, `form.ts`, `phrases.ts`, `tempo.ts`: reading
-    the music.
+  - `bed.ts` (steady lamps, the trucks' bars, the cabins' colour, and the breath where the music flows),
+    `moves.ts` (every move as `(cars, an, ph) => void`, sized by the level, the `MOVES` table,
+    `centreTruck`, `slotAt`), `catalog.ts` (the catalogue; `MOVES.md` is generated from it), `drums.ts`
+    (kick, snare, hats), `pulse.ts` (the beat, builds and drops), `motors.ts` (closures), `lyrics.ts`
+    (lyric moments), `lamps.ts` (2025+ Model Y output), `channels.ts` (Tesla's channel map and limits).
+    Each layer lights lamps of its own: docs/HOW_IT_WORKS.md has the table.
+  - `feel.ts` (flow or beat, kit), `phrases.ts`, `tempo.ts`: reading the music.
 - `src/engine/listen/`: decoding helpers, resampling, the librosa subset (`dsp.ts`, `cqt.ts`),
-  `audio.ts` (the analysis), `visual.ts` (loudness, bands, the drum voices, harmony, novelty, kit, beat
-  confidence), beat-this and basic-pitch (`beats.ts`, `notes.ts`) on the backend `infer.ts` picks,
+  `audio.ts` (the analysis), `texture.ts` (notes into events), `form.ts` (the sections), `visual.ts`
+  (loudness, bands, the drum voices, harmony, novelty, kit, beat confidence), beat-this and basic-pitch (`beats.ts`, `notes.ts`) on the backend `infer.ts` picks,
   `tags.ts`, `lrclib.ts`, `align.ts`.
 - `src/app/`: the page (`App.tsx` is in `src/`), the show worker (`show.worker.ts`), `pipeline.ts`,
   the WAV and the ZIP.
@@ -55,7 +55,7 @@ gh release download examples --dir public/examples                      # the ex
   `Car.pixels` reverses the front bar. Use the group methods (`heads`, `accents`, `lamps`...); never
   write raw L/R channel numbers in a move.
 - **Any lineup of 1–5 cars.** Never index `cars[1]` as the truck or assume two Model Ys. Use
-  `centreTruck(cars)` (may be `null`) and `sides(cars)` from `moves.ts`.
+  `centreTruck(cars)` from `moves.ts` (may be `null`) and treat every other car alike.
 - **Tesla's motor limits** (`CLOSURE_LIMITS` in `channels.ts`): liftgate 6, each window 6, each mirror
   20, charge port 3, a Model X's doors 6 each. Dance only once a lid is fully open; about 30 s of dancing
   per closure per show (each motor's own thermal limit). `Car.closure()` refuses commands past the

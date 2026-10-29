@@ -231,7 +231,7 @@ export function barPositions(an: Analysis): Int32Array {
 /** Beats at the level's pace there, counted in the bar so none is lost where the performer's beats are
  * uneven: every one from drive up, 1 and 3 in a groove, the downbeat when calm, so a calm passage swoops
  * and every-beat hitting is kept for the climbs. */
-function paced(an: Analysis, beats: number[]): number[] {
+export function paced(an: Analysis, beats: number[]): number[] {
   const pos = barPositions(an), b = an.beats;
   return beats.filter((t, k) => {
     const st = stepOf(levelAt(an, t)), every = st >= 3 ? 1 : st === 2 ? 2 : 4;
