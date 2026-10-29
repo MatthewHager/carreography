@@ -5,19 +5,20 @@
 // what lamps can't: comets at a note's pitch, fills and sweeps. Every move lights the whole lineup.
 //
 // Every hit is sized by the level at its moment (level.ts), so one move grows with the music: at a hush a
-// note lights a single lamp and fades; then a half car's signature and DRL; then its inner beam too; at
-// the peak the whole half with both headlights. What each move looks like is in catalog.ts (MOVES.md);
+// note lights a single lamp and fades; then a half car's signature and DRL; from a groove its inner beam
+// too, from drive both headlights - except the headlights the beat layer owns there (pulse.ts), which the
+// moves leave to the beat. What each move looks like is in catalog.ts (MOVES.md);
 // MOVES at the end is how the choreographer finds one by name.
 
 import type { Analysis, Phrase } from './analysis';
 import type { Car } from './car';
 import * as C from './channels';
-import { levelAt } from './level';
+import { levelAt, STEPS } from './level';
 import { paced } from './mood';
 import { arange, clip, cumsum, diff, linspace, searchsorted, sum } from './np';
 import { beatLen } from './tempo';
 
-const ON = C.ON, ON_500 = C.ON_500, OFF_500 = C.OFF_500, OFF_1000 = C.OFF_1000;
+const ON_500 = C.ON_500, OFF_500 = C.OFF_500, OFF_1000 = C.OFF_1000;
 const BAR = C.FRONT_BAR.length;   // 60 LEDs
 
 type LR = 'L' | 'R';
@@ -78,26 +79,34 @@ const posOf = (p: number, lo: number, hi: number) => clip((p - lo) / Math.max(hi
 
 // --- size ------------------------------------------------------------------------------------------
 
-/** What one hit lights of a car's half at level s: a single lamp at a hush, the signature and DRL, then the
- * inner headlight too, then both headlights. A truck's half is its side marker and headlights (its bar is
+/** How much of the headlights the beat layer owns at t (pulse.ownership): 0 none, 1 the inner beams, 2
+ * both. */
+export const owned = (an: Analysis, t: number) =>
+  an.beatLamps?.[clip(Math.trunc(t / an.step), 0, an.nFrames - 1)] ?? 0;
+
+/** What one hit lights of a car's half at level s: a single lamp at a hush, then the signature and DRL, from
+ * a groove the inner headlight too, from drive the outer one as well, leaving the headlights the beat layer
+ * owns (`own`, as owned() says) to the beat. A truck's half is its side marker and headlights (its bar is
  * drawn separately). */
-export function half(car: Car, side: LR, s: number): number[] {
-  if (car.isCt) return s < 0.4 ? car.sig(side) : s < 0.75 ? [...car.sig(side), ...car.inner(side)]
-    : [...car.sig(side), ...car.heads(side)];
-  if (s < 0.2) return car.sig(side);
-  if (s < 0.45) return car.accents(side);
-  if (s < 0.75) return [...car.accents(side), ...car.inner(side)];
-  return [...car.accents(side), ...car.heads(side)];
+export function half(car: Car, side: LR, s: number, own = 0): number[] {
+  const out = car.isCt || s < STEPS[0] ? car.sig(side) : car.accents(side);
+  if (s >= STEPS[1] && own < 1) out.push(...car.inner(side));
+  if (s >= STEPS[2] && own < 2) out.push(...car.outer(side));
+  return out;
 }
 
-const whole = (car: Car, s: number) => [...half(car, 'L', s), ...half(car, 'R', s)];
+/** `chs` without the headlights the beat layer owns. */
+const free = (car: Car, chs: number[], own: number) =>
+  chs.filter((ch) => !(own >= 1 && car.inner().includes(ch)) && !(own >= 2 && car.outer().includes(ch)));
+
+const whole = (car: Car, s: number, own = 0) => [...half(car, 'L', s, own), ...half(car, 'R', s, own)];
 
 /** One note's light, shaped like its sound (Tesla's ramps are the envelopes). Quiet: a short note flashes
  * and fades over half a second, a pluck; a long note swells in and fades over a second, a pad. From the
  * middle level up, every note is struck and held for its length, at least most of the way to the next one
  * when it is loud, so the light has mass. */
 export function note(car: Car, chs: number[], t: number, dur: number, s: number, next = Infinity) {
-  if (s < 0.4) {
+  if (s < STEPS[1]) {
     if (dur >= 0.6) {
       const end = Math.min(t + Math.min(dur, 2.0), next);
       car.light(chs, t, end, ON_500);
@@ -110,7 +119,7 @@ export function note(car: Car, chs: number[], t: number, dur: number, s: number,
     return;
   }
   let hold = clip(dur, 0.1, 1.2);
-  if (s >= 0.6 && next < Infinity) hold = Math.max(hold, Math.min(0.8 * (next - t), 0.6));
+  if (s >= STEPS[2] && next < Infinity) hold = Math.max(hold, Math.min(0.8 * (next - t), 0.6));
   car.light(chs, t, t + hold);
 }
 
@@ -130,7 +139,7 @@ function rows(n: number, fn: (f: number, k: number) => number, w = BAR): Rows {
 const frames = (car: Car, t: number, dur: number) => Math.max(2, car.fr(t + dur) - car.fr(t));
 
 /** A comet at `pos` (0..1 along the bar) fading over `dur`: wider and brighter as the level rises. */
-function comet(car: Car, t: number, pos: number, dur: number, s: number) {
+export function comet(car: Car, t: number, pos: number, dur: number, s: number) {
   const width = 3 + 8 * s, amp = 0.55 + 0.45 * s, n = frames(car, t, dur);
   const fade = linspace(1, 0, n);
   car.pixels(C.FRONT_BAR, t, rows(n, (f, k) => {
@@ -164,8 +173,8 @@ export function barFlash(car: Car, t: number, dur: number, level = 1.0) {
 const barHalf = (side: LR): [number, number] => (side === 'L' ? [0, 0.5] : [0.5, 1]);
 
 /** A slot's hit: the half's lamps, and on a truck that half of its bar. */
-function slotHit(car: Car, side: LR, t: number, dur: number, s: number) {
-  car.light(half(car, side, s), t, t + dur);
+function slotHit(car: Car, side: LR, t: number, dur: number, s: number, own = 0) {
+  car.light(half(car, side, s, own), t, t + dur);
   if (car.isCt) barSpan(car, t, dur + 0.1, ...barHalf(side), 0.5 + 0.5 * s);
 }
 
@@ -249,10 +258,10 @@ type Move = (cars: Car[], an: Analysis, ph: Phrase) => void;
 const keyboard: Move = (cars, an, ph) => {
   const ev = an.events, [lo, hi] = phraseRange(ph), all = slots(cars);
   for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t), nxt = ev.t[i + 1] ?? Infinity;
+    const t = ev.t[i], s = levelAt(an, t), own = owned(an, t), nxt = ev.t[i + 1] ?? Infinity;
     const top = slotFor(cars, ev.top[i], lo, hi);
     let span: [Car, LR][] = [[top[0], top[1]]];
-    if (ev.kind[i] >= 2 && s >= 0.6) {
+    if (ev.kind[i] >= 2 && s >= STEPS[2]) {
       const low = slotFor(cars, ev.low[i], lo, hi);
       const a = all.findIndex(([c, d]) => c === low[0] && d === low[1]);
       const b = all.findIndex(([c, d]) => c === top[0] && d === top[1]);
@@ -262,9 +271,9 @@ const keyboard: Move = (cars, an, ph) => {
       if (car.isCt) {
         const w = car === top[0] && top[2] !== null ? top[2] : side === 'L' ? 0.25 : 0.75;
         comet(car, t, w, clip(ev.dur[i], 0.15, 0.6) + 0.2, s);
-        if (s >= 0.4) note(car, half(car, side, s), t, ev.dur[i], s, nxt);
+        if (s >= STEPS[1]) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
       } else {
-        note(car, half(car, side, s), t, ev.dur[i], s, nxt);
+        note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
       }
     }
   }
@@ -282,14 +291,14 @@ const relay: Move = (cars, an, ph) => {
   const n = stations.length;
   let dir = ph.up >= 0.5 ? 1 : -1, pos = dir > 0 ? 0 : n - 1;
   for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t);
+    const t = ev.t[i], s = levelAt(an, t), own = owned(an, t);
     const [car, side, st] = stations[pos];
     const hold = Math.max(clip(ev.dur[i], 0.1, 0.25), 0.2 + 0.2 * s);    // a trail, longer when loud
     if (typeof st === 'number') {
       barSpan(car, t, hold + 0.1, st / 6, (st + 1) / 6, 0.6 + 0.4 * s);
-      if (s >= 0.6) car.light(half(car, side, s), t, t + hold);
+      if (s >= STEPS[2]) car.light(half(car, side, s, own), t, t + hold);
     } else {
-      car.light(s >= 0.6 ? half(car, side, s) : st, t, t + hold);
+      car.light(s >= STEPS[2] ? half(car, side, s, own) : free(car, st, own), t, t + hold);
     }
     if (i + 1 < ph.b) {
       const step = Math.sign(ev.top[i + 1] - ev.top[i]);
@@ -311,11 +320,12 @@ const mirror: Move = (cars, an, ph) => {
   const rings = n / 2;
   const ct = centreTruck(cars);
   for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t), p = posOf(ev.top[i], lo, hi), nxt = ev.t[i + 1] ?? Infinity;
+    const t = ev.t[i], s = levelAt(an, t), own = owned(an, t), p = posOf(ev.top[i], lo, hi);
+    const nxt = ev.t[i + 1] ?? Infinity;
     const r = Math.min(rings - 1, Math.trunc(p * rings));          // 0: the middle pair
     for (const k of new Set([rings - 1 - r, rings + r])) {
       const [car, side] = all[k];
-      if (!car.isCt || s >= 0.4) note(car, half(car, side, s), t, ev.dur[i], s, nxt);
+      if (!car.isCt || s >= STEPS[1]) note(car, half(car, side, s, own), t, ev.dur[i], s, nxt);
     }
     if (ct !== null) barFill(ct, t, clip(ev.dur[i], 0.15, 0.5) + 0.15, 0.15 + 0.85 * p, true);
   }
@@ -334,9 +344,9 @@ const lrNotes: Move = (cars, an, ph) => {
   for (let k = 0, i = ph.a; i < ph.b; k++, i++) {
     const t = ev.t[i], s = levelAt(an, t), group = sidesOf[k % 2];
     const at = Math.min(group.length - 1, Math.trunc(posOf(ev.top[i], lo, hi) * group.length));
-    const pick = s >= 0.6 ? group : [group[at]];
+    const pick = s >= STEPS[2] ? group : [group[at]];
     const d = clip(ev.dur[i], 0.1, 0.25);
-    for (const [car, side] of pick) slotHit(car, side, t, d, s);
+    for (const [car, side] of pick) slotHit(car, side, t, d, s, owned(an, t));
   }
 };
 
@@ -351,7 +361,7 @@ const antiphony: Move = (cars, an, ph) => {
     const group = sidesOf[turn];
     const [car, side] = group[Math.min(group.length - 1, Math.trunc(posOf(ev.top[i], lo, hi) * group.length))];
     if (car.isCt) comet(car, t, side === 'L' ? 0.25 : 0.75, 0.3, s);
-    note(car, half(car, side, s), t, ev.dur[i], s, nxt);
+    note(car, half(car, side, s, owned(an, t)), t, ev.dur[i], s, nxt);
   }
 };
 
@@ -368,7 +378,7 @@ const block: Move = (cars, an, ph) => {
     const span = big ? all : all.slice(Math.min(ia, ib), Math.max(ia, ib) + 1);
     const dur = Math.max(ev.dur[i], 0.3);
     for (const [car, side] of span) {
-      note(car, half(car, side, s), t, dur, s, nxt);
+      note(car, half(car, side, s, owned(an, t)), t, dur, s, nxt);
       if (car.isCt) barSpan(car, t, Math.min(dur, nxt - t), ...barHalf(side), 0.4 + 0.6 * s);
     }
   }
@@ -381,9 +391,9 @@ const shimmer: Move = (cars, an, ph) => {
   const mid = (ph.lo + ph.hi) / 2, [home] = slotFor(cars, mid, lo, hi);
   for (let k = 0, i = ph.a; i < ph.b; k++, i++) {
     const t = ev.t[i], s = levelAt(an, t), side: LR = k % 2 === 0 ? 'L' : 'R';
-    for (const car of s >= 0.5 ? cars : [home]) {
+    for (const car of s >= STEPS[1] ? cars : [home]) {
       const sd = car.x > home.x ? (side === 'L' ? 'R' : 'L') : side;
-      slotHit(car, sd, t, 0.07, s);
+      slotHit(car, sd, t, 0.07, s, owned(an, t));
     }
   }
 };
@@ -408,9 +418,9 @@ const motif: Move = (cars, an, ph) => {
   const path = far < target ? all.slice(far, target + 1) : all.slice(target, far + 1).reverse();
   run.forEach((i, k) => {
     const [car, side] = path[Math.min(k, path.length - 1)];
-    slotHit(car, side, ev.t[i], 0.1, Math.max(0.6, levelAt(an, ev.t[i])));
+    slotHit(car, side, ev.t[i], 0.1, Math.max(STEPS[2], levelAt(an, ev.t[i])));
   });
-  const t = ev.t[landI], hold = clip(ev.dur[landI], 0.4, 3.0), s = Math.max(0.75, levelAt(an, t));
+  const t = ev.t[landI], hold = clip(ev.dur[landI], 0.4, 3.0), s = Math.max(STEPS[3], levelAt(an, t));
   landCar.light(half(landCar, landSide, s), t, t + hold);
   landCar.light(half(landCar, landSide, s), t + hold, t + hold + 0.8, OFF_500);
   if (landCar.isCt) barSpan(landCar, t, hold + 0.5, ...barHalf(landSide));
@@ -423,6 +433,17 @@ const cadence: Move = (cars, an, ph) => {
   for (let i = ph.a; i < ph.b; i++) allOn(cars, ev.t[i], clip(ev.dur[i], 0.3, 1.5), i === ph.a);
 };
 
+/** The melody along every truck's bar while a beat move plays: a comet at each note's pitch, so the notes
+ * still show over the figure on the beat. */
+export const barMelody: Move = (cars, an, ph) => {
+  const trucks = cars.filter((c) => c.isCt), ev = an.events, [lo, hi] = phraseRange(ph);
+  if (!trucks.length) return;
+  for (let i = ph.a; i < ph.b; i++) {
+    const t = ev.t[i], s = levelAt(an, t);
+    for (const c of trucks) comet(c, t, posOf(ev.top[i], lo, hi), clip(ev.dur[i], 0.15, 0.5) + 0.15, 0.8 * s);
+  }
+};
+
 // --- beat moves ------------------------------------------------------------------------------------
 // Locked to the beat map: every beat from the middle level up, every second or fourth when calm (the
 // phrase's pace), each hit sized by the level.
@@ -432,9 +453,9 @@ function units(cars: Car[]): [Car, LR | null][] {
   return cars.length > 1 ? cars.map((c) => [c, null]) : [[cars[0], 'L'], [cars[0], 'R']];
 }
 
-function unitHit(car: Car, side: LR | null, t: number, dur: number, s: number) {
-  if (side) return slotHit(car, side, t, dur, s);
-  car.light(whole(car, Math.max(s, 0.45)), t, t + dur);
+function unitHit(car: Car, side: LR | null, t: number, dur: number, s: number, own: number) {
+  if (side) return slotHit(car, side, t, dur, s, own);
+  car.light(whole(car, Math.max(s, STEPS[1]), own), t, t + dur);
   if (car.isCt) barFlash(car, t, dur + 0.1, 0.5 + 0.5 * s);
 }
 
@@ -444,9 +465,10 @@ const march: Move = (cars, an, ph) => {
   const u = units(cars), seq = [...u, ...u.slice(1, -1).reverse()];
   const beats = grid(an, ph);
   beats.forEach((b, k) => {
-    const [car, side] = seq[k % seq.length], s = levelAt(an, b), hold = holdFor(next(beats, k, 0.5) - b, 0.9);
-    unitHit(car, side, b, hold, s);
-    car.light(side ? half(car, side, s) : whole(car, s), b + hold, b + hold + 0.5, OFF_500);
+    const [car, side] = seq[k % seq.length], s = levelAt(an, b), own = owned(an, b);
+    const hold = holdFor(next(beats, k, 0.5) - b, 0.9);
+    unitHit(car, side, b, hold, s, own);
+    car.light(side ? half(car, side, s, own) : whole(car, s, own), b + hold, b + hold + 0.5, OFF_500);
   });
 };
 
@@ -455,7 +477,7 @@ const lrChannel: Move = (cars, an, ph) => {
   const sidesOf = halves(cars), beats = grid(an, ph);
   beats.forEach((b, k) => {
     const s = levelAt(an, b), hold = holdFor(next(beats, k, 0.4) - b, 0.8, 0.45);
-    for (const [car, side] of sidesOf[k % 2]) slotHit(car, side, b, hold, s);
+    for (const [car, side] of sidesOf[k % 2]) slotHit(car, side, b, hold, s, owned(an, b));
   });
 };
 
@@ -466,7 +488,7 @@ const checker: Move = (cars, an, ph) => {
     const s = levelAt(an, b), hold = holdFor(next(beats, k, 0.4) - b);
     all.forEach(([car, side], j) => {
       if (j % 2 !== k % 2) return;
-      car.light(half(car, side, s), b, b + hold);
+      car.light(half(car, side, s, owned(an, b)), b, b + hold);
     });
     for (const car of cars.filter((c) => c.isCt)) {
       const n = frames(car, b, hold);
@@ -483,7 +505,7 @@ const tugOfWar: Move = (cars, an, ph) => {
       const [car, side] = all[j], start = beats[k0 + j];
       const end = beats[Math.min(beats.length - 1, k0 + 2 * n - 1 - j)] + 0.12;
       const s = levelAt(an, start);
-      car.light(half(car, side, s), start, Math.max(end, start + 0.15));
+      car.light(half(car, side, s, owned(an, start)), start, Math.max(end, start + 0.15));
       if (car.isCt) barSpan(car, start, Math.max(end - start, 0.15), ...barHalf(side), 0.5 + 0.5 * s);
     }
   }
@@ -501,7 +523,7 @@ const beam: Move = (cars, an, ph) => {
       for (const j of [pos - 1, pos]) {
         if (j < 0 || j >= n) continue;
         const [car, side] = all[j];
-        car.light(half(car, side, Math.max(s, 0.45)), t, t + per * 1.2);
+        car.light(half(car, side, Math.max(s, STEPS[1]), owned(an, t)), t, t + per * 1.2);
         if (car.isCt) {
           const centre = side === 'L' ? 0.25 : 0.75;
           barSpan(car, t, per * 1.2, centre - 0.25, centre + 0.25, 0.6 + 0.4 * s);
@@ -520,7 +542,7 @@ const converge: Move = (cars, an, ph) => {
       const t = b + (half8 * r) / rings;
       for (const k of new Set([r, n - 1 - r])) {
         const [car, side] = all[k];
-        car.light(half(car, side, s), t, t + 0.12);
+        car.light(half(car, side, s, owned(an, t)), t, t + 0.12);
       }
     }
     for (const car of cars.filter((c) => c.isCt)) {
@@ -534,14 +556,14 @@ const converge: Move = (cars, an, ph) => {
  * through every car to both ends. */
 const shockwave: Move = (cars, an, ph) => {
   const all = slots(cars), n = all.length, rings = n / 2;
-  const peak = levelAt(an, ph.t0) >= 0.8;
+  const peak = levelAt(an, ph.t0) >= STEPS[3];
   for (const d of grid(an, ph, peak ? 'beats' : 'downbeats')) {
     const s = levelAt(an, d), ring = beatAt(an, d) / 8;
     for (let r = 0; r < rings; r++) {                              // r = 0: the middle pair
       const t = d + r * ring;
       for (const k of new Set([rings - 1 - r, rings + r])) {
         const [car, side] = all[k];
-        car.light(half(car, side, Math.max(s, 0.45)), t, t + 0.14);
+        car.light(half(car, side, Math.max(s, STEPS[1]), owned(an, t)), t, t + 0.14);
       }
     }
     for (const car of cars.filter((c) => c.isCt)) {
@@ -587,34 +609,6 @@ export function lightning(cars: Car[], t: number) {
   for (const c of cars) {
     c.set(c.everything(), t + 0.39, t + 0.64, 0);
     c.set(C.FRONT_BAR, t + 0.39, t + 0.64, 0);
-  }
-}
-
-/** A release after a peak: the whole stage on at t0, coming apart layer by layer - fogs and markers, the
- * outer cars' headlights, the truck's, then the signatures - each fading over a second, until only the DRLs
- * glow and fade; the truck's bar dies from its ends in. */
-export function teardown(cars: Car[], t0: number, span: number) {
-  const ct = centreTruck(cars), ys = sides(cars);
-  const stages: [number, (c: Car) => number[], Car[]][] = [
-    [0.15, (c) => [...c.fogs(), ...c.markers()], cars],
-    [0.35, (c) => c.heads(), ys],
-    [0.6, (c) => c.heads(), ct ? [ct] : []],
-    [0.85, (c) => c.sig(), cars],
-  ];
-  for (const [frac, group, who] of stages) {
-    for (const c of who) {
-      const off = t0 + span * frac;
-      c.light(group(c), t0, off);
-      c.light(group(c), off, off + 1.0, OFF_1000);
-    }
-  }
-  for (const c of cars) {
-    c.light(c.drl(), t0, t0 + span, ON);
-    c.light(c.drl(), t0 + span, t0 + span + 2.0, C.OFF_2000);
-  }
-  if (ct !== null) {
-    const m = frames(ct, t0, span), d = linspace(-1, 1, BAR).map(Math.abs);
-    ct.pixels(C.FRONT_BAR, t0, rows(m, (f, k) => (f / m < 1 - d[k] * 0.9 ? 1 : 0)));
   }
 }
 

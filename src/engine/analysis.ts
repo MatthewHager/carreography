@@ -38,9 +38,8 @@ export interface Phrase {
   gesture: string;
   density: number;      // notes per second
   up: number;           // share of rising steps in the melody
-  lo: number;           // the melody's lowest and highest pitch
+  lo: number;           // the melody's lowest and highest pitch, but for strays (its 10th and 90th percentiles)
   hi: number;
-  index: number;        // the phrase's number among those with its gesture
   level?: number;
   mood?: string;
   move?: string;
@@ -99,4 +98,5 @@ export interface Analysis {
   // set while choreographing
   phrases?: Phrase[];
   level?: Float32Array;  // per frame 0..1: how big the show is (level.ts)
+  beatLamps?: Uint8Array;   // per frame, the headlights the beat layer owns: 0, 1 the inner beams, 2 both (pulse.ts)
 }

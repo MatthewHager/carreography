@@ -18,10 +18,10 @@ import { Car, makeLineup } from './car';
 import * as CAT from './catalog';
 import * as C from './channels';
 import * as DRUMS from './drums';
-import { clarity, feel, flowsAt, kitAt } from './feel';
+import { clarity, feel, flowsAt, kitAt, steadyAt } from './feel';
 import * as LAMPS from './lamps';
 import * as LEGATO from './legato';
-import { levelAt, levelCurve, levelOver } from './level';
+import { levelAt, levelCurve, levelOver, STEPS, stepOf } from './level';
 import * as LY from './lyrics';
 import type { Moment } from './lyrics';
 import * as MD from './mood';
@@ -48,11 +48,12 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   for (const ph of phrases) if (flowsAt(an, ph.t0)) ph.move = 'legato';
   const said = sung ? LY.moments(sung, an) : [];
   const endsFlowing = flowing.length > 0 && LEGATO.choreograph(cars, an, flowing);
+  an.beatLamps = PULSE.ownership(an);       // the headlights the beat plays, which the moves leave to it
   BED.apply(cars, an);
   pedal(cars, an);
   playPassages(cars, an, phrases.filter((ph) => ph.move !== 'legato'));
   DRUMS.apply(cars, an);
-  PULSE.apply(cars, an, phrases);
+  PULSE.apply(cars, an);
   PULSE.dropHits(cars, an);
   strikes(cars, an, said);
   colours(cars, said);
@@ -71,11 +72,14 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
 }
 
 // ---- Passages ----------------------------------------------------------------------------------
-// One move per passage, so the same music reads as the same idea: Hall of the Mountain King's theme,
-// played eighteen times and growing, keeps its move and grows with the level. A passage runs from one
-// change in the music to the next: a section of the form map that brings back earlier material (it
-// replays that material's moves, so a chorus looks like the chorus), or a new section where the sound
-// changes (a novelty peak). A passage over 40 s is split where its sound changes most.
+// One move per passage, so the same music reads as the same idea, and a new move where the music grows:
+// Hall of the Mountain King's theme, played eighteen times and growing, follows its notes while it is quiet,
+// then turns into figures that travel the whole stage on the beat as it drives into its climax. A passage
+// runs from one change in the music to the next: a section of the form map that brings back earlier
+// material (it replays that material's moves at the same level, so a chorus looks like the chorus), or a
+// new section where the sound changes (a novelty peak). A passage over LONG_S is split where its sound
+// changes most, and wherever the level settles on another step for BAND_S or more (calm, groove, drive, the
+// peak), so the look changes as the music builds.
 
 interface Passage {
   t0: number;
@@ -85,7 +89,9 @@ interface Passage {
 }
 
 const CHANGE = 0.6;     // a novelty peak this strong (0..1) at a section's start makes a new passage
+const SPLIT = 0.5;      // ... and this strong inside a long passage splits it (any marked change will do)
 const LONG_S = 40, PIECE_S = 12;
+const BAND_S = 8;
 
 function passages(an: Analysis): Passage[] {
   const secs = an.sections?.length ? an.sections : [{ t0: 0, t1: an.duration, letter: 'A' }];
@@ -106,7 +112,7 @@ function passages(an: Analysis): Passage[] {
   // long passages split where the sound changes most
   const split = (p: Passage): Passage[] => {
     if (p.t1 - p.t0 <= LONG_S) return [p];
-    const inner = peaks.filter(([t, v]) => v >= 0.5 && t > p.t0 + PIECE_S && t < p.t1 - PIECE_S);
+    const inner = peaks.filter(([t, v]) => v >= SPLIT && t > p.t0 + PIECE_S && t < p.t1 - PIECE_S);
     if (!inner.length) return [p];
     const [cut] = inner.reduce((a, b) => (b[1] > a[1] ? b : a));
     return [...split({ ...p, t1: cut }), ...split({ ...p, t0: cut })];
@@ -114,53 +120,94 @@ function passages(an: Analysis): Passage[] {
   return out.flatMap((p) => split(p).map((q, k) => ({ ...q, piece: k })));
 }
 
-/** Does the passage call for a move that follows the melody (notes enough to follow) rather than the
- * beat (a clear beat under sparse notes: a singer over a band)? Either will do in between: then the one
- * the previous passage didn't take, for contrast. */
-function family(an: Analysis, p: Passage, before: 'note' | 'beat' | null): 'note' | 'beat' {
-  const ev = an.events;
-  const notes = ev.t.filter((t) => t >= p.t0 && t < p.t1).length / Math.max(p.t1 - p.t0, 1);
-  const clear = clarity(an, p.t0, p.t1, 0);
-  if (clear < 2.0 || notes >= 5.5) return 'note';
-  if (notes < 2.0 || (kitAt(an, (p.t0 + p.t1) / 2) && notes < 3.5)) return 'beat';
+/** The level's step (calm counting as hush) a run of phrases settles on, merged so none is under BAND_S:
+ * [step, the phrases]. */
+function bands(phrases: Phrase[]): [number, Phrase[]][] {
+  const out: [number, Phrase[]][] = [];
+  for (const ph of phrases) {
+    const step = Math.max(1, stepOf(ph.level ?? 0)), last = out[out.length - 1];
+    if (last && last[0] === step) last[1].push(ph);
+    else out.push([step, [ph]]);
+  }
+  const span = (r: Phrase[]) => r[r.length - 1].t1 - r[0].t0;
+  for (let i = 0; i < out.length;) {                        // a short run joins the longer neighbour
+    if (out.length === 1 || span(out[i][1]) >= BAND_S) {
+      i++;
+      continue;
+    }
+    const left = i === out.length - 1 || (i > 0 && span(out[i - 1][1]) >= span(out[i + 1][1]));
+    const j = left ? i - 1 : i + 1;
+    out[j][1] = j < i ? [...out[j][1], ...out[i][1]] : [...out[i][1], ...out[j][1]];
+    out.splice(i, 1);
+    i = Math.max(0, Math.min(i, j) - 1);
+  }
+  return out;
+}
+
+const DENSE = 5.5, SPARSE = 2.0, SUNG = 3.5;   // notes a second: enough to follow, too few, a singer's line
+const BEATS = 2.0;                             // clarity (feel.ts) of a beat the figures can follow
+
+/** Does a run of phrases call for a move that follows the melody or one that follows the beat? With no
+ * beat to follow, or none the music strikes (a held chord), the melody. From drive up, the beat: the whole
+ * stage moves together on it, whatever the notes do. Below that, the melody where there are notes enough to
+ * follow, the beat under sparse notes (a singer over a band), and in between the one the previous passage
+ * didn't take, for contrast. */
+function family(an: Analysis, t0: number, t1: number, step: number,
+  before: 'note' | 'beat' | null): 'note' | 'beat' {
+  const notes = an.events.t.filter((t) => t >= t0 && t < t1).length / Math.max(t1 - t0, 1);
+  const mid = (t0 + t1) / 2;
+  if (!steadyAt(an, mid) && clarity(an, t0, t1, 0) < BEATS) return 'note';
+  if (PULSE.struckShare(an, t0, t1) < 0.5) return 'note';
+  if (step >= 3) return 'beat';
+  if (notes >= DENSE) return 'note';
+  if (notes < SPARSE || (kitAt(an, mid) && notes < SUNG)) return 'beat';
   return before === 'note' ? 'beat' : 'note';
 }
 
 /** Every passage's move, and every phrase's: a phrase whose shape asks for its own move (chords, a trill,
  * a cadence, the motif) plays that; the rest play their passage's. A beat move plays across its whole
- * passage, rests included; a note move plays each phrase's notes. */
+ * stretch, rests included, with the melody riding the trucks' bars on top; a note move plays each phrase's
+ * notes. */
 function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
   const used = new Map<string, number>();
-  const byLetter = new Map<string, string[]>();
+  const byKey = new Map<string, string>();
   let prev: string | null = null, prevFamily: 'note' | 'beat' | null = null;
-  const ps = passages(an).filter((p) => phrases.some((ph) => ph.t0 >= p.t0 - 0.01 && ph.t0 < p.t1));
-  for (const p of ps) {
-    let move = byLetter.get(p.letters[0])?.[p.piece];
-    if (move === undefined) {
-      const fam = family(an, p, prevFamily);
-      const pool = fam === 'note' ? CAT.NOTE_MOVES : CAT.BEAT_MOVES;
-      const fresh = pool.filter((m) => m !== prev);
-      move = fresh.reduce((best, m) => ((used.get(m) ?? 0) < (used.get(best) ?? 0) ? m : best), fresh[0]);
-    }
-    for (const letter of p.letters) {                       // a letter heard again replays this
-      if (!byLetter.has(letter)) byLetter.set(letter, []);
-      byLetter.get(letter)![p.piece] ??= move;
-    }
-    used.set(move, (used.get(move) ?? 0) + 1);
-    prev = move;
-    prevFamily = CAT.NOTE_MOVES.includes(move) ? 'note' : 'beat';
-    const own = phrases.filter((ph) => ph.t0 >= p.t0 - 0.01 && ph.t0 < p.t1);
-    for (const ph of own) ph.move = CAT.FOR_GESTURE[ph.gesture] ?? move;
-    if (prevFamily === 'beat') {
-      // the beat move across the passage, around the phrases that play their own
-      let t = p.t0;
-      for (const ph of [...own.filter((q) => q.move !== move), { t0: p.t1, t1: p.t1 } as Phrase]) {
-        for (const [a, b] of beating(an, t, ph.t0)) if (b - a >= 1.0) M.MOVES[move](cars, an, stretch(an, a, b));
-        t = Math.max(t, ph.t1);
+  for (const p of passages(an)) {
+    const mine = phrases.filter((ph) => ph.t0 >= p.t0 - 0.01 && ph.t0 < p.t1);
+    if (!mine.length) continue;
+    const runs = bands(mine);
+    runs.forEach(([step, own], r) => {
+      const t0 = r === 0 ? p.t0 : own[0].t0, t1 = r === runs.length - 1 ? p.t1 : runs[r + 1][1][0].t0;
+      const key = `${p.letters[0]}:${p.piece}:${step}`;      // a letter heard again at this level replays it
+      let move = byKey.get(key);
+      if (move === undefined) {
+        const pool = family(an, t0, t1, step, prevFamily) === 'note' ? CAT.NOTE_MOVES : CAT.BEAT_MOVES;
+        const fresh = pool.filter((m) => m !== prev);
+        move = fresh.reduce((best, m) => ((used.get(m) ?? 0) < (used.get(best) ?? 0) ? m : best), fresh[0]);
       }
-    }
-    for (const ph of own) if (ph.move !== move || prevFamily === 'note') M.MOVES[ph.move!](cars, an, ph);
-    for (const ph of own) arrivals(cars, an, ph);
+      for (const letter of p.letters) {
+        const k = `${letter}:${p.piece}:${step}`;
+        if (!byKey.has(k)) byKey.set(k, move);
+      }
+      used.set(move, (used.get(move) ?? 0) + 1);
+      prev = move;
+      prevFamily = CAT.NOTE_MOVES.includes(move) ? 'note' : 'beat';
+      for (const ph of own) ph.move = CAT.FOR_GESTURE[ph.gesture] ?? move;
+      if (prevFamily === 'beat') {
+        // the beat move across the stretch, around the phrases that play their own
+        let t = t0;
+        for (const ph of [...own.filter((q) => q.move !== move), { t0: t1, t1 } as Phrase]) {
+          for (const [a, b] of beating(an, t, ph.t0)) {
+            if (b - a < 1.0) continue;
+            M.MOVES[move](cars, an, stretch(an, a, b));
+            M.barMelody(cars, an, stretch(an, a, b));
+          }
+          t = Math.max(t, ph.t1);
+        }
+      }
+      for (const ph of own) if (ph.move !== move || prevFamily === 'note') M.MOVES[ph.move!](cars, an, ph);
+      for (const ph of own) arrivals(cars, an, ph);
+    });
   }
 }
 
@@ -173,7 +220,7 @@ function beating(an: Analysis, t0: number, t1: number): [number, number][] {
 /** A stretch of a passage as a phrase, for a beat move. */
 function stretch(an: Analysis, t0: number, t1: number): Phrase {
   const a = searchsorted(an.events.t, t0), b = searchsorted(an.events.t, t1);
-  return { a, b, t0, t1, gesture: 'figuration', density: 0, up: 0.5, lo: an.pitchLo, hi: an.pitchHi, index: 0,
+  return { a, b, t0, t1, gesture: 'figuration', density: 0, up: 0.5, lo: an.pitchLo, hi: an.pitchHi,
     level: levelOver(an, t0, t1) };
 }
 
@@ -185,10 +232,10 @@ function arrivals(cars: Car[], an: Analysis, ph: Phrase) {
   for (let i = ph.a; i < ph.b; i++) {
     if (!ev.arrival[i] || ph.move === 'cadence') continue;
     const t = ev.t[i], s = levelAt(an, t);
-    if (s >= 0.6) {
+    if (s >= STEPS[2]) {
       if (n++ % 2 === 1 && ev.dur[i] < 0.8) M.lightning(cars, t);
       else M.allOn(cars, t, clip(ev.dur[i], 0.3, 1.2));
-    } else if (s < 0.4) {
+    } else if (s < STEPS[1]) {
       for (const c of cars) {
         c.light(c.inner(), t, t + 0.8, C.ON_500);
         c.light(c.inner(), t + 0.8, t + 1.8, C.OFF_1000);
@@ -207,7 +254,7 @@ function pedal(cars: Car[], an: Analysis) {
   const anchor = trucks.length ? trucks : [cars[Math.floor(cars.length / 2)]];
   for (let i = 0; i < ev.t.length; i++) {
     const t = ev.t[i];
-    if (ev.low[i] <= 45 && ev.dur[i] >= 0.8 && levelAt(an, t) < 0.6 && !flowsAt(an, t)) {
+    if (ev.low[i] <= 45 && ev.dur[i] >= 0.8 && levelAt(an, t) < STEPS[2] && !flowsAt(an, t)) {
       const d = Math.min(ev.dur[i], 2.5);
       for (const c of anchor) {
         c.light(c.inner(), t, t + d, C.ON_2000);

@@ -14,7 +14,7 @@
 //   recitative   slow single notes with space between them
 
 import type { Analysis, Events, Phrase } from './analysis';
-import { mean, searchsorted } from './np';
+import { mean, quantiles, searchsorted } from './np';
 
 const MAX_PHRASE = 8.0;
 
@@ -115,15 +115,10 @@ export function segment(ev: Events, cutsAt?: number[] | null): Phrase[] {
     else if (m >= 5 && (up >= 0.8 || up <= 0.2) && dens >= 4) g = 'run';
     else if (dens >= 5.5) g = 'figuration';
     else g = 'recitative';
-    let lo = Infinity, hi = -Infinity;
-    for (let i = a; i < b; i++) [lo, hi] = [Math.min(lo, top[i]), Math.max(hi, top[i])];
+    // the melody's range without its strays (a passing high note would push the rest to one end of the stage)
+    const [lo, hi] = quantiles(top.slice(a, b), [0.1, 0.9]);
     const t1 = Math.min(maxEnd(a, b), t[b - 1] + 4);
-    phrases.push({ a, b, t0: t[a], t1, gesture: g, density: dens, up, lo, hi, index: 0 });
-  }
-  const counts = new Map<string, number>();
-  for (const p of phrases) {
-    p.index = counts.get(p.gesture) ?? 0;
-    counts.set(p.gesture, p.index + 1);
+    phrases.push({ a, b, t0: t[a], t1, gesture: g, density: dens, up, lo, hi });
   }
   return phrases;
 }

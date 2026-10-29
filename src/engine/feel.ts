@@ -13,6 +13,10 @@
 //          melody (choreo.ts): the listening's kit measure (kicks, snares and hats on the beats) at least
 //          KIT over the section.
 //
+// Alongside: whether the tracker keeps time there (steady). An orchestra's tutti strikes every eighth, so
+// its beats stand out little from the notes between them (a low an.beatConfidence), yet the beat is plain to
+// follow: the beat layer takes a steady beat as a clear one (pulse.ts).
+//
 // Measured on the beats as the listening tracked them, before tempo.ts moves them onto what is played. The
 // neural tracker's own beats say best whether there is a pulse: where it hears none its beats wander, while
 // the fallback tracker always draws an even grid.
@@ -31,6 +35,7 @@ export interface Feel {
   t1: number;
   flow: boolean;
   kit: boolean;
+  steady: boolean;
 }
 
 /**
@@ -85,17 +90,18 @@ export function feel(an: Analysis, phrases?: Phrase[]): Feel[] {
   out = spans.map(([t0, t1]) => {
     const beats = an.beats.filter((b) => b >= t0 && b < t1);
     const heard = an.heardBeats ? an.heardBeats.filter((b) => b >= t0 && b < t1) : beats;
-    const flow = clarity(an, t0, t1, 0) < FLOW_CLARITY && steadiness(heard, STEADY_TOL) < STEADY;
-    return { t0, t1, flow, kit: !flow && kitOver(an, t0, t1) >= KIT };
+    const steady = steadiness(heard, STEADY_TOL) >= STEADY;
+    return { t0, t1, flow: !steady && clarity(an, t0, t1, 0) < FLOW_CLARITY, kit: false, steady };
   });
-  // a short stretch between two that agree goes their way: the style doesn't flip for a few bars
-  for (let i = 1; i + 1 < out.length; i++) {
-    const f = out[i];
-    if (f.t1 - f.t0 < ISLAND_S && out[i - 1].flow === out[i + 1].flow && f.flow !== out[i - 1].flow) {
-      f.flow = !f.flow;
-      f.kit = f.kit && !f.flow;
+  // a short stretch between two that agree goes their way: the style doesn't flip for a few bars (judged on
+  // the stretches as heard, so one flip doesn't lead to the next)
+  const heardFlow = out.map((f) => f.flow);
+  out.forEach((f, i, all) => {
+    if (i > 0 && i + 1 < all.length && f.t1 - f.t0 < ISLAND_S && heardFlow[i - 1] === heardFlow[i + 1]) {
+      f.flow = heardFlow[i - 1];
     }
-  }
+    f.kit = !f.flow && kitOver(an, f.t0, f.t1) >= KIT;
+  });
   if (phrases?.length) {
     const starts = phrases.map((ph) => ph.t0);
     for (let i = 1; i < out.length; i++) {
@@ -119,3 +125,6 @@ export const flowsAt = (an: Analysis, t: number) => at(an, t).flow;
 
 /** Whether a rhythm section plays at t. */
 export const kitAt = (an: Analysis, t: number) => at(an, t).kit;
+
+/** Whether the beat tracker keeps steady time at t. */
+export const steadyAt = (an: Analysis, t: number) => at(an, t).steady;
