@@ -297,40 +297,40 @@ function stretch(an: Analysis, t0: number, t1: number): Phrase {
 //              seconds before, or a jump of BLAST
 //   blasts     a strike out of a breath that lands loud (LOUD: within 16 dB of the song's loud end, the show
 //              at a groove or more as it rings, RING_S on): BLAST (16 dB) louder than the quietest moment of
-//              the 0.4 s before (an orchestra's tutti after a rest, a band's hit after a stop)
-// light the whole stage, at most one for every ACCENT_EVERY_S of the song, none within ACCENT_GAP_S of
-// another, a drop, a cadence or lightning, strongest first. A strike out of silence (the 0.4 s before it at
-// REST: 30 dB under the loud end) lands whenever STRIKE_GAP_S has passed since the last, as the Toccata's
-// opening calls do. Every other arrival is punctuation on its own: the accents and the bars flash in lively
+//              the BREATH_S before (an orchestra's tutti after a rest, a band's hit after a stop)
+// light the whole stage, at most one for every ACCENT_EVERY_S of the song, strongest first: a strike out of
+// silence (the breath before it at REST: 30 dB under the loud end) at least STRIKE_GAP_S after another, as
+// the Toccata's opening calls are, anything else ACCENT_GAP_S clear of every other, a drop, a cadence or
+// lightning. Every other arrival is punctuation on its own: the accents and the bars flash in lively
 // music, the inner beams glow in calm.
 
 const BLAST = 0.4, LIFT = 0.08, LOUD = 0.6, REST = 0.25, RING_S = 0.8;
 const ACCENT_EVERY_S = 40, ACCENT_GAP_S = 10, STRIKE_GAP_S = 4;
+const BREATH_S = 0.4, ATTACK_S = 0.15;     // the breath before a strike, and its attack (the loudest moment)
+const LIFT_WEIGHT = 2;     // a step up in the level counts twice a jump in loudness: it lasts
+const STRIKE_HOLD_S = 0.3;     // a strike holds the whole stage this long at most, and under a beat
 
 function accents(cars: Car[], an: Analysis, phrases: Phrase[], said: Moment[]) {
   const x = an.loudness, ev = an.events, at = (t: number) => clip(Math.round(t / an.step), 0, an.nFrames - 1);
-  const around = (t: number) => {
+  /** [the quietest moment of the breath before t (silence before the song), the loudest of its attack] */
+  const around = (t: number): [number, number] => {
     let before = Infinity, after = 0;
-    for (let f = at(t - 0.4); f < at(t - 0.05); f++) before = Math.min(before, x[f]);
-    for (let f = at(t); f <= at(t + 0.15); f++) after = Math.max(after, x[f]);
-    return [Math.min(before, after), after];
+    for (let f = at(t - BREATH_S); f < at(t - 0.05); f++) before = Math.min(before, x[f]);
+    for (let f = at(t); f <= at(t + ATTACK_S); f++) after = Math.max(after, x[f]);
+    return [before === Infinity ? 0 : before, after];
   };
-  const jump = (t: number) => around(t)[1] - around(t)[0];
   const lift = (t: number) => levelOver(an, t, t + 2) - levelOver(an, t - 4, t - 0.3);
-  const strength = (t: number) => jump(t) + 2 * Math.max(0, lift(t));
+  const strength = (t: number, [before, after]: [number, number]) =>
+    after - before + LIFT_WEIGHT * Math.max(0, lift(t));
   const lively = (t: number) => levelAt(an, t) >= DRIVE && !flowsAt(an, t);
   const taken = [...PULSE.drops(an), ...said.filter((m) => m.do === 'lightning').map((m) => onGrid(an, m.t0))];
   for (const ph of phrases) if (ph.move === 'cadence') for (let i = ph.a; i < ph.b; i++) taken.push(ev.t[i]);
-  const cands: [number, number, number][] = [];               // [t, strength, hold]
-  const kept: number[] = [];
+  const cands: { t: number; strength: number; hold: number; strike: boolean }[] = [];
   for (const h of an.hits) {
-    const [before, after] = around(h), hold = Math.min(0.3, M.beatAt(an, h) * 0.6);
+    const [before, after] = around(h);
     if (after < LOUD || after - before < BLAST || levelAt(an, h + RING_S) < GROOVE || flowsAt(an, h)) continue;
-    if (before > REST) cands.push([h, strength(h), hold]);
-    else if (kept.every((u) => h - u >= STRIKE_GAP_S) && taken.every((u) => Math.abs(u - h) >= 1)) {
-      kept.push(h);
-      M.allOn(cars, h, hold);
-    }
+    const hold = Math.min(STRIKE_HOLD_S, M.beatAt(an, h) * 0.6);
+    cands.push({ t: h, strength: strength(h, [before, after]), hold, strike: before <= REST });
   }
   const arrivals: number[] = [];
   for (const ph of phrases) {
@@ -339,20 +339,24 @@ function accents(cars: Car[], an: Analysis, phrases: Phrase[], said: Moment[]) {
       const t = ev.t[i];
       if (!ev.arrival[i]) continue;
       arrivals.push(i);
-      if (!lively(t) || (lift(t) < LIFT && jump(t) < BLAST)) continue;
-      cands.push([t, strength(t), clip(ev.dur[i], 0.3, 1.2)]);
+      const [before, after] = around(t);
+      if (!lively(t) || (lift(t) < LIFT && after - before < BLAST)) continue;
+      cands.push({ t, strength: strength(t, [before, after]), hold: clip(ev.dur[i], 0.3, 1.2), strike: false });
     }
   }
   let most = Math.round(an.duration / ACCENT_EVERY_S);
-  for (const [t, , hold] of cands.sort((p, q) => q[1] - p[1])) {
-    if (most <= 0 || [...taken, ...kept].some((u) => Math.abs(u - t) < ACCENT_GAP_S)) continue;
+  const kept: typeof cands = [];
+  for (const c of cands.sort((p, q) => q.strength - p.strength)) {
+    const near = (u: number, gap: number) => Math.abs(u - c.t) < gap;
+    if (most <= 0 || taken.some((u) => near(u, c.strike ? 1 : ACCENT_GAP_S))
+      || kept.some((k) => near(k.t, c.strike && k.strike ? STRIKE_GAP_S : ACCENT_GAP_S))) continue;
     most--;
-    kept.push(t);
-    M.allOn(cars, t, hold);
+    kept.push(c);
+    M.allOn(cars, c.t, c.hold);
   }
   for (const i of arrivals) {
     const t = ev.t[i];
-    if (kept.includes(t)) continue;
+    if (kept.some((k) => k.t === t)) continue;
     if (levelAt(an, t) < GROOVE) {
       for (const c of cars) {
         c.light(c.inner(), t, t + 0.8, C.ON_500);
