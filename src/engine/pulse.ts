@@ -245,7 +245,7 @@ export function dropHits(cars: Car[], an: Analysis): void {
       c.set([...C.FRONT_BAR, ...C.REAR_BAR, ...C.OFFROAD_BAR], d - gap, d, 0);
       c.set(C.ALL_RGB.flatMap((ch) => [ch, ch + 1, ch + 2]), d - gap, d, 0);
     }
-    M.allOn(cars, d, clip(beat, 0.3, 0.6), false);
+    M.allOn(cars, d, clip(beat, 0.3, 0.6));
     for (const c of cars) c.rgb(d, d + clip(beat, 0.3, 0.6), [255, 255, 255]);
   }
 }

@@ -448,10 +448,10 @@ const motif: Move = (cars, an, ph) => {
   for (const c of cars) c.rgb(t, t + hold, [255, 255, 255], 0.6);
 };
 
-/** A big closing chord: a breath of black, then the whole stage on for the chord. */
+/** A big closing chord: the whole stage on for the chord. */
 const cadence: Move = (cars, an, ph) => {
   const ev = an.events;
-  for (let i = ph.a; i < ph.b; i++) allOn(cars, ev.t[i], clip(ev.dur[i], 0.3, 1.5), i === ph.a);
+  for (let i = ph.a; i < ph.b; i++) allOn(cars, ev.t[i], clip(ev.dur[i], 0.3, 1.5));
 };
 
 /** The melody along every truck's bar: a comet at each note's pitch, faint when the music is quiet, so the
@@ -601,14 +601,9 @@ const shockwave: Move = (cars, an, ph) => {
 
 // --- hits ------------------------------------------------------------------------------------------
 
-/** Every lamp of every car on at t for `hold`, then a half-second fade; with `blackout`, a breath of black
- * just before, so it lands. */
-export function allOn(cars: Car[], t: number, hold: number, blackout = true) {
+/** Every lamp of every car on at t for `hold`, then a half-second fade. */
+export function allOn(cars: Car[], t: number, hold: number) {
   for (const c of cars) {
-    if (blackout) {
-      c.set(c.everything(), t - 0.16, t, 0);
-      c.set([...C.FRONT_BAR, ...C.REAR_BAR], t - 0.16, t, 0);
-    }
     c.light(c.everything(), t, t + hold);
     c.light(c.everything(), t + hold, t + hold + 0.6, OFF_500);
     if (c.isCt) {

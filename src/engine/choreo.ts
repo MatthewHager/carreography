@@ -55,8 +55,8 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   DRUMS.apply(cars, an);
   PULSE.apply(cars, an);
   PULSE.dropHits(cars, an);
-  blasts(cars, an);
   strikes(cars, an, said);
+  accents(cars, an, phrases, said);
   colours(cars, said);
   motors.choreograph(cars, an);
   if (!endsFlowing) finale(cars, an);      // (music that ends flowing has already faded out)
@@ -207,7 +207,6 @@ function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
         }
       }
       for (const ph of own) if (ph.move !== move || prevFamily === 'note') M.MOVES[ph.move!](cars, an, ph);
-      for (const ph of own) arrivals(cars, an, ph);
     });
   }
 }
@@ -225,41 +224,81 @@ function stretch(an: Analysis, t0: number, t1: number): Phrase {
     level: levelOver(an, t0, t1) };
 }
 
-/** The phrase's arrival chords, punctuation whatever the move: in lively music the whole stage hits (every
- * other short one a lightning strike), a calm arrival glows, and in between the headlights flash. */
-function arrivals(cars: Car[], an: Analysis, ph: Phrase) {
-  const ev = an.events;
-  let n = 0;
-  for (let i = ph.a; i < ph.b; i++) {
-    if (!ev.arrival[i] || ph.move === 'cadence') continue;
-    const t = ev.t[i], s = levelAt(an, t);
-    if (s >= STEPS[2]) {
-      if (n++ % 2 === 1 && ev.dur[i] < 0.8) M.lightning(cars, t);
-      else M.allOn(cars, t, clip(ev.dur[i], 0.3, 1.2));
-    } else if (s < STEPS[1]) {
+// ---- Accents ----------------------------------------------------------------------------------
+// The whole stage at once is the show's exclamation mark, so it is kept for the moments that stand out most.
+// Besides the drops (pulse.ts), the cadences' closing chords (the cadence move) and a sung line's lightning
+// (lyrics.ts), the strongest of
+//   arrivals   a phrase's arrival chord in lively music where the music steps up: its level LIFT over the
+//              seconds before, or a jump of BLAST
+//   blasts     a strike out of a breath that lands loud (LOUD: within 16 dB of the song's loud end, the show
+//              at a groove or more as it rings, RING_S on): BLAST (16 dB) louder than the quietest moment of
+//              the 0.4 s before (an orchestra's tutti after a rest, a band's hit after a stop)
+// light the whole stage, at most one for every ACCENT_EVERY_S of the song, none within ACCENT_GAP_S of
+// another, a drop, a cadence or lightning, strongest first. A strike out of silence (the 0.4 s before it at
+// REST: 30 dB under the loud end) lands whenever STRIKE_GAP_S has passed since the last, as the Toccata's
+// opening calls do. Every other arrival is punctuation on its own: the accents and the bars flash in lively
+// music, the inner beams glow in calm.
+
+const BLAST = 0.4, LIFT = 0.08, LOUD = 0.6, REST = 0.25, RING_S = 0.8;
+const ACCENT_EVERY_S = 40, ACCENT_GAP_S = 10, STRIKE_GAP_S = 4;
+
+function accents(cars: Car[], an: Analysis, phrases: Phrase[], said: Moment[]) {
+  const x = an.loudness, ev = an.events, at = (t: number) => clip(Math.round(t / an.step), 0, an.nFrames - 1);
+  const around = (t: number) => {
+    let before = Infinity, after = 0;
+    for (let f = at(t - 0.4); f < at(t - 0.05); f++) before = Math.min(before, x[f]);
+    for (let f = at(t); f <= at(t + 0.15); f++) after = Math.max(after, x[f]);
+    return [Math.min(before, after), after];
+  };
+  const jump = (t: number) => around(t)[1] - around(t)[0];
+  const lift = (t: number) => levelOver(an, t, t + 2) - levelOver(an, t - 4, t - 0.3);
+  const strength = (t: number) => jump(t) + 2 * Math.max(0, lift(t));
+  const lively = (t: number) => levelAt(an, t) >= STEPS[2] && !flowsAt(an, t);
+  const taken = [...PULSE.drops(an), ...said.filter((m) => m.do === 'lightning').map((m) => onGrid(an, m.t0))];
+  for (const ph of phrases) if (ph.move === 'cadence') for (let i = ph.a; i < ph.b; i++) taken.push(ev.t[i]);
+  const cands: [number, number, number][] = [];               // [t, strength, hold]
+  const kept: number[] = [];
+  for (const h of an.hits) {
+    const [before, after] = around(h), hold = Math.min(0.3, M.beatAt(an, h) * 0.6);
+    if (after < LOUD || after - before < BLAST || levelAt(an, h + RING_S) < STEPS[1] || flowsAt(an, h)) continue;
+    if (before > REST) cands.push([h, strength(h), hold]);
+    else if (kept.every((u) => h - u >= STRIKE_GAP_S) && taken.every((u) => Math.abs(u - h) >= 1)) {
+      kept.push(h);
+      M.allOn(cars, h, hold);
+    }
+  }
+  const arrivals: number[] = [];
+  for (const ph of phrases) {
+    if (ph.move === 'cadence' || ph.move === 'legato') continue;
+    for (let i = ph.a; i < ph.b; i++) {
+      const t = ev.t[i];
+      if (!ev.arrival[i]) continue;
+      arrivals.push(i);
+      if (lively(t) && (lift(t) >= LIFT || jump(t) >= BLAST)) cands.push([t, strength(t), clip(ev.dur[i], 0.3, 1.2)]);
+    }
+  }
+  let most = Math.round(an.duration / ACCENT_EVERY_S);
+  for (const [t, , hold] of cands.sort((p, q) => q[1] - p[1])) {
+    if (most <= 0 || [...taken, ...kept].some((u) => Math.abs(u - t) < ACCENT_GAP_S)) continue;
+    most--;
+    kept.push(t);
+    M.allOn(cars, t, hold);
+  }
+  for (const i of arrivals) {
+    const t = ev.t[i];
+    if (kept.includes(t)) continue;
+    if (levelAt(an, t) < STEPS[1]) {
       for (const c of cars) {
         c.light(c.inner(), t, t + 0.8, C.ON_500);
         c.light(c.inner(), t + 0.8, t + 1.8, C.OFF_1000);
       }
     } else {
-      for (const c of cars) c.flash(c.heads(), t, 0.15);
+      const hold = clip(ev.dur[i], 0.15, 0.4);
+      for (const c of cars) {
+        c.flash(c.accents(), t, hold);
+        if (c.hasBar) M.barFlash(c, t, hold + 0.2, 0.9);
+      }
     }
-  }
-}
-
-const BLAST = 0.4;      // a hit this much louder than the moment before it (an.loudness: 16 dB) is a blast
-
-/** A strike out of a breath in loud music - an orchestra's tutti chord after a rest, a band's hit after a
- * stop - lights the whole stage at once: an accent (an.hits) at drive or above that jumps BLAST over the
- * quietest moment of the 0.4 s before it. */
-function blasts(cars: Car[], an: Analysis) {
-  const x = an.loudness, at = (t: number) => clip(Math.round(t / an.step), 0, an.nFrames - 1);
-  for (const h of an.hits) {
-    if (levelAt(an, h) < STEPS[2] || flowsAt(an, h)) continue;
-    let before = Infinity, after = 0;
-    for (let f = at(h - 0.4); f < at(h - 0.05); f++) before = Math.min(before, x[f]);
-    for (let f = at(h); f <= at(h + 0.15); f++) after = Math.max(after, x[f]);
-    if (after - before >= BLAST) M.allOn(cars, h, Math.min(0.3, M.beatAt(an, h) * 0.6), false);
   }
 }
 
