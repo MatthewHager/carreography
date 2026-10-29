@@ -113,7 +113,7 @@ export function juniperOutput(car: Car): void {
       let p = left[fr] * (1 - w[k]) + right[fr] * w[k];
       p = Math.max(p, fogLevel[fr] * mid[k]);
       const v = u8(clip(p * 255, 0, 255));
-      const at = fr * N + bar[n - 1 - k];                // reversed: Tesla numbers the bar from the vehicle's left
+      const at = fr * N + bar[n - 1 - k];            // reversed: Tesla numbers it from the vehicle's left
       if (f[at] < v) f[at] = v;
     }
   }

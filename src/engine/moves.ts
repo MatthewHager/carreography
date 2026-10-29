@@ -570,7 +570,8 @@ const checker: Move = (cars, an, ph) => {
   beats.forEach((b, k) => {
     const s = levelAt(an, b), hold = holdFor(next(beats, k, 0.4) - b);
     u.forEach(([car, side], j) => {
-      if (j % 2 === k % 2) car.light(side ? half(car, side, s, owned(an, b)) : whole(car, s, owned(an, b)), b, b + hold);
+      const own = owned(an, b);
+      if (j % 2 === k % 2) car.light(side ? half(car, side, s, own) : whole(car, s, own), b, b + hold);
     });
     for (const car of cars.filter((c) => c.isCt)) {
       const n = frames(car, b, hold);
@@ -640,7 +641,8 @@ const shockwave: Move = (cars, an, ph) => {
     const end = d + holdFor(next(beats, k, 0.5) - d);
     for (let r = 0; r < rings; r++) {                              // r = 0: the middle pair
       const t = d + r * step;
-      for (const j of new Set([rings - 1 - r, rings + r])) ring(all[j], t, Math.max(end, t + 0.14), s, owned(an, t));
+      const own = owned(an, t);
+      for (const j of new Set([rings - 1 - r, rings + r])) ring(all[j], t, Math.max(end, t + 0.14), s, own);
     }
     for (const car of cars.filter((c) => c.isCt)) {
       const m = frames(car, d, 0.45);

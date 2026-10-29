@@ -126,7 +126,8 @@ function glow(car: Car, chs: readonly number[], t0: number, t1: number, up: numb
 function tailBar(car: Car, t0: number, t1: number): void {
   const n = car.fr(t1 + 2.0) - car.fr(t0), up = Math.round(2.0 / car.step), hold = car.fr(t1) - car.fr(t0);
   const level = (f: number) => TAIL_BAR * Math.min(1, f / up, f < hold ? 1 : 1 - (f - hold) / up);
-  car.pixels(C.REAR_BAR, t0, Array.from({ length: n }, (_, f) => new Float64Array(C.REAR_BAR.length).fill(level(f))));
+  const row = (f: number) => new Float64Array(C.REAR_BAR.length).fill(level(f));
+  car.pixels(C.REAR_BAR, t0, Array.from({ length: n }, (_, f) => row(f)));
 }
 
 /**

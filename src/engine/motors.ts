@@ -1,7 +1,8 @@
 // The motor choreographer: closures as their own slow instruments, a side stage to the lights.
 //
 // Lights flash in 20 ms; the motors move in seconds (mirrors 2 s, windows 4 s, frunk and liftgates
-// 14 s up / 4 s down - the Cybertruck's frunk 10 s up - charge port 2 s), and Tesla counts their commands per show *per closure*
+// 14 s up / 4 s down - the Cybertruck's frunk 10 s up - charge port 2 s), and Tesla counts their commands
+// per show *per closure*
 // (liftgate 6, each window 6, each mirror 20, charge port 3). So they get their own choreography,
 // planned from the form map and the crescendos rather than from the lights, with its own moves:
 //
@@ -34,14 +35,15 @@ import { barLen, beatLen } from './tempo';
 const LIVELY = GROOVE;                // motors move only where the music is at least this lively (a groove)
 const LOUD = DRIVE;                  // ... and spend the most where it is loud (drive and the peak)
 
-export const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };   // Cybertruck frunk: timed on the truck, Oct 2026
+// the Cybertruck's frunk timed on the truck, Oct 2026
+export const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };
 const LIFTGATE_CLOSE_S = 4.0;
 export const WINDOW_S = 4.0, PORT_S = 2.0, MIRROR_S = 2.0;
-const WINDOW_BURST_S = 4.5, WINDOW_PEAK_DANCE_S = 10.0;   // window dances: ~3 x 4.5 + 10 = 24 s, under Tesla's ~30 s
+const WINDOW_BURST_S = 4.5, WINDOW_PEAK_DANCE_S = 10.0;   // window dances: ~3 x 4.5 + 10 = 24 s, under 30 s
 const LID_DANCE_MIN_S = 4.0, LID_DANCE_MAX_S = 9.0, LID_DANCE_BUDGET_S = 20.0;   // a lid's dance on a peak
 const LID_OPEN_MARGIN_S = 0.8;          // a lid only dances once fully open: land a little early
 const PORT_DANCE_MAX_S = 30.0;          // the port's rainbow: about 30 s of dancing a show, as for the motors
-const STILL_LIVELY_S = 12.0, STILL_CALM_S = 30.0;   // longest stretch with no motor moving, loud and in a groove
+const STILL_LIVELY_S = 12.0, STILL_CALM_S = 30.0;   // longest still stretch, loud and in a groove
 const ARRIVE_S = 0.5, BUILT = 0.55, HOLDS = 0.8, HOLD_MAX_S = 16, SPACING_S = 24;   // crescendos()
 const MIRROR_PULSE_CYCLES = 4;          // the steady mirror pulse, leaving commands for the rest of the song
 const RELAY_MAX_S = 4.0;                // the longest a car waits for the one before it (a lid's close)
@@ -89,7 +91,9 @@ function crescendos(an: Analysis, lead: number): Crescendo[] {
   for (const [t0, land] of builds(an)) cands.push([land, land - t0, 0.5]);
   for (const d of drops(an)) cands.push([d, null, 0.3]);
   const ev = an.events;
-  for (let i = 0; i < ev.t.length; i++) if (ev.arrival[i] === 1 && levelAt(an, ev.t[i]) >= LOUD) cands.push([ev.t[i], null, 0.2]);
+  for (let i = 0; i < ev.t.length; i++) {
+    if (ev.arrival[i] === 1 && levelAt(an, ev.t[i]) >= LOUD) cands.push([ev.t[i], null, 0.2]);
+  }
   const peaks: Crescendo[] = [];
   for (const [t, blen0, bonus] of cands) {
     const f = Math.min(Math.trunc(t / step), lv.length - 1);
@@ -252,7 +256,7 @@ function lids(cars: Car[], an: Analysis): void {
    *   wave       left to right two seconds apart, closing in the same order */
   const lidPlan = (pattern: number, k: number, peak: number, buildLen: number, holdUntil: number): LidPlan => {
     const travel = Math.max(3.5, Math.min(lead, Math.max(buildLen, 6.0)));     // the lid that lands on the peak
-    const rise = Math.max(5.0, Math.min(lead * 0.5, buildLen / 2));      // a part-way lift (about a third of the travel)
+    const rise = Math.max(5.0, Math.min(lead * 0.5, buildLen / 2));      // a part-way lift (a third of the way)
     const plan: LidPlan = new Map();
     cars.forEach((c, idx) => {
       let lag = 0.0;
@@ -357,7 +361,7 @@ function lids(cars: Car[], an: Analysis): void {
 function mirrors(cars: Car[], an: Analysis): [Line, Spent] {
   const end = an.duration;
   const line: Line = [];
-  for (const c of cars) for (const m of [C.R_MIRROR, C.L_MIRROR]) line.push([c, m]);   // crowd-left to crowd-right
+  for (const c of cars) for (const m of [C.R_MIRROR, C.L_MIRROR]) line.push([c, m]);   // crowd-left first
   const spent: Spent = new Map(cars.map((c) => [c, new Map([[C.R_MIRROR, 0], [C.L_MIRROR, 0]])]));
   const secs = an.sections ?? [];
   const bar = barLen(an);
@@ -476,7 +480,8 @@ function falconDoors(cars: Car[], an: Analysis): void {
       for (const w of C.WINDOWS) {
         // every window command that would have the window moving in the span: a whole run, plus travel
         for (const [a, b] of commandRuns(c, w)) {
-          if (a * an.step < still[1] && b * an.step + WINDOW_S > still[0]) for (let f = a; f < b; f++) c.put(f, w, 0);
+          if (a * an.step >= still[1] || b * an.step + WINDOW_S <= still[0]) continue;
+          for (let f = a; f < b; f++) c.put(f, w, 0);
         }
       }
       break;
@@ -639,7 +644,7 @@ function finishWindows(cars: Car[], an: Analysis): void {
       }
       if (last < 0) continue;
       let t = (last + 1) * an.step + 1.0;
-      for (const [a, b] of c.windowsStill) if (t + WINDOW_S > a && t < b) t = b;      // not while a Model X's doors move
+      for (const [a, b] of c.windowsStill) if (t + WINDOW_S > a && t < b) t = b;   // not while the doors move
       c.closure(w, Math.min(an.duration - 2.0, t), Math.min(an.duration - 1.5, t + 0.5), C.CLOSURE_OPEN);
     }
   }

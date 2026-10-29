@@ -238,7 +238,8 @@ function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
         // a replay keeps its move where the music still allows it (a beat to follow for a beat move, a held
         // chord for a swell) and the figure before didn't just play it: material repeated back to back
         // changes its figure rather than playing one move for half a minute
-        const fits = (m: string) => (familyOf(m) === 'held') === (fam === 'held') && (m !== prev || m === 'swell')
+        const fits = (m: string) => (familyOf(m) === 'held') === (fam === 'held')
+          && (m !== prev || m === 'swell')
           && (familyOf(m) !== 'beat' || fam === 'beat' || followable(an, g0, g1));
         if (move === undefined || !fits(move)) {
           const pool = fam === 'note' ? CAT.NOTE_MOVES : fam === 'beat' ? CAT.BEAT_MOVES : CAT.HELD_MOVES;
