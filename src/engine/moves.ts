@@ -268,8 +268,10 @@ const steps = (an: Analysis, t: number, span: number, n: number) =>
 
 const next = (g: number[], k: number, fallback: number) => (k + 1 < g.length ? g[k + 1] : g[k] + fallback);
 
-/** How long a beat-locked hit holds: most of the way to the next, never under a flash. */
-const holdFor = (gap: number, share = 0.85, most = 0.6) => clip(gap * share, 0.12, most);
+/** How long a beat-locked hit at level s holds: about half the way to the next beat in a groove, most of the
+ * way at the peak (`share` of it), so the stage fills as the music grows; never under a flash. */
+const holdFor = (gap: number, s: number, share = 0.85, most = 0.6) =>
+  clip(gap * share * (0.55 + 0.45 * clip((s - GROOVE) / (PEAK - GROOVE), 0, 1)), 0.12, most);
 
 // --- note moves -----------------------------------------------------------------------------------
 
@@ -310,13 +312,13 @@ const relay: Move = (cars, an, ph) => {
   let dir = ph.up >= 0.5 ? 1 : -1, pos = dir > 0 ? 0 : n - 1;
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], s = levelAt(an, t);
-    const [car, side, st] = stations[pos];
-    const hold = Math.max(clip(ev.dur[i], 0.1, 0.25), 0.2 + 0.2 * s);    // a trail, longer when loud
+    const [car, side, st] = stations[pos], nxt = ev.t[i + 1] ?? Infinity;
     if (typeof st === 'number') {
-      barSpan(car, t, hold + 0.1, st / 6, (st + 1) / 6, 0.6 + 0.4 * s);
-      if (s >= DRIVE) car.light(car.half(side, s), t, t + hold);
+      const trail = Math.max(clip(ev.dur[i], 0.1, 0.25), 0.2 + 0.2 * s);    // longer when loud
+      barSpan(car, t, trail + 0.1, st / 6, (st + 1) / 6, 0.6 + 0.4 * s);
+      if (s >= DRIVE) note(car, car.half(side, s), t, ev.dur[i], s, nxt);
     } else {
-      car.light(s >= DRIVE ? car.half(side, s) : st, t, t + hold);
+      note(car, s >= DRIVE ? car.half(side, s) : st, t, ev.dur[i], s, nxt);
     }
     if (i + 1 < ph.b) {
       const step = Math.sign(ev.top[i + 1] - ev.top[i]);
@@ -515,7 +517,7 @@ const march: Move = (cars, an, ph) => {
   const beats = grid(an, ph);
   beats.forEach((b, k) => {
     const [car, side] = seq[k % seq.length], s = levelAt(an, b);
-    const hold = holdFor(next(beats, k, 0.5) - b, 0.9);
+    const hold = holdFor(next(beats, k, 0.5) - b, s, 0.9);
     unitHit(car, side, b, hold, s);
     car.light(side ? car.half(side, s) : car.whole(s), b + hold, b + hold + 0.5, OFF_500);
   });
@@ -525,7 +527,7 @@ const march: Move = (cars, an, ph) => {
 const lrChannel: Move = (cars, an, ph) => {
   const sidesOf = halves(cars), beats = grid(an, ph);
   beats.forEach((b, k) => {
-    const s = levelAt(an, b), hold = holdFor(next(beats, k, 0.4) - b, 0.8, 0.45);
+    const s = levelAt(an, b), hold = holdFor(next(beats, k, 0.4) - b, s, 0.8, 0.45);
     for (const [car, side] of sidesOf[k % 2]) slotHit(car, side, b, hold, s);
   });
 };
@@ -535,14 +537,14 @@ const lrChannel: Move = (cars, an, ph) => {
 const checker: Move = (cars, an, ph) => {
   const u = units(cars), beats = grid(an, ph);
   beats.forEach((b, k) => {
-    const s = levelAt(an, b), hold = holdFor(next(beats, k, 0.4) - b);
+    const s = levelAt(an, b), hold = holdFor(next(beats, k, 0.4) - b, s);
     u.forEach(([car, side], j) => {
-      if (j % 2 === k % 2) car.light(side ? car.half(side, s) : car.whole(s), b, b + hold);
+      if (j % 2 !== k % 2) return;
+      car.light(side ? car.half(side, s) : car.whole(s), b, b + hold);
+      if (!car.isCt) return;
+      const n = frames(car, b, hold), flip = Math.floor(k / 2) % 2;      // on its own beats, in turn
+      car.pixels(C.FRONT_BAR, b, rows(n, (_, q) => (Math.floor(q / 10) % 2 === flip ? 0.5 + 0.5 * s : 0)));
     });
-    for (const car of cars.filter((c) => c.isCt)) {
-      const n = frames(car, b, hold);
-      car.pixels(C.FRONT_BAR, b, rows(n, (_, q) => (Math.floor(q / 10) % 2 === k % 2 ? 0.5 + 0.5 * s : 0)));
-    }
   });
 };
 
@@ -588,7 +590,7 @@ const beam: Move = (cars, an, ph) => {
 const converge: Move = (cars, an, ph) => {
   const all = slots(cars), n = all.length, rings = n / 2, beats = grid(an, ph);
   beats.forEach((b, k) => {
-    const s = levelAt(an, b), half8 = beatAt(an, b) / 2, end = b + holdFor(next(beats, k, 2 * half8) - b);
+    const s = levelAt(an, b), half8 = beatAt(an, b) / 2, end = b + holdFor(next(beats, k, 2 * half8) - b, s);
     for (let r = 0; r < rings; r++) {                     // r = 0: the two ends; the middle on the "and"
       const t = b + (half8 * r) / Math.max(1, rings - 1);
       for (const j of new Set([r, n - 1 - r])) ring(all[j], t, Math.max(end, t + 0.12), s);
@@ -606,7 +608,7 @@ const shockwave: Move = (cars, an, ph) => {
   const all = slots(cars), n = all.length, rings = n / 2, beats = grid(an, ph);
   beats.forEach((d, k) => {
     const s = Math.max(levelAt(an, d), GROOVE), step = beatAt(an, d) / 8;
-    const end = d + holdFor(next(beats, k, 0.5) - d);
+    const end = d + holdFor(next(beats, k, 0.5) - d, s);
     for (let r = 0; r < rings; r++) {                              // r = 0: the middle pair
       const t = d + r * step;
       for (const j of new Set([rings - 1 - r, rings + r])) ring(all[j], t, Math.max(end, t + 0.14), s);
