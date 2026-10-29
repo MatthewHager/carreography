@@ -3,12 +3,12 @@
 //   sections   boundaries from beat-synchronous chroma + timbre (agglomerative clustering)
 //   letters    repeated material gets the same letter (A, B, A', ...) by chroma/timbre similarity
 
-import type { Section } from './analysis';
-import { chromaCqt } from './listen/cqt';
+import type { Section } from '../analysis';
+import { chromaCqt } from './cqt';
 import {
   agglomerative, beatTrackY, framesToTime, mfcc, normalizeColumns, SR, sync, type Spectrum,
-} from './listen/dsp';
-import { clip, mean } from './np';
+} from './dsp';
+import { clip, mean } from '../np';
 
 /** The form map of `y` (mono, 22050 Hz): its sections, from the spectrum audio.ts already took of the
  * same samples. */
@@ -94,9 +94,4 @@ export function analyzeForm(y: Float32Array, duration: number, s: Spectrum): Sec
     }
   }
   return sections;
-}
-
-export function sectionAt(sections: Section[], t: number): Section {
-  for (const s of sections) if (s.t0 <= t && t < s.t1) return s;
-  return sections[sections.length - 1];
 }

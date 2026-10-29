@@ -22,12 +22,6 @@ export function std(a: Arr): number {
   return Math.sqrt(s / a.length);
 }
 
-export function max(a: Arr, start = 0, end = a.length): number {
-  let m = -Infinity;
-  for (let i = start; i < end; i++) if (a[i] > m) m = a[i];
-  return m;
-}
-
 /** Index of the first maximum. */
 export function argmax(a: Arr): number {
   let k = 0;
@@ -36,12 +30,6 @@ export function argmax(a: Arr): number {
 }
 
 /** Index of the first minimum. */
-export function argmin(a: Arr): number {
-  let k = 0;
-  for (let i = 1; i < a.length; i++) if (a[i] < a[k]) k = i;
-  return k;
-}
-
 /** The indices that sort `a` ascending; ties keep their order, NaNs go last. */
 export function argsort(a: Arr): number[] {
   const key = (i: number) => (Number.isNaN(a[i]) ? Infinity : a[i]);
@@ -66,27 +54,12 @@ export function quantiles(a: Arr, qs: number[]): number[] {
   return qs.map((q) => quantileOf(s, q));
 }
 
-export function percentile(a: Arr, p: number): number {
-  return quantile(a, p / 100);
-}
-
 export function median(a: Arr): number {
   const s = sorted(a), n = s.length;
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
 /** fp at each x, interpolated linearly between the points (xp ascending), held flat beyond them. */
-export function interp(x: Arr, xp: Arr, fp: Arr): Float64Array {
-  const out = new Float64Array(x.length), n = xp.length;
-  for (let i = 0; i < x.length; i++) {
-    const j = searchsorted(xp, x[i], 'right') - 1;
-    if (j < 0) out[i] = fp[0];
-    else if (j >= n - 1) out[i] = fp[n - 1];
-    else out[i] = fp[j] + ((fp[j + 1] - fp[j]) * (x[i] - xp[j])) / (xp[j + 1] - xp[j]);
-  }
-  return out;
-}
-
 /** `num` evenly spaced values from start to stop, both included. */
 export function linspace(start: number, stop: number, num: number): Float64Array {
   const out = new Float64Array(Math.max(0, num));
@@ -129,44 +102,8 @@ export function clip(x: number, lo: number, hi: number): number {
 }
 
 /** `a` convolved with the kernel `v`, centred, as long as the longer of the two. */
-export function convolveSame(a: Arr, v: Arr): Float64Array {
-  if (v.length > a.length) [a, v] = [v, a];
-  const n = a.length, m = v.length, half = Math.floor((m - 1) / 2);
-  const out = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    let s = 0;
-    for (let k = 0; k < m; k++) {
-      const j = i + half - k;
-      if (j >= 0 && j < n) s += a[j] * v[k];
-    }
-    out[i] = s;
-  }
-  return out;
-}
-
 /** Slope of the least-squares line through (0, y0), (1, y1), ... */
-export function slope(y: Arr): number {
-  const n = y.length, mx = (n - 1) / 2, my = mean(y);
-  let sxy = 0, sxx = 0;
-  for (let i = 0; i < n; i++) {
-    sxy += (i - mx) * (y[i] - my);
-    sxx += (i - mx) * (i - mx);
-  }
-  return sxy / sxx;
-}
-
 /** Pearson correlation of two equally long series. */
-export function corrcoef(x: Arr, y: Arr): number {
-  const mx = mean(x), my = mean(y);
-  let sxy = 0, sxx = 0, syy = 0;
-  for (let i = 0; i < x.length; i++) {
-    sxy += (x[i] - mx) * (y[i] - my);
-    sxx += (x[i] - mx) * (x[i] - mx);
-    syy += (y[i] - my) * (y[i] - my);
-  }
-  return clip(sxy / Math.sqrt(sxx * syy), -1, 1);
-}
-
 /** A 0..255 level as a byte (truncated). */
 export function u8(x: number): number {
   return x <= 0 ? 0 : x >= 255 ? 255 : Math.trunc(x);

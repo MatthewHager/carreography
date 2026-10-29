@@ -13,16 +13,10 @@
 //   cadence      a short phrase of big chords (an ending or a punctuation)
 //   recitative   slow single notes with space between them
 
-import type { Analysis, Events, Phrase } from './analysis';
+import type { Events, Phrase } from './analysis';
 import { mean, quantiles, searchsorted } from './np';
 
 const MAX_PHRASE = 8.0;
-
-/** The frames a phrase covers on the analysis grid: [first, end), never empty. */
-export function frameSpan(an: Pick<Analysis, 'step'>, ph: Pick<Phrase, 't0' | 't1'>): [number, number] {
-  const f0 = Math.trunc(ph.t0 / an.step);
-  return [f0, Math.max(f0 + 1, Math.trunc(ph.t1 / an.step))];
-}
 
 /** `cutsAt`: extra phrase boundaries in seconds (sung lines), snapped to the nearest event. */
 export function segment(ev: Events, cutsAt?: number[] | null): Phrase[] {

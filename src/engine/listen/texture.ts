@@ -7,8 +7,8 @@
 //   trill: 1 if part of a rapid two-note alternation
 //   arrival: 1 if a strong chord that lands after a run or a gap
 
-import type { Events } from './analysis';
-import { median, quantile } from './np';
+import type { Events } from '../analysis';
+import { median, quantile } from '../np';
 
 const GROUP_WINDOW = 0.045;   // onsets this close together are one event (one hand, one chord)
 

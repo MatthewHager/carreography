@@ -8,9 +8,9 @@
 // Everything comes from the full mix: there is no source separation.
 
 import type { Analysis } from '../analysis';
-import { analyzeForm } from '../form';
+import { analyzeForm } from './form';
 import { argmax, diff, mean, median, quantile, sum } from '../np';
-import { groupEvents, labelPhrases, pitchScale } from '../texture';
+import { groupEvents, labelPhrases, pitchScale } from './texture';
 import {
   beatTrack, framesToTime, HOP, localTempo, onsetDetect, onsetStrength, powerToDb, spectrum, SR,
 } from './dsp';
