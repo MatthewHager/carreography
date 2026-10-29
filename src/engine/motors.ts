@@ -39,7 +39,7 @@ export const FALCON_OPEN_S = 20.0, FALCON_CLOSE_S = 8.0;
 
 const RELAY_MAX_S = 4.0;           // the longest a car waits for the one before it (a lid's close)
 const SPACING_S = 24;              // big moments for the motors at least this far apart
-const LID_DANCE_S: [number, number] = [4.0, 20.0];   // a lid's dance on the peak: at least, at most (its ~30 s budget, spare)
+const LID_DANCE_S: [number, number] = [4.0, 20.0];   // a lid's dance on the peak, at least and at most
 const OPEN_MARGIN_S = 0.8;         // a lid or door only dances once fully open: land a little early
 const RISE_S = 5.0, WAVE_S = 2.0;  // a part-way lift, and the cars of a wave this far apart
 const SHUT_BY_S = 1.0;             // every lid is shut this long before the show ends
@@ -71,8 +71,8 @@ function lowered(an: Analysis, i: number, n: number, rear: boolean): number {
   return (an.beats.find((b) => b >= 0.2) ?? 0.2) + Math.min(beatLen(an), 1.0) * (i + (rear ? n : 0));
 }
 
-/** The motor plan as it is written: every command goes through cmd(), which keeps Tesla's limits (Car.closure)
- * and marks the frames where some motor is moving, so the mirrors can fill the stillness. */
+/** The motor plan as it is written: every command goes through cmd(), which keeps Tesla's limits
+ * (Car.closure) and marks the frames where some motor is moving, so the mirrors can fill the stillness. */
 class Plan {
   readonly moving: Uint8Array;
   readonly still = new Map<Car, [number, number][]>();      // spans a Model X's windows must keep still
@@ -114,9 +114,9 @@ function thePeak(an: Analysis): [number, number] | null {
   return [onBeat(an, top * an.step), h * an.step];
 }
 
-/** The other big moments, biggest first: each build's landing and drop (pulse.ts), each arrival chord and each
- * loud section's start in lively music, sized by the level they reach, at least SPACING_S apart, clear of the
- * peak's lids and of the song's ends. */
+/** The other big moments, biggest first: each build's landing and drop (pulse.ts), each arrival chord and
+ * each loud section's start in lively music, sized by the level they reach, at least SPACING_S apart, clear
+ * of the peak's lids and of the song's ends. */
 function moments(an: Analysis, peak: [number, number] | null): number[] {
   const cands: [number, number][] = [...builds(an).map(([, land]): [number, number] => [land, 0.5]),
     ...drops(an).map((d): [number, number] => [d, 0.3])];
@@ -147,7 +147,8 @@ function lids(plan: Plan, peak: [number, number] | null, big: number[]): number[
       cars.forEach((c, i) => {
         plan.cmd(c, C.LIFTGATE, lands[i] - lead, lands[i] - lead + 0.5, C.CLOSURE_OPEN, lead);
         if (dance) plan.cmd(c, C.LIFTGATE, lands[i], lands[i] + len, C.CLOSURE_DANCE);
-        plan.cmd(c, C.LIFTGATE, lands[i] + len + 0.3, lands[i] + len + 0.8, C.CLOSURE_CLOSE, LIFTGATE_CLOSE_S);
+        const close = lands[i] + len + 0.3;
+        plan.cmd(c, C.LIFTGATE, close, close + 0.5, C.CLOSURE_CLOSE, LIFTGATE_CLOSE_S);
       });
       left -= dance ? 3 : 2;
       busy = [lands[0] - lead - 1, lands[n - 1] + len + LIFTGATE_CLOSE_S + 2];
@@ -160,12 +161,10 @@ function lids(plan: Plan, peak: [number, number] | null, big: number[]): number[
   for (const m of big) {
     if (left < 2) break;
     const stops = cars.map((_, i) => onBeat(an, m + (i - mid) * WAVE_S));
-    const shut = stops[n - 1] + Math.max(2, 2 * beatLen(an));
-    if (stops[0] - RISE_S < 0.8 || shut > end || (shut + LIFTGATE_CLOSE_S > busy[0] && stops[0] - RISE_S < busy[1])) {
-      continue;
-    }
+    const hold = Math.max(2, 2 * beatLen(an)), first = stops[0] - RISE_S, shut = stops[n - 1] + hold;
+    if (first < 0.8 || shut > end || (shut + LIFTGATE_CLOSE_S > busy[0] && first < busy[1])) continue;
     cars.forEach((c, i) => {
-      const close = stops[i] + Math.max(2, 2 * beatLen(an));
+      const close = stops[i] + hold;
       plan.cmd(c, C.LIFTGATE, stops[i] - RISE_S, stops[i] - RISE_S + 0.5, C.CLOSURE_OPEN, RISE_S);
       c.set(C.LIFTGATE, stops[i], stops[i] + 0.3, C.CLOSURE_STOP);
       plan.cmd(c, C.LIFTGATE, close, close + 0.5, C.CLOSURE_CLOSE, LIFTGATE_CLOSE_S);
@@ -184,9 +183,11 @@ function doors(plan: Plan, peak: [number, number] | null): void {
   cars.forEach((c, i) => {
     if (!c.falcon) return;
     const land = onBeat(an, peak[0] + i * relayWithin(an, FALCON_OPEN_S, peak[1] - peak[0], cars.length));
-    const open = land - FALCON_OPEN_S - OPEN_MARGIN_S, close = land + clip(peak[1] - land, 4, DOOR_DANCE_S) + 0.3;
+    const open = land - FALCON_OPEN_S - OPEN_MARGIN_S;
+    const close = land + clip(peak[1] - land, 4, DOOR_DANCE_S) + 0.3;
     // after its windows have gone down, and shut in time for their last Open to follow
-    if (open < lowered(an, i, cars.length, true) + WINDOW_S + 0.5 || close + FALCON_CLOSE_S + 0.5 > an.duration - 2.0) return;
+    const down = lowered(an, i, cars.length, true) + WINDOW_S + 0.5;
+    if (open < down || close + FALCON_CLOSE_S + 0.5 > an.duration - 2.0) return;
     for (const door of [C.L_FALCON, C.R_FALCON]) {
       plan.cmd(c, door, open, open + 0.5, C.CLOSURE_OPEN, FALCON_OPEN_S);
       plan.cmd(c, door, land, close - 0.3, C.CLOSURE_DANCE);
@@ -201,7 +202,8 @@ function doors(plan: Plan, peak: [number, number] | null): void {
  * travel apart, left to right and then back - and after the last, down again. */
 function windows(plan: Plan, big: number[]): void {
   const { cars, an } = plan, n = cars.length, beat = beatLen(an);
-  const burst = beat * Math.max(2, Math.round(BURST_S / beat)), half = beat * Math.max(1, Math.round(burst / beat / 2));
+  const burst = beat * Math.max(2, Math.round(BURST_S / beat));
+  const half = beat * Math.max(1, Math.round(burst / beat / 2));
   const moves = (c: Car, t0: number, t1: number) =>
     (plan.still.get(c) ?? []).every(([a, b]) => t1 + WINDOW_S <= a || t0 >= b);
   const fronts = [C.L_FRONT_WINDOW, C.R_FRONT_WINDOW], rears = [C.L_REAR_WINDOW, C.R_REAR_WINDOW];
@@ -242,7 +244,9 @@ function port(plan: Plan): void {
   for (let i = 0; i < lv.length; i++) score[i + 1] = score[i] + Math.max(0, stepOf(lv[i]) - 2);
   const lo = Math.trunc((PORT_S + 1.5) / an.step), hi = Math.trunc((an.duration - 6 - PORT_DANCE_S) / an.step);
   let best = -1, top = 0;
-  for (let s = lo; s <= hi; s++) if (score[s + w] - score[s] > top) [best, top] = [s, score[s + w] - score[s]];
+  for (let s = lo; s <= hi; s++) {
+    if (score[s + w] - score[s] > top) [best, top] = [s, score[s + w] - score[s]];
+  }
   if (best < 0) return;
   let a = best, b = best + w;
   while (a < b && stepOf(lv[a]) < 3) a++;
@@ -270,9 +274,12 @@ function mirrors(plan: Plan): void {
     const g = diff(an.beats.filter((x) => x >= t0 && x < t1));
     return g.length < 8 ? 0 : clip(1 - std(g) / Math.max(mean(g), 1e-6), 0, 1) * (t1 - t0);
   };
-  const steady = an.sections.filter((s) => s.t1 - s.t0 >= 6 * cycle + 4 && s.t0 > 6 && an.beatScore >= 2
-    && levelOver(an, s.t0, s.t1) >= DRIVE && !flowsAt(an, (s.t0 + s.t1) / 2) && regular(s.t0, s.t1) >= 0.6 * (s.t1 - s.t0))
-    .reduce<{ t0: number; t1: number } | null>((p, s) => (!p || regular(s.t0, s.t1) > regular(p.t0, p.t1) ? s : p), null);
+  let steady: { t0: number; t1: number } | null = null;
+  for (const s of an.beatScore >= 2 ? an.sections : []) {
+    if (s.t1 - s.t0 < 6 * cycle + 4 || s.t0 <= 6 || levelOver(an, s.t0, s.t1) < DRIVE
+      || flowsAt(an, (s.t0 + s.t1) / 2) || regular(s.t0, s.t1) < 0.6 * (s.t1 - s.t0)) continue;
+    if (!steady || regular(s.t0, s.t1) > regular(steady.t0, steady.t1)) steady = s;
+  }
   if (steady) {
     const beats = an.beats.filter((x) => x >= steady.t0 + 1 && x < steady.t1 - 4);
     const per = Math.max(1, Math.round(cycle / Math.max(beats.length > 1 ? median(diff(beats)) : beat, 0.2)));
@@ -290,18 +297,22 @@ function mirrors(plan: Plan): void {
   for (let k = 0; ; k++) {
     let best: [number, number] | null = null;
     for (let f = 0, a = -1; f <= plan.moving.length; f++) {
-      const free = f < plan.moving.length && !plan.moving[f] && plan.lively(f * an.step) && f * an.step < an.duration - 10;
-      if (free && a < 0) a = f;
-      if (!free && a >= 0) {
-        if ((f - a) * an.step >= STILL_S && !tried.has(a) && (!best || f - a > best[1] - best[0])) best = [a, f];
-        a = -1;
+      const t = f * an.step, free = f < plan.moving.length && !plan.moving[f] && plan.lively(t);
+      if (free && t < an.duration - 10) {
+        if (a < 0) a = f;
+        continue;
       }
+      if (a >= 0 && (f - a) * an.step >= STILL_S && !tried.has(a) && (!best || f - a > best[1] - best[0])) {
+        best = [a, f];
+      }
+      a = -1;
     }
     if (!best) return;
     tried.add(best[0]);
     const mid = ((best[0] + best[1]) / 2) * an.step;
-    const at = an.downbeats.reduce((p, d) => (Math.abs(d - mid) < Math.abs(p - mid) && Math.abs(d - mid) < 3 ? d : p), mid);
-    gesture(plan, line, at, patterns[k % patterns.length]);
+    const near = an.downbeats.filter((d) => Math.abs(d - mid) < 3);
+    gesture(plan, line, near.reduce((p, d) => (Math.abs(d - mid) < Math.abs(p - mid) ? d : p), mid),
+      patterns[k % patterns.length]);
   }
 }
 
@@ -325,5 +336,6 @@ function gesture(plan: Plan, line: [Car, number][], t: number, pat: string): voi
     plan.cmd(c, m, a, a + 0.4, C.CLOSURE_CLOSE, MIRROR_S);
     plan.cmd(c, m, b, b + 0.4, C.CLOSURE_OPEN, MIRROR_S);
   });
-  plan.moving.fill(1, plan.cars[0].fr(t), plan.cars[0].fr(t + hold + (n - 1) * Math.max(step, beat) + MIRROR_S));
+  const span = hold + (n - 1) * Math.max(step, beat) + MIRROR_S;
+  plan.moving.fill(1, plan.cars[0].fr(t), plan.cars[0].fr(t + span));
 }

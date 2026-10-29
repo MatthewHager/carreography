@@ -1,28 +1,19 @@
-// How the music moves, section by section, heard from the music alone: no labels, no settings. Two
-// decisions, each from two measures, all in one place:
+// How the music moves, heard from the music alone: no labels, no settings.
 //
-//   flow   No steady beat to follow, so the lights flow (legato.ts: layers that swell with the music
-//          and the melody gliding across the stage) instead of hitting. Both signs of a beat must be
-//          missing: the neural tracker's beats don't keep time (fewer than STEADY of their gaps within
-//          STEADY_TOL of the gaps around them, so a performer speeding up still keeps time) and the music
-//          doesn't hit on the beats (clarity below FLOW_CLARITY). Either one keeps the beat: a band's groove
-//          can be syncopated (little on the beat itself), and an orchestra's tutti hits everywhere but its
-//          tracker hears a firm pulse. A stretch under ISLAND_S between two that agree goes their way,
-//          so the style doesn't flip for a few bars.
-//   kit    A rhythm section, so a passage over sparse notes (a singer) follows the beat rather than the
-//          melody (choreo.ts): the listening's kit measure (kicks, snares and hats on the beats) at least
-//          KIT over the section.
+//   flow        no steady beat to follow, so the lights glide with the melody and breathe with the phrases
+//               instead of hitting. Both signs of a beat must be missing: the neural tracker's beats don't
+//               keep time (fewer than STEADY of their gaps within STEADY_TOL of the gaps around them, so a
+//               performer speeding up still keeps time) and the music doesn't hit on them (clarity under
+//               FLOW_CLARITY): a band's groove can be syncopated, an orchestra's tutti hits everywhere but
+//               its tracker hears a firm pulse. A section under ISLAND_S between two that agree goes their
+//               way, so the style doesn't flip for a few bars.
+//   kit         a rhythm section plays: the listening's kit measure at least KIT over the section
+//   followable  a stretch has a beat the lights can follow: steady or clear, its beats covering it, and the
+//               music striking at least half of them (not a held chord the tracker carried on through)
+//   held        a stretch is a held chord: VOICES notes sounding on through most of it
 //
-// Alongside: whether the tracker keeps time there (steady). An orchestra's tutti strikes every eighth, so
-// its beats stand out little from the notes between them (a low an.beatConfidence), yet the beat is plain to
-// follow: the beat layer takes a steady beat as a clear one (pulse.ts). And whether the music strikes each
-// beat (struck): the tracker carries on through a held chord, which gives the lights nothing to hit. A run
-// of the song has a beat to follow (followable) where it is steady or clear and mostly struck; the choice
-// between the moves that follow the melody and those that follow the beat starts there (choreo.ts).
-//
-// Measured on the beats as the listening tracked them, before tempo.ts moves them onto what is played. The
-// neural tracker's own beats say best whether there is a pulse: where it hears none its beats wander, while
-// the fallback tracker always draws an even grid.
+// Flow is measured on the beats as the listening tracked them, before tempo.ts moves them onto what is
+// played: where the neural tracker hears no pulse its beats wander, while the fallback draws an even grid.
 
 import type { Analysis, Phrase } from './analysis';
 import { clip, mean, median, searchsorted } from './np';
