@@ -15,8 +15,8 @@
 import type { Analysis } from '../analysis';
 import { analyzeForm } from '../form';
 import {
-  argmax, clip, convolveSame, diff, interp, linspace, max, mean32, median, percentile, quantile, quantiles,
-  searchsorted, sum32,
+  argmax, clip, convolveSame, diff, interp, linspace, max, mean, median, percentile, quantile, quantiles,
+  searchsorted, sum,
 } from '../np';
 import { groupEvents, labelPhrases, pitchScale } from '../texture';
 import {
@@ -24,8 +24,6 @@ import {
   SR,
 } from './dsp';
 import { visuals } from './visual';
-
-const f32 = Math.fround;
 
 interface NeuralBeats {
   beats: number[];
@@ -111,9 +109,8 @@ function bandOnsets(melDb: Float32Array, T: number, r0: number, r1: number, delt
   if (frames.length === 0) return [];
   const s = frames.map((f) => env[f]);
   const lo = quantile(env.filter((v) => v > 0), 0.5), hi = quantile(s, 0.97);
-  // float32, as numpy keeps the envelope's dtype against float64 scalars
-  const lo32 = f32(lo), span = f32(Math.max(hi - lo, 1e-9));
-  return frames.map((f, i) => [framesToTime(f), clip(f32(f32(s[i] - lo32) / span), 0, 1)]);
+  const span = Math.max(hi - lo, 1e-9);
+  return frames.map((f, i) => [framesToTime(f), clip((s[i] - lo) / span, 0, 1)]);
 }
 
 /** Runs shorter than `minLen` take the value before them, so a level never flickers. */
@@ -129,7 +126,7 @@ function stabilize(level: ArrayLike<number>, minLen: number): number[] {
   return out;
 }
 
-function gather32(env: Float32Array, frames: ArrayLike<number>, start = 0, by = 1): Float32Array {
+function gather(env: Float32Array, frames: ArrayLike<number>, start = 0, by = 1): Float32Array {
   const out: number[] = [];
   for (let i = start; i < frames.length; i += by) out.push(env[Math.min(frames[i], env.length - 1)]);
   return Float32Array.from(out);
@@ -159,7 +156,7 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   const every4 = (a: number[], from: number) => a.filter((_, i) => i >= from && (i - from) % 4 === 0);
   let downbeats: number[];
   if (beatFrames.length >= 8) {
-    const sums = [0, 1, 2, 3].map((p) => sum32(gather32(fullEnv, beatFrames, p, 4)));
+    const sums = [0, 1, 2, 3].map((p) => sum(gather(fullEnv, beatFrames, p, 4)));
     downbeats = every4(beats, argmax(sums));
   } else {
     downbeats = every4(beats, 0);
@@ -180,7 +177,7 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   const hits: number[] = [];
   if (frames.length) {
     const s = frames.map((f) => fullEnv[f]);
-    const cut = f32(quantile(s, 0.93));
+    const cut = quantile(s, 0.93);
     let last = -1.0;
     frames.forEach((f, i) => {
       if (s[i] < cut) return;
@@ -235,7 +232,7 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
     } else i++;
   }
 
-  const beatScore = f32(mean32(gather32(fullEnv, beatFrames)) / Math.max(mean32(fullEnv), 1e-9));
+  const beatScore = mean(gather(fullEnv, beatFrames)) / Math.max(mean(fullEnv), 1e-9);
 
   // --- Form map: sections, repeats, arc ceilings, per-section tempo ---
   const sections = analyzeForm(y, intensity, step, duration, spec);
@@ -249,7 +246,7 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
         // beat from the first can lock the whole section onto the off-beats
         const fb = toFrames(sec.beats);
         const odd = fb.length >= 4
-          ? mean32(gather32(fullEnv, fb, 1, 2)) > mean32(gather32(fullEnv, fb, 0, 2)) : false;
+          ? mean(gather(fullEnv, fb, 1, 2)) > mean(gather(fullEnv, fb, 0, 2)) : false;
         sec.beats = sec.beats.filter((_, i) => i % 2 === (odd ? 1 : 0));
         sec.tempo = sec.tempo / 2;
       } else if (sec.tempo < tempo / 1.6) {
@@ -275,7 +272,7 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
     for (const sb of secBeats) {
       if (sb.length >= 8) {
         const bf = toFrames(sb);
-        const phase = argmax([0, 1, 2, 3].map((p) => sum32(gather32(fullEnv, bf, p, 4))));
+        const phase = argmax([0, 1, 2, 3].map((p) => sum(gather(fullEnv, bf, p, 4))));
         downs.push(every4(sb, phase));
       } else if (sb.length) {
         downs.push(every4(sb, 0));

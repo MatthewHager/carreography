@@ -1,16 +1,13 @@
 // The librosa 0.11 subset the analysis uses (sr 22050, hop 512, n_fft 2048), checked against librosa
-// when it was written. Matrices are row-major (rows x T) typed arrays. librosa keeps its spectrograms
-// and onset envelopes in float32, and the thresholds that pick onsets and beats see float32 values, so
-// those are rounded with Math.fround where numpy would.
+// when it was written. Matrices are row-major (rows x T) typed arrays.
 
-import { median, median32, mean32, round, sum32 } from '../np';
+import { mean, median, round, sum } from '../np';
 import { realFft } from './fft';
 
 export const SR = 22050;
 export const HOP = 512;
 export const N_FFT = 2048;
 
-const f32 = Math.fround;
 export const TINY32 = 1.1754943508222875e-38;   // np.finfo(np.float32).tiny
 const TINY64 = 2.2250738585072014e-308;
 
@@ -94,14 +91,14 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
     for (let n = 0; n < nFft; n++) {
       const i = s0 + n, v = i >= 0 && i < y.length ? y[i] : 0;
       buf[n] = v * win[n];
-      if (rms) ss = f32(ss + f32(v * v));
+      if (rms) ss += v * v;
     }
-    if (rms) rms[t] = f32(Math.sqrt(f32(ss / nFft)));
+    if (rms) rms[t] = Math.sqrt(ss / nFft);
     fft.forward(buf, re, im);
     for (let k = 0; k < nb; k++) {
-      const r = f32(re[k]), i = f32(im[k]), m = f32(Math.sqrt(r * r + i * i));   // np.abs of the complex64 STFT
+      const m = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
       S[k] = m;
-      P[k] = f32(m * m);
+      P[k] = m * m;
     }
     if (full) piptrack(S, pitches, mags);
     for (const [basis, dst] of bands) {
@@ -122,7 +119,7 @@ function piptrack(S: Float64Array, outP: number[], outM: number[]) {
   const nb = S.length, nFft = (nb - 1) * 2;
   let mx = 0;
   for (let k = 0; k < nb; k++) if (S[k] > mx) mx = S[k];
-  const ref = f32(0.1 * mx);
+  const ref = 0.1 * mx;
   const masked = (k: number) => (S[k] > ref ? S[k] : 0);
   for (let k = 1; k < nb - 1; k++) {
     const f = (k * SR) / nFft;
@@ -131,10 +128,10 @@ function piptrack(S: Float64Array, outP: number[], outM: number[]) {
     if (!(cur > masked(k - 1) && cur >= masked(k + 1))) continue;
     const a = S[k + 1] + S[k - 1] - 2 * S[k], b = (S[k + 1] - S[k - 1]) / 2;
     const shift = Math.abs(b) >= Math.abs(a) ? 0 : -b / a;
-    const pitch = f32(((k + shift) * SR) / nFft);
+    const pitch = ((k + shift) * SR) / nFft;
     if (pitch > 0) {
       outP.push(pitch);
-      outM.push(f32(S[k] + 0.5 * b * shift));
+      outM.push(S[k] + 0.5 * b * shift);
     }
   }
 }
@@ -143,16 +140,16 @@ function piptrack(S: Float64Array, outP: number[], outM: number[]) {
  * their deviation from the equal-tempered grid (resolution 0.01 of a bin). */
 function pitchTuning(P: number[], M: number[], bpo: number): number {
   if (!P.length) return 0;
-  const thr = median32(M);
+  const thr = median(M);
   const counts = new Int32Array(100);
   const edges = Array.from({ length: 101 }, (_, i) => -0.5 + i * 0.01);
   let any = false;
   for (let i = 0; i < P.length; i++) {
     if (!(M[i] >= thr)) continue;
     any = true;
-    let r = f32(bpo * f32(Math.log2(f32(P[i] / (440 / 16)))));
-    r = f32(r - Math.floor(r));
-    if (r >= 0.5) r = f32(r - 1);
+    let r = bpo * Math.log2(P[i] / (440 / 16));
+    r -= Math.floor(r);
+    if (r >= 0.5) r -= 1;
     // np.histogram's uniform-bin rule
     let b = Math.trunc((r + 0.5) * 100);
     if (b === 100) b--;
@@ -170,15 +167,15 @@ function pitchTuning(P: number[], M: number[], bpo: number): number {
 export function powerToDb(S: Float32Array, ref: 'max' | number): Float32Array {
   let mx = 0;
   if (ref === 'max') for (let i = 0; i < S.length; i++) if (S[i] > mx) mx = S[i];
-  const off = f32(10 * Math.log10(Math.max(1e-10, ref === 'max' ? mx : Math.abs(ref))));
+  const off = 10 * Math.log10(Math.max(1e-10, ref === 'max' ? mx : Math.abs(ref)));
   const out = new Float32Array(S.length);
   let top = -Infinity;
   for (let i = 0; i < S.length; i++) {
-    const v = f32(f32(10 * Math.log10(Math.max(1e-10, S[i]))) - off);
+    const v = 10 * Math.log10(Math.max(1e-10, S[i])) - off;
     out[i] = v;
     if (v > top) top = v;
   }
-  const lo = f32(top - 80);
+  const lo = top - 80;
   for (let i = 0; i < out.length; i++) if (out[i] < lo) out[i] = lo;
   return out;
 }
@@ -196,11 +193,11 @@ export function onsetStrength(S: Float32Array, T: number, r0: number, r1: number
     if (j + lag >= T) break;
     if (aggregate === 'mean') {
       let s = 0;
-      for (let r = r0; r < r1; r++) s = f32(s + Math.max(0, f32(S[r * T + j + lag] - S[r * T + j])));
-      env[t] = f32(s / n);
+      for (let r = r0; r < r1; r++) s += Math.max(0, S[r * T + j + lag] - S[r * T + j]);
+      env[t] = s / n;
     } else {
-      for (let r = r0; r < r1; r++) tmp[r - r0] = Math.max(0, f32(S[r * T + j + lag] - S[r * T + j]));
-      env[t] = median32(tmp);
+      for (let r = r0; r < r1; r++) tmp[r - r0] = Math.max(0, S[r * T + j + lag] - S[r * T + j]);
+      env[t] = median(tmp);
     }
   }
   return env;
@@ -248,13 +245,13 @@ export function onsetDetect(env: Float32Array,
   const e = new Float32Array(env.length);
   let mx = 0;
   for (let i = 0; i < e.length; i++) {
-    e[i] = f32(env[i] - mn);
+    e[i] = env[i] - mn;
     if (e[i] > mx) mx = e[i];
   }
-  const d = f32(mx + TINY32);
+  const d = mx + TINY32;
   let any = false;
   for (let i = 0; i < e.length; i++) {
-    e[i] = f32(e[i] / d);
+    e[i] /= d;
     if (e[i]) any = true;
   }
   if (!any) return [];
@@ -348,15 +345,15 @@ export function beatTrack(env: Float32Array, bpm: number | Float64Array, tightne
   const frameRate = SR / HOP;
   const fpb = (i: number) => round((frameRate * 60.0) / (typeof bpm === 'number' ? bpm : bpm[i]));
 
-  // onsets over their (float32, ddof 1) standard deviation
-  const m = mean32(env), dev = new Float32Array(N);
+  // onsets over their (ddof 1) standard deviation
+  const m = mean(env), dev = new Float32Array(N);
   for (let i = 0; i < N; i++) {
-    const x = f32(env[i] - m);
-    dev[i] = f32(x * x);
+    const x = env[i] - m;
+    dev[i] = x * x;
   }
-  const sd = f32(f32(Math.sqrt(f32(sum32(dev) / (N - 1)))) + TINY32);
+  const sd = Math.sqrt(sum(dev) / (N - 1)) + TINY32;
   const o = new Float64Array(N);
-  for (let i = 0; i < N; i++) o[i] = f32(env[i] / sd);
+  for (let i = 0; i < N; i++) o[i] = env[i] / sd;
 
   // local score: the onsets smoothed by a Gaussian a beat wide
   const windows = new Map<number, Float64Array>();
@@ -482,7 +479,7 @@ export function sync(M: Float32Array, rows: number, T: number, beats: readonly n
     const a = edges[c], b = edges[c + 1], tmp = new Float32Array(b - a);
     for (let r = 0; r < rows; r++) {
       for (let t = a; t < b; t++) tmp[t - a] = M[r * T + t];
-      out[r * nc + c] = aggregate === 'mean' ? mean32(tmp) : median32(tmp);
+      out[r * nc + c] = aggregate === 'mean' ? mean(tmp) : median(tmp);
     }
   }
   return { data: out, nc };

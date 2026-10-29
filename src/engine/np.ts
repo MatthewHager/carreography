@@ -187,30 +187,9 @@ export function runs(mask: ArrayLike<number | boolean>): [number, number][] {
   return out;
 }
 
-// ---- For the listening (listen/dsp.ts, listen/audio.ts), which still asks for these ----------------
-
 /** Halves to the even neighbour. */
 export function round(x: number): number {
   const f = Math.floor(x);
   if (x - f === 0.5) return f % 2 === 0 ? f : f + 1;
   return Math.round(x);
-}
-
-const f32 = Math.fround;
-
-/** The sum of a float32 array, each step rounded to float32. */
-export function sum32(a: Arr, start = 0, end = a.length): number {
-  let s = 0;
-  for (let i = start; i < end; i++) s = f32(s + a[i]);
-  return s;
-}
-
-export function mean32(a: Arr, start = 0, end = a.length): number {
-  return f32(sum32(a, start, end) / (end - start));
-}
-
-/** The median of a float32 array, the middle two averaged in float32. */
-export function median32(a: Arr): number {
-  const s = sorted(a), n = s.length;
-  return n % 2 ? s[(n - 1) / 2] : f32(f32(s[n / 2 - 1] + s[n / 2]) / 2);
 }
