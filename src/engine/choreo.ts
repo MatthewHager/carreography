@@ -55,6 +55,7 @@ export function choreograph(an: Analysis, layout = 'YCY'): Car[] {
   DRUMS.apply(cars, an);
   PULSE.apply(cars, an);
   PULSE.dropHits(cars, an);
+  blasts(cars, an);
   strikes(cars, an, said);
   colours(cars, said);
   motors.choreograph(cars, an);
@@ -243,6 +244,22 @@ function arrivals(cars: Car[], an: Analysis, ph: Phrase) {
     } else {
       for (const c of cars) c.flash(c.heads(), t, 0.15);
     }
+  }
+}
+
+const BLAST = 0.4;      // a hit this much louder than the moment before it (an.loudness: 16 dB) is a blast
+
+/** A strike out of a breath in loud music - an orchestra's tutti chord after a rest, a band's hit after a
+ * stop - lights the whole stage at once: an accent (an.hits) at drive or above that jumps BLAST over the
+ * quietest moment of the 0.4 s before it. */
+function blasts(cars: Car[], an: Analysis) {
+  const x = an.loudness, at = (t: number) => clip(Math.round(t / an.step), 0, an.nFrames - 1);
+  for (const h of an.hits) {
+    if (levelAt(an, h) < STEPS[2] || flowsAt(an, h)) continue;
+    let before = Infinity, after = 0;
+    for (let f = at(h - 0.4); f < at(h - 0.05); f++) before = Math.min(before, x[f]);
+    for (let f = at(h); f <= at(h + 0.15); f++) after = Math.max(after, x[f]);
+    if (after - before >= BLAST) M.allOn(cars, h, Math.min(0.3, M.beatAt(an, h) * 0.6), false);
   }
 }
 
