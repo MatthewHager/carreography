@@ -15,6 +15,22 @@ export const beatLen = (an: Analysis) => 60.0 / Math.max(an.tempo, 40);
 /** Four of those beats. */
 export const barLen = (an: Analysis) => 4 * beatLen(an);
 
+/** The length of the tracked beat around t. */
+export function beatAt(an: Analysis, t: number): number {
+  const b = an.beats, nominal = beatLen(an);
+  if (b.length < 2) return nominal;
+  const i = clip(searchsorted(b, t, 'right'), 1, b.length - 1);
+  return Math.min(b[i] - b[i - 1], 1.5 * nominal);       // across a fermata: a normal beat
+}
+
+/** `t` on the nearest tracked beat within `reach` s, else as it is: a motor starting, a lid stopping or a
+ * sung word's picture is an accent, and lands with the music. */
+export function onBeat(an: Analysis, t: number, reach = 0.35): number {
+  let best = t;
+  for (const b of an.beats) if (Math.abs(b - t) <= reach && Math.abs(b - t) < Math.abs(best - t)) best = b;
+  return Math.abs(best - t) <= reach && best !== t ? best : t;
+}
+
 /** [times, strengths] of the played attacks: transcribed note events (chords count more) and the
  * kicks (a kick drum, a timpani stroke, a bass note's attack). */
 function onsets(an: Analysis): [number[], number[]] {

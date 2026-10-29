@@ -31,7 +31,7 @@ import { DRIVE, GROOVE, levelAt, levelOver, PEAK, stepOf } from './level';
 import { centreTruck } from './moves';
 import { clip, diff, mean, median, std } from './np';
 import { builds, drops } from './pulse';
-import { barLen, beatLen } from './tempo';
+import { barLen, beatLen, onBeat } from './tempo';
 
 // the Cybertruck's frunk timed on the truck, Oct 2026; the rest from Tesla's README
 export const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };
@@ -59,13 +59,6 @@ const relay = (travel: number) => Math.min(travel, RELAY_MAX_S);
  * it, but at least a beat, so each car's move reads as its own. */
 const relayWithin = (an: Analysis, travel: number, span: number, n: number) =>
   Math.max(beatLen(an), Math.min(relay(travel), span / Math.max(n - 1, 1)));
-
-/** `t` on the nearest beat within `reach` s: a motor starting or a lid stopping is an accent. */
-function onBeat(an: Analysis, t: number, reach = 0.35): number {
-  let best = t;
-  for (const b of an.beats) if (Math.abs(b - t) <= reach && Math.abs(b - t) < Math.abs(best - t)) best = b;
-  return Math.abs(best - t) <= reach && best !== t ? best : t;
-}
 
 /** When car `i` of `n` starts lowering a window as the music starts: fronts then rears, car by car from the
  * crowd's left, a beat (at most a second) apart. */

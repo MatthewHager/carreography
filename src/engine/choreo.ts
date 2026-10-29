@@ -323,7 +323,7 @@ function accents(cars: Car[], an: Analysis, said: Moment[]) {
   for (const h of an.hits) {
     const [before, after] = around(h);
     if (after < LOUD || after - before < BLAST || levelAt(an, h + RING_S) < GROOVE || flowsAt(an, h)) continue;
-    const hold = Math.min(STRIKE_HOLD_S, M.beatAt(an, h) * 0.6);
+    const hold = Math.min(STRIKE_HOLD_S, TEMPO.beatAt(an, h) * 0.6);
     cands.push({ t: h, strength: strength(h, [before, after]), hold, strike: before <= REST });
   }
   for (const ph of phrases) {

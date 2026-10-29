@@ -15,7 +15,7 @@ import type { Car } from './car';
 import * as C from './channels';
 import { CALM, DRIVE, GROOVE, levelAt, PEAK, stepOf } from './level';
 import { arange, clip, cumsum, diff, linspace, quantiles, runs, searchsorted, sum } from './np';
-import { beatLen } from './tempo';
+import { beatAt, beatLen } from './tempo';
 
 const ON_500 = C.ON_500, OFF_500 = C.OFF_500, OFF_1000 = C.OFF_1000;
 const BAR = C.FRONT_BAR.length;   // 60 LEDs
@@ -191,14 +191,6 @@ function slotHit(car: Car, side: LR, t: number, dur: number, s: number) {
 }
 
 // --- time ------------------------------------------------------------------------------------------
-
-/** The length of the tracked beat around t. */
-export function beatAt(an: Analysis, t: number): number {
-  const b = an.beats, nominal = beatLen(an);
-  if (b.length < 2) return nominal;
-  const i = clip(searchsorted(b, t, 'right'), 1, b.length - 1);
-  return Math.min(b[i] - b[i - 1], 1.5 * nominal);       // across a fermata: a normal beat
-}
 
 const within = (a: ArrayLike<number>, lo: number, hi: number) => Array.from(a).filter((x) => x >= lo && x < hi);
 

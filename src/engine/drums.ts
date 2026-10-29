@@ -29,7 +29,7 @@ const NEED = { kick: 0.4, snare: 0.3, hats: 0.9 };
 const HEARD = 0.1;              // below this level the music is barely there: no drums
 
 /** Whether t lands on a beat or halfway between two (`beats` sorted). */
-function onGrid(beats: number[], t: number): boolean {
+function onBeatOrHalf(beats: number[], t: number): boolean {
   const i = searchsorted(beats, t);
   for (const k of [i - 1, i]) {
     if (k < 0 || k >= beats.length) continue;
@@ -43,7 +43,7 @@ function onGrid(beats: number[], t: number): boolean {
 /** Per hit of `hits`, whether it keeps time: on the grid, and with at least `need` such hits of MIN_STRENGTH
  * a beat around it. */
 function keepsTime(an: Analysis, hits: number[][], need: number): boolean[] {
-  const beats = an.beats, on = hits.map(([t, s]) => s >= MIN_STRENGTH && onGrid(beats, t));
+  const beats = an.beats, on = hits.map(([t, s]) => s >= MIN_STRENGTH && onBeatOrHalf(beats, t));
   const strong = hits.filter((_, i) => on[i]).map(([t]) => t);
   const count = (a: number[], t0: number, t1: number) => searchsorted(a, t1) - searchsorted(a, t0);
   return hits.map(([t], i) => on[i]

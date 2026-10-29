@@ -31,7 +31,7 @@ import { flowsAt, kitAt, steadyAt, struckBeats, struckShare } from './feel';
 import { CALM, DRIVE, GROOVE, levelAt, levelOver, stepOf } from './level';
 import * as M from './moves';
 import { clip, quantile } from './np';
-import { beatLen } from './tempo';
+import { beatAt, beatLen } from './tempo';
 
 const OWNERS = new Set(['cadence', 'motif']);     // phrase shapes whose moves own the whole stage
 const CLEAR = 0.6, FAINT = 0.25, SURE = 0.9;       // how clear the beat is (an.beatConfidence): a full pulse,
@@ -44,7 +44,7 @@ const MUSIC_LEAD_S = 8;                            // no drop this soon after th
 const cached = new WeakMap<Analysis, { drops: number[]; builds: [number, number][] }>();
 
 /** The level that holds over [t0, t1): its quieter quarter, so a lone loud moment doesn't count. */
-function held(an: Analysis, t0: number, t1: number): number {
+function heldLevel(an: Analysis, t0: number, t1: number): number {
   const lv = an.level!, a = clip(Math.trunc(t0 / an.step), 0, lv.length - 1);
   return quantile(lv.subarray(a, clip(Math.trunc(t1 / an.step), a + 1, lv.length)), 0.25);
 }
@@ -62,7 +62,7 @@ function plan(an: Analysis) {
   let first = 0;
   while (first < an.nFrames && an.level![first] < CALM) first++;
   const start = first * an.step;
-  const jump = (d: number) => held(an, d + 0.1, d + 4) - levelOver(an, d - 2, d - 0.1);
+  const jump = (d: number) => heldLevel(an, d + 0.1, d + 4) - levelOver(an, d - 2, d - 0.1);
   const smooth = (t: number) => levelOver(an, t - 2, t);
   const buildInto = (d: number): [number, number] | null => {
     let t0 = d;                                      // back while the level keeps falling the earlier we look
@@ -70,12 +70,12 @@ function plan(an: Analysis) {
     return d - t0 >= BUILD_S && smooth(d) - smooth(t0) >= 0.1 ? [Math.max(start + 2, t0 - 2), d] : null;
   };
   const cands = an.downbeats.filter((d) => {
-    const before = stepOf(levelOver(an, d - 2, d - 0.1)), after = stepOf(held(an, d + 0.1, d + 4));
+    const before = stepOf(levelOver(an, d - 2, d - 0.1)), after = stepOf(heldLevel(an, d + 0.1, d + 4));
     return d > start + MUSIC_LEAD_S && after >= 3 && after > before && jump(d) >= 0.08
       && [0, 2, 4, 6].every((k) => !flowsAt(an, d + k));
   }).map((d) => {
     const b = buildInto(d);
-    const peak = stepOf(held(an, d + 0.1, d + 4)) === 4 ? PEAK_BONUS : 0;
+    const peak = stepOf(heldLevel(an, d + 0.1, d + 4)) === 4 ? PEAK_BONUS : 0;
     return { d, b, size: jump(d) + (b ? smooth(d) - smooth(b[0] + 2) : 0) + peak };
   });
   const most = Math.max(1, Math.round(an.duration / DROP_EVERY_S));
@@ -199,7 +199,7 @@ function buildPulse(cars: Car[], an: Analysis, t0: number, land: number): void {
 /** Each drop: black for a beat before it, then every lamp of every car on together for a beat. */
 function dropHits(cars: Car[], an: Analysis): void {
   for (const d of drops(an)) {
-    const beat = M.beatAt(an, d), gap = clip(beat, 0.25, 0.6);
+    const beat = beatAt(an, d), gap = clip(beat, 0.25, 0.6);
     for (const c of cars) {
       c.dark(c.everything(), d - gap, d);
       c.set([...C.FRONT_BAR, ...C.REAR_BAR, ...C.OFFROAD_BAR], d - gap, d, 0);

@@ -7,7 +7,7 @@ import type { Car } from './car';
 import * as C from './channels';
 import { flowsAt } from './feel';
 import * as M from './moves';
-import { clip, searchsorted } from './np';
+import { beatAt, onBeat } from './tempo';
 
 /** A picture a line calls for: interior colours from t0 to t1, a lightning strike at t0, or a ping of
  * one car's front at t0 (the k-th word of a chant lands on car k, round the lineup). */
@@ -94,12 +94,9 @@ export function moments(lines: LyricLine[], an: Analysis): Moment[] {
 /** A moment moved onto the music's grid: onto the beat within a quarter beat of one, else the nearest
  * eighth. */
 export function onGrid(an: Analysis, t: number): number {
-  const b = an.beats;
-  if (b.length < 2) return t;
-  const i = clip(searchsorted(b, t), 1, b.length - 1);
-  const near = t - b[i - 1] <= b[i] - t ? b[i - 1] : b[i];
-  if (Math.abs(near - t) <= 0.25 * M.beatAt(an, t)) return near;
-  return M.snap(an, t, 2);
+  if (an.beats.length < 2) return t;
+  const near = onBeat(an, t, 0.25 * beatAt(an, t));
+  return near !== t ? near : M.snap(an, t, 2);
 }
 
 /** The moments on the stage: a line's colour in every cabin while it is sung; its lightning strike or chant
