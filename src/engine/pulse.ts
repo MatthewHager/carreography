@@ -20,7 +20,7 @@
 import type { Analysis, Phrase } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
-import { clarity, flowsAt } from './feel';
+import { flowsAt } from './feel';
 import { levelAt, levelOver, stepOf } from './level';
 import * as M from './moves';
 import { clip, searchsorted } from './np';
@@ -29,7 +29,8 @@ import { beatLen } from './tempo';
 const HEADS = [C.L_OUTER_MAIN, C.R_OUTER_MAIN, C.L_INNER_MAIN, C.R_INNER_MAIN];
 const INNER = [C.L_INNER_MAIN, C.R_INNER_MAIN];
 const OWNERS = new Set(['cadence', 'motif']);     // moves that own the whole stage while they play
-const CLEAR = 1.6, FAINT = 1.25;                  // clarity (feel.ts) for a full pulse, for downbeats only
+const CLEAR = 0.6, FAINT = 0.25, SURE = 0.9;       // how clear the beat is (an.beatConfidence): a full pulse,
+                                                   // downbeats only, a calm tick
 const STRUCK = 1.3;
 const DROP_GAP_S = 15, BUILD_S = 4;
 
@@ -53,15 +54,15 @@ const cached = new WeakMap<Analysis, { drops: number[]; builds: [number, number]
 
 /** The drops: the downbeats where the music lands a step higher and stays there - the level over the four
  * seconds after a step above the two before, into a drive or the peak - the biggest jump of any close
- * together, at most one every DROP_GAP_S, none where the music flows. And the builds: the climb into a
- * drop, where the level has been rising for BUILD_S or more (a crescendo, a riser). */
+ * together, at most one every DROP_GAP_S, none where the music flows or is about to. And the builds: the
+ * climb into a drop, where the level has been rising for BUILD_S or more (a crescendo, a riser). */
 function plan(an: Analysis) {
   let out = cached.get(an);
   if (out) return out;
   const jump = (d: number) => levelOver(an, d + 0.1, d + 1.5) - levelOver(an, d - 2, d - 0.1);
   const cands = an.downbeats.filter((d) => {
     const before = stepOf(levelOver(an, d - 2, d - 0.1)), after = stepOf(levelOver(an, d + 0.1, d + 4));
-    return d > 2 && after >= 3 && after > before && jump(d) >= 0.08 && !flowsAt(an, d);
+    return d > 2 && after >= 3 && after > before && jump(d) >= 0.08 && !flowsAt(an, d) && !flowsAt(an, d + 4);
   });
   const drops: number[] = [];
   for (const d of cands) {
@@ -108,10 +109,10 @@ export function apply(cars: Car[], an: Analysis, phrases: Phrase[]): void {
     if (flowsAt(an, t) || owned.some((ph) => t >= ph.t0 - 0.05 && t < ph.t1)) continue;
     if (spans.some(([s0, land]) => t >= s0 && t < land)) continue;              // the build's own pulse
     const s = levelAt(an, t), step = stepOf(s);
-    const clear = clarity(an, t - 2, t + 2);
+    const clear = an.beatConfidence[clip(Math.round(t / an.step), 0, an.nFrames - 1)];
     if (step === 0 || clear < FAINT) continue;
     let kind = '';
-    if (step === 1) kind = pos[i] === 0 && clear >= 2.5 ? 'tick' : '';
+    if (step === 1) kind = pos[i] === 0 && clear >= SURE ? 'tick' : '';
     else if (clear < CLEAR) kind = pos[i] === 0 && step >= 3 ? 'big' : '';
     else if (step === 2) kind = pos[i] === 0 ? 'big' : pos[i] === 2 ? 'mid' : '';
     else kind = pos[i] === 0 ? 'big' : pos[i] === 2 ? 'mid' : step === 4 ? 'mid' : 'small';

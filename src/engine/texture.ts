@@ -106,10 +106,8 @@ export function groupEvents(notes: readonly (readonly number[])[]): Events {
  *  trill              rapid alternation of two neighbouring notes
  *  chords             mostly 3+ voice events
  *  arrival            strong chord landing after a run or a gap
- *  climax             loud tier with dense notes
- *  melody             everything else
- *  `tierAt(t)` gives the intensity tier so climax can be told from an ordinary run. */
-export function labelPhrases(ev: Events, tierAt: (t: number) => number): Events {
+ *  melody             everything else */
+export function labelPhrases(ev: Events): Events {
   const n = ev.t.length;
   const phrase = new Array<string>(n).fill('melody');
   if (n === 0) {
@@ -146,7 +144,6 @@ export function labelPhrases(ev: Events, tierAt: (t: number) => number): Events 
       else if (up >= 0.65) phrase[i] = 'run_up';
       else if (up <= 0.35) phrase[i] = 'run_down';
       else phrase[i] = 'zigzag';
-      if (tierAt(t) >= 3 && dens >= 7) phrase[i] = 'climax';
     } else if (kindMean >= 1.6) {
       phrase[i] = 'chords';
     }

@@ -21,8 +21,6 @@ export interface Section {
   t0: number;
   t1: number;
   letter: string;       // sections with the same letter are the same material
-  energy: number;
-  ceiling: number;      // the most intense tier the section may reach (0..3)
   repeatOf: number;     // index of the first section with this letter, or -1
   index: number;
   nth: number;          // how many times the letter was heard before
@@ -70,13 +68,7 @@ export interface Analysis {
   tempo: number;
   beats: number[];
   downbeats: number[];
-  bass: number[][];      // rows: time, strength 0..1 (kick, timpani, low brass)
-  highs: number[][];     // rows: time, strength 0..1 (cymbals, string attacks)
   hits: number[];        // the strongest accents, at least 0.5 s apart
-  intensity: number[];   // per frame 0..1
-  build: number[];       // per frame 0..1 progress through a crescendo
-  tier: number[];        // per frame 0..3
-  loudFast: number[];    // per frame 0..1
   events: Events;
   pitchLo: number;       // the song's melodic range, mapped across the stage
   pitchHi: number;

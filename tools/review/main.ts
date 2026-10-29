@@ -11,6 +11,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { STEP_MS } from '@/engine/channels';
 import { choreograph } from '@/engine/choreo';
+import { builds, drops } from '@/engine/pulse';
 import { place, vocalCurve } from '@/engine/listen/align';
 import { analyze } from '@/engine/listen/audio';
 import { trackBeats } from '@/engine/listen/beats';
@@ -158,8 +159,8 @@ export async function main(argv: string[]): Promise<number> {
   writeFileSync(path.join(out, 'show.json'), JSON.stringify({
     title, lineup, duration: an.duration, tempo: an.tempo, beatScore: an.beatScore,
     sections: an.sections, phrases: an.phrases, beats: an.beats,
-    downbeats: an.downbeats, hits: an.hits, bass: an.bass, highs: an.highs, lyricLines: an.lyricLines ?? null,
-    curves: { hz: 10, loudness: tenth(an.loudness), level: tenth(an.level), build: tenth(an.build) },
+    downbeats: an.downbeats, hits: an.hits, builds: builds(an), drops: drops(an), lyricLines: an.lyricLines ?? null,
+    curves: { hz: 10, loudness: tenth(an.loudness), level: tenth(an.level) },
     drums: { kick: an.kick, snare: an.snare, hats: an.hats },
   }, null, 1));
 

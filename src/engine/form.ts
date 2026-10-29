@@ -2,10 +2,7 @@
 //
 //   sections   boundaries from beat-synchronous chroma + timbre (agglomerative clustering)
 //   letters    repeated material gets the same letter (A, B, A', ...) by chroma/timbre similarity
-//   energy     mean loudness per section; the climax section is the loudest in the second half
-//   ceiling    the intensity each section is allowed (0..3): an arc that saves the top for the climax,
-//              with every repeat of a letter allowed one step more than the last ("escalation")
-//   repeatOf   index of the first section with the same letter, for callbacks
+//   repeatOf   index of the first section with the same letter
 
 import type { Section } from './analysis';
 import { chromaCqt } from './listen/cqt';
@@ -16,8 +13,7 @@ import { clip, mean } from './np';
 
 /** The form map of `y` (mono, 22050 Hz): its sections, from the spectrum audio.ts already took of the
  * same samples. */
-export function analyzeForm(y: Float32Array, intensity: ArrayLike<number>, step: number, duration: number,
-  s: Spectrum): Section[] {
+export function analyzeForm(y: Float32Array, duration: number, s: Spectrum): Section[] {
   const T = s.T;
   const chroma = chromaCqt(y, s.tuning);
   const mf = mfcc(s.mel128, T);
@@ -74,12 +70,8 @@ export function analyzeForm(y: Float32Array, intensity: ArrayLike<number>, step:
     letters.push(letter);
   }
 
-  const sections: Section[] = spans.map(([t0, t1], i) => {
-    const a = Math.trunc(t0 / step), b = Math.min(Math.max(a + 1, Math.trunc(t1 / step)), intensity.length);
-    const e = a < b ? mean(intensity, a, b) : NaN;
-    return { t0, t1, letter: letters[i], energy: e, ceiling: 3, repeatOf: -1, index: i, nth: 0, tempo: 0.0,
-      beats: [] };
-  });
+  const sections: Section[] = spans.map(([t0, t1], i) => ({ t0, t1, letter: letters[i], repeatOf: -1, index: i,
+    nth: 0, tempo: 0.0, beats: [] }));
   const first = new Map<string, Section>();
   for (const s of sections) {
     const f = first.get(s.letter);
@@ -87,29 +79,6 @@ export function analyzeForm(y: Float32Array, intensity: ArrayLike<number>, step:
       s.repeatOf = f.index;
       s.nth = sections.slice(0, s.index).filter((q) => q.letter === s.letter).length;
     } else first.set(s.letter, s);
-  }
-
-  // The arc: the climax is the loudest section in the second half (or the loudest overall).
-  let late = sections.filter((s) => s.t0 >= 0.45 * duration);
-  if (!late.length) late = sections;
-  const climax = late.reduce((best, s) => (s.energy > best.energy ? s : best));
-  const top = Math.max(...sections.map((s) => s.energy));
-  const order = [...sections].sort((a, b) => a.energy - b.energy);
-  const n = order.length;
-  order.forEach((s, rank) => {           // ceilings by rank: loudest third 3, middle 2, rest 1
-    const frac = (rank + 1) / n;
-    let ceiling = frac > 2 / 3 ? 3 : frac > 1 / 3 ? 2 : 1;
-    const rel = s.energy / Math.max(top, 1e-9);
-    if (rel < 0.15) ceiling = 0;
-    else if (rel < 0.3) ceiling = Math.min(ceiling, 1);
-    if (s.index < climax.index) ceiling = Math.min(ceiling, 2);   // nothing before the climax gets the top tier...
-    if (s.nth > 0) ceiling = Math.min(3, ceiling + 1);            // ...except that every repeat escalates one step
-    if (s === climax || (s.index > climax.index && rel >= 0.7)) ceiling = 3;
-    s.ceiling = ceiling;
-  });
-  // The opening stays modest unless it is genuinely the loudest thing in the piece.
-  if (sections[0] !== climax) {
-    sections[0].ceiling = Math.min(sections[0].ceiling, sections[0].energy / top < 0.6 ? 1 : 2);
   }
 
   // Per-section tempo and beats, so beat-locked moves survive tempo changes.

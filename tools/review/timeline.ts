@@ -4,6 +4,7 @@
 
 import type { Analysis } from '@/engine/analysis';
 import { stepOf } from '@/engine/level';
+import { builds, drops } from '@/engine/pulse';
 import { dim, mix, Picture, type Rgb } from './image';
 import type { CarView, Row } from './stage';
 
@@ -171,7 +172,19 @@ export function drawTimeline(r: Review, t0: number, t1: number, pxPerS: number):
         if (v > 0.01) pic.rect(GUTTER + x, y, 1, PITCH - 1, dim(c, v));
       }
     } });
-  strip('build (crescendo)', an.build, [255, 220, 60]);
+  strip('beat confidence', an.beatConfidence, [120, 220, 140]);
+  strip('kit', an.kit, [200, 140, 255]);
+  bands.push({ h: PITCH, label: 'builds, drops', draw: (y) => {
+    lane(y, PITCH - 1);
+    for (const [a, b] of builds(an)) {
+      if (b <= t0 || a >= t1) continue;
+      const xa = X(Math.max(a, t0)), xb = X(Math.min(b, t1));
+      for (let x = Math.floor(xa); x < xb; x++) {
+        pic.rect(x, y, 1, PITCH - 1, dim([255, 220, 60], 0.2 + (0.8 * (t0 + (x - GUTTER) / pxPerS - a)) / (b - a)));
+      }
+    }
+    for (const d of drops(an).filter(inView)) pic.rect(X(d) - 1, y, 3, PITCH - 1, WHITE);
+  } });
   bands.push({ h: 12, label: 'beats, downbeats', draw: (y) => {
     lane(y, 11);
     for (const t of beats) pic.rect(X(t), y + 5, 1, 6, FAINT);

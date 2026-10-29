@@ -10,9 +10,8 @@
 //          tracker hears a firm pulse. A stretch under ISLAND_S between two that agree goes their way,
 //          so the style doesn't flip for a few bars.
 //   kit    A rhythm section, so a passage over sparse notes (a singer) follows the beat rather than the
-//          melody (choreo.ts). A low hit (kick, bass, timpani) right on at least KICK of the beats, and at
-//          least HATS high hits (snare, hats, cymbals) a beat. An orchestra passage that pounds like that
-//          counts too.
+//          melody (choreo.ts): the listening's kit measure (kicks, snares and hats on the beats) at least
+//          KIT over the section.
 //
 // Measured on the beats as the listening tracked them, before tempo.ts moves them onto what is played. The
 // neural tracker's own beats say best whether there is a pulse: where it hears none its beats wander, while
@@ -24,7 +23,7 @@ import { clip, mean, median } from './np';
 const FLOW_CLARITY = 2.2;
 const STEADY = 0.75, STEADY_TOL = 0.05;
 const ISLAND_S = 20;
-const KICK = 0.3, HATS = 1.0, KICK_NEAR_S = 0.05;
+const KIT = 0.6;
 
 /** One section of the song and how it moves. */
 export interface Feel {
@@ -68,22 +67,10 @@ function steadiness(beats: number[], tol: number): number {
   }).length / gaps.length;
 }
 
-const near = (sorted: number[], t: number, reach: number) => {
-  let lo = 0, hi = sorted.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (sorted[mid] < t - reach) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo < sorted.length && sorted[lo] <= t + reach;
-};
-
-function hasKit(an: Analysis, t0: number, t1: number, beats: number[]): boolean {
-  if (beats.length < 4) return false;
-  const lows = an.bass.filter((r) => r[0] >= t0 && r[0] < t1).map((r) => r[0]).sort((a, b) => a - b);
-  const highs = an.highs.filter((r) => r[0] >= t0 && r[0] < t1).length;
-  const kicks = beats.filter((b) => near(lows, b, KICK_NEAR_S)).length;
-  return kicks >= KICK * beats.length && highs >= HATS * beats.length;
+/** The listening's kit measure (an.kit) over [t0, t1]: how much a drum kit plays there. */
+function kitOver(an: Analysis, t0: number, t1: number): number {
+  const a = Math.trunc(t0 / an.step), b = Math.min(an.kit.length, Math.max(a + 1, Math.trunc(t1 / an.step)));
+  return mean(an.kit, a, b);
 }
 
 const read = new WeakMap<Analysis, Feel[]>();
@@ -99,7 +86,7 @@ export function feel(an: Analysis, phrases?: Phrase[]): Feel[] {
     const beats = an.beats.filter((b) => b >= t0 && b < t1);
     const heard = an.heardBeats ? an.heardBeats.filter((b) => b >= t0 && b < t1) : beats;
     const flow = clarity(an, t0, t1, 0) < FLOW_CLARITY && steadiness(heard, STEADY_TOL) < STEADY;
-    return { t0, t1, flow, kit: !flow && hasKit(an, t0, t1, beats) };
+    return { t0, t1, flow, kit: !flow && kitOver(an, t0, t1) >= KIT };
   });
   // a short stretch between two that agree goes their way: the style doesn't flip for a few bars
   for (let i = 1; i + 1 < out.length; i++) {

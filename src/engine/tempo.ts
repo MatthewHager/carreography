@@ -16,14 +16,14 @@ export const beatLen = (an: Analysis) => 60.0 / Math.max(an.tempo, 40);
 export const barLen = (an: Analysis) => 4 * beatLen(an);
 
 /** [times, strengths] of the played attacks: transcribed note events (chords count more) and the
- * bass onsets. */
+ * kicks (a kick drum, a timpani stroke, a bass note's attack). */
 function onsets(an: Analysis): [number[], number[]] {
   const ev = an.events;
   let t = [...ev.t];
   let w = ev.amp.map((a, i) => a * (1 + 0.5 * (ev.kind[i] >= 2 ? 1 : 0)));
-  if (an.bass.length) {
-    t = t.concat(an.bass.map((r) => r[0]));
-    w = w.concat(an.bass.map((r) => r[1]));
+  if (an.kick.length) {
+    t = t.concat(an.kick.map((r) => r[0]));
+    w = w.concat(an.kick.map((r) => r[1]));
   }
   const order = argsort(t);
   t = order.map((i) => t[i]);

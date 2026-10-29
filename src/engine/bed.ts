@@ -2,11 +2,12 @@
 // stage carries the song's arc while the moves, the beat and the drums play on top.
 //
 //   rear       the tail lights from groove up, the number plates, rear fogs and a truck's bed lights from
-//              drive up; a truck's rear bar glows brighter as the level rises
-//   front bar  a truck's front bar glows under the comets, from a groove up, to nearly half at the peak
-//   cabins     the interiors take the harmony's colour, bar by bar (the bar's strongest pitch class, round
-//              the circle of fifths, so related keys sit near each other), brighter as the level rises; from
-//              drive up they flash on the downbeats and on the big accents
+//              drive up; a truck's rear bar pumps with the bass, a level meter, brighter as the level rises
+//   front bar  a truck's front bar glows under the comets, from a groove up, to nearly half at the peak,
+//              breathing with the voice and the lead (the 600 Hz-4 kHz band)
+//   cabins     the interiors take the harmony's colour, bar by bar (the pitch class leading the bar, round
+//              the circle of fifths, so related keys sit near each other), else the sound's own (purple when
+//              dull, amber when bright), brighter as the level rises; from drive up a flash on the downbeats
 //
 // Where the music flows (feel.ts) the legato style has its own bed.
 
@@ -18,7 +19,7 @@ import { STEPS } from './level';
 import { clip, runs } from './np';
 
 const DWELL_S = 4.0;          // a lamp of the bed stays at least this long once it changes
-const PURPLE = [110, 0, 200], ORANGE = [255, 90, 0];
+const DULL = [110, 0, 200], BRIGHT = [255, 140, 20];
 
 /** Per frame, whether the level is at `at` or above, held for DWELL_S so a lamp never flickers. */
 function above(an: Analysis, at: number): boolean[] {
@@ -50,12 +51,14 @@ export function apply(cars: Car[], an: Analysis): void {
     for (const [a, b] of runs(above(an, at))) for (const c of cars) c.light(chs(c), a * step, b * step);
   }
   const glow = (f: number, from: number, top: number) => clip((lv[f] - from) / (1 - from), 0, 1) * top;
+  const { low, highMid } = an.bands;
   for (const c of cars.filter((q) => q.isCt)) {
     const front: Float64Array[] = [], rear: Float64Array[] = [];
     for (let f = 0; f < an.nFrames; f++) {
       const on = !flowsAt(an, f * step);
-      front.push(new Float64Array(C.FRONT_BAR.length).fill(on ? glow(f, STEPS[1], 0.2) + glow(f, STEPS[3], 0.25) : 0));
-      rear.push(new Float64Array(C.REAR_BAR.length).fill(on ? glow(f, STEPS[0], 0.6) : 0));
+      const lead = (glow(f, STEPS[1], 0.2) + glow(f, STEPS[3], 0.25)) * (0.5 + 0.5 * highMid[f]);
+      front.push(new Float64Array(C.FRONT_BAR.length).fill(on ? lead : 0));
+      rear.push(new Float64Array(C.REAR_BAR.length).fill(on ? glow(f, STEPS[0], 0.7) * (0.3 + 0.7 * low[f]) : 0));
     }
     c.pixels(C.FRONT_BAR, 0, front);
     c.pixels(C.REAR_BAR, 0, rear);
@@ -77,25 +80,22 @@ function bars(an: Analysis): [number, number][] {
   return edges.slice(1).map((e, i) => [edges[i], e]);
 }
 
-/** The interiors: the bar's harmony as a colour (its strongest pitch class, held through the bar so the
- * colour changes as the chords do), toward purple when quiet and orange when loud where the harmony is
- * unclear, brighter as the level rises; from drive up a white flash on each downbeat and big accent. */
+/** The interiors: the bar's harmony as a colour (the pitch class that leads most of the bar, held through
+ * it so the colour changes as the chords do), toward the sound's own colour where the harmony is unclear
+ * (purple when it is dull, amber when it is bright), brighter as the level rises; from drive up a white
+ * flash on each downbeat and big accent. */
 function cabins(cars: Car[], an: Analysis): void {
-  const lv = an.level!, step = an.step, sum = new Float64Array(12);
+  const lv = an.level!, step = an.step, votes = new Float64Array(12);
   for (const [t0, t1] of bars(an)) {
     const a = Math.trunc(t0 / step), b = Math.min(an.nFrames, Math.trunc(t1 / step));
-    sum.fill(0);
-    for (let f = a; f < b; f++) for (let k = 0; k < 12; k++) sum[k] += an.chroma[f * 12 + k] * an.loudness[f];
-    let pc = 0, tot = 0;
-    for (let k = 0; k < 12; k++) {
-      tot += sum[k];
-      if (sum[k] > sum[pc]) pc = k;
-    }
-    const sure = sum[pc] > 0 ? clip(((1 - tot / sum[pc] / 12) * 12) / 11, 0, 1) : 0;
+    votes.fill(0);
+    for (let f = a; f < b; f++) votes[an.pitchClass[f]] += an.pitchClassStrength[f];
+    let pc = 0;
+    for (let k = 1; k < 12; k++) if (votes[k] > votes[pc]) pc = k;
+    const sure = clip(votes[pc] / Math.max(1, b - a), 0, 1);
     for (let f = a; f < b; f += 5) {
       if (flowsAt(an, f * step)) continue;
-      const s = lv[f];
-      const base = ORANGE.map((o, i) => PURPLE[i] + (o - PURPLE[i]) * s);
+      const s = lv[f], base = DULL.map((d, i) => d + (BRIGHT[i] - d) * an.brightness[f]);
       const colour = hueOf(pc).map((h, i) => h * sure + base[i] * (1 - sure));
       for (const c of cars) c.rgb(f * step, Math.min(f + 5, b) * step, colour, 0.1 + 0.9 * s * s);
     }

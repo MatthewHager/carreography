@@ -68,7 +68,6 @@ export interface Spectrum {
   T: number;
   mel96: Float32Array | null;    // (96 x T) power, fmax 8000 (the onsets and beats in audio.ts)
   mel128: Float32Array;          // (128 x T) power, fmax sr/2 (librosa's default, for mfcc and beat_track(y))
-  rms: Float32Array | null;      // feature.rms
   tuning: number;                // estimate_tuning(bins_per_octave=36), as chroma_cqt estimates it
 }
 
@@ -80,20 +79,16 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
   const win = hann(nFft), fft = realFft(nFft);
   const m96 = full ? melBasis(96, 8000) : null, m128 = melBasis(128, SR / 2);
   const mel96 = full ? new Float32Array(96 * T) : null, mel128 = new Float32Array(128 * T);
-  const rms = full ? new Float32Array(T) : null;
   const buf = new Float64Array(nFft), re = new Float64Array(nb), im = new Float64Array(nb);
   const P = new Float64Array(nb), S = new Float64Array(nb);
   const pitches: number[] = [], mags: number[] = [];
   const bands: [SparseRow[], Float32Array][] = m96 && mel96 ? [[m96, mel96], [m128, mel128]] : [[m128, mel128]];
   for (let t = 0; t < T; t++) {
     const s0 = t * hop - half;
-    let ss = 0;
     for (let n = 0; n < nFft; n++) {
-      const i = s0 + n, v = i >= 0 && i < y.length ? y[i] : 0;
-      buf[n] = v * win[n];
-      if (rms) ss += v * v;
+      const i = s0 + n;
+      buf[n] = i >= 0 && i < y.length ? y[i] * win[n] : 0;
     }
-    if (rms) rms[t] = Math.sqrt(ss / nFft);
     fft.forward(buf, re, im);
     for (let k = 0; k < nb; k++) {
       const m = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
@@ -110,7 +105,7 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
       }
     }
   }
-  return { T, mel96, mel128, rms, tuning: full ? pitchTuning(pitches, mags, 36) : 0 };
+  return { T, mel96, mel128, tuning: full ? pitchTuning(pitches, mags, 36) : 0 };
 }
 
 /** librosa.piptrack on one magnitude frame (fmin 150, fmax 4000, threshold 0.1): appends the picked
