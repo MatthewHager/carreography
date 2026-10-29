@@ -666,7 +666,7 @@ function melodyPath(an: Analysis): Float64Array {
   if (out) return out;
   const ev = an.events, n = an.nFrames, step = an.step, pos = new Float64Array(n).fill(NaN);
   const range: [number, number][] = [];
-  for (const ph of an.phrases ?? []) range.splice(ph.a, ph.b - ph.a, ...localRanges(an, ph));
+  for (const ph of an.phrases ?? []) localRanges(an, ph).forEach((r, k) => (range[ph.a + k] = r));
   const cut = ev.amp.length ? quantiles(ev.amp, [0.35])[0] : 0;
   const kept = ev.t.flatMap((_, i) => (ev.amp[i] >= cut && range[i] ? [i] : []));
   kept.forEach((i, k) => {
@@ -724,7 +724,8 @@ const flowing = (places: (p: number) => number[]): Move => (cars, an, ph) => {
   for (const [key, on] of lit) {
     const [k, part] = key.split(' '), car = cars[Number(k)];
     for (const [f0, f1] of runs(on)) {
-      const t0 = (a + f0) * step, held = (f1 - f0) * step >= HELD_NOTE_S, t1 = (a + f1) * step + (held ? 0.25 : 0.1);
+      const held = (f1 - f0) * step >= HELD_NOTE_S, t0 = (a + f0) * step;
+      const t1 = (a + f1) * step + (held ? 0.25 : 0.1);
       if (part === 'L' || part === 'R') {
         car.light(car.inner(part), t0, t1, held ? C.ON_1000 : C.ON);
         car.light(car.inner(part), t1, t1 + (held ? 1 : 0.5), held ? OFF_1000 : OFF_500);

@@ -142,8 +142,8 @@ function hits(an: Analysis): Hit[] {
   return out;
 }
 
-/** Per frame, the headlights the beat layer owns (as Hit.own says), from each hit until it stops ringing. The moves leave what it owns alone (moves.half); choreograph sets it on the
- * analysis before the moves play. */
+/** Per frame, the headlights the beat layer owns (as Hit.own says), from each hit until it stops ringing.
+ * The moves leave what it owns alone (moves.half); choreograph sets it on the analysis before they play. */
 export function ownership(an: Analysis): Uint8Array {
   const out = new Uint8Array(an.nFrames);
   const f = (x: number) => clip(Math.round(x / an.step) - 1, 0, an.nFrames);     // the lights lead a frame

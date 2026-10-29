@@ -318,7 +318,8 @@ function accents(cars: Car[], an: Analysis, said: Moment[]) {
   const lift = (t: number) => levelOver(an, t, t + 2) - levelOver(an, t - 4, t - 0.3);
   const strength = (t: number, [before, after]: [number, number]) =>
     after - before + LIFT_WEIGHT * Math.max(0, lift(t));
-  const taken = [...PULSE.drops(an), ...said.filter((m) => m.do === 'lightning').map((m) => LY.onGrid(an, m.t0))];
+  const taken = [...PULSE.drops(an),
+    ...said.filter((m) => m.do === 'lightning').map((m) => LY.onGrid(an, m.t0))];
   const phrases = an.phrases!.filter((ph) => !flowsAt(an, ph.t0));
   for (const ph of phrases) if (ph.move === 'cadence') for (let i = ph.a; i < ph.b; i++) taken.push(ev.t[i]);
   const cands: { t: number; strength: number; hold: number; strike: boolean }[] = [];
@@ -378,7 +379,8 @@ function finale(cars: Car[], an: Analysis) {
   const ring = an.loudness.subarray(cars[0].fr(t), cars[0].fr(t + 0.2) + 1);
   if (flowsAt(an, end - 0.25) && !(late.includes(t) && Math.max(...ring) >= LOUD)) {
     for (const c of cars) {
-      const row = clip(c.fr(end) - 1, 0, c.nFrames - 1), lit = c.everything().filter((ch) => c.get(row, ch) > 0);
+      const row = clip(c.fr(end) - 1, 0, c.nFrames - 1);
+      const lit = c.everything().filter((ch) => c.get(row, ch) > 0);
       c.set(c.everything(), end, an.duration, 0);
       c.light(lit, end, Math.min(an.duration, end + 2.0), C.OFF_2000);
     }

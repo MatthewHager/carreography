@@ -76,7 +76,9 @@ export class Car {
     const F = this.frames, N = C.N_CHANNELS, q = this.hush;
     for (const ch of cs) {
       let from = a, to = b;
-      for (let g = a - 1; on && g >= Math.max(0, a - MIN_OFF); g--) if (F[g * N + ch] >= 128) [from, g] = [g + 1, -1];
+      for (let g = a - 1; on && g >= Math.max(0, a - MIN_OFF); g--) {
+        if (F[g * N + ch] >= 128) [from, g] = [g + 1, -1];
+      }
       for (let g = b; on && g < Math.min(n, b + MIN_OFF); g++) if (F[g * N + ch] >= 128) [to, g] = [g, n];
       for (let f = from; f < to; f++) {
         const v = q?.[f] && on ? (q[f] <= FADE ? C.OFF_500 : 0) : value;
@@ -230,7 +232,7 @@ export class Car {
 }
 
 /** One Car per letter, crowd-left to right (vehicles.ts), dark wherever `hush` says the music is silent. */
-export function makeLineup(layout: string, nFrames: number, step: number, hush: Uint8Array | null = null): Car[] {
+export function makeLineup(layout: string, nFrames: number, step: number, hush: Uint8Array | null): Car[] {
   return lineupCars(layout).map(([name, v], i) => {
     const car = new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon);
     car.hush = hush;

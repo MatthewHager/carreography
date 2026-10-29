@@ -193,9 +193,11 @@ function breathe(cars: Car[], an: Analysis, B: Float64Array): void {
         c.light(chs, a * res, b * res, C.ON_2000);
         c.light(chs, b * res, b * res + 2, C.OFF_2000);
         if (k === 2 && c.isCt) {
-          const n = c.fr(b * res + 2) - c.fr(a * res), up = Math.round(2 / c.step), hold = c.fr(b * res) - c.fr(a * res);
-          c.pixels(C.REAR_BAR, a * res, Array.from({ length: n }, (_, f) => new Float64Array(C.REAR_BAR.length)
-            .fill(TAIL_BAR * Math.min(1, f / up, f < hold ? 1 : 1 - (f - hold) / up))));
+          const n = c.fr(b * res + 2) - c.fr(a * res), hold = c.fr(b * res) - c.fr(a * res);
+          const up = Math.round(2 / c.step);
+          const at = (f: number) => Math.min(1, f / up, f < hold ? 1 : 1 - (f - hold) / up);
+          c.pixels(C.REAR_BAR, a * res, Array.from({ length: n },
+            (_, f) => new Float64Array(C.REAR_BAR.length).fill(TAIL_BAR * at(f))));
         }
       }
     }
