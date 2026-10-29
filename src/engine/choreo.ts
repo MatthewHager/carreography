@@ -151,7 +151,7 @@ type Family = 'note' | 'beat' | 'held' | 'flow';
  * stage moves together on it, with the melody along the trucks' bars. Below that, the melody where there are
  * notes enough to follow, the beat under sparse notes (a singer over a band), and in between the one the
  * previous figure didn't take, for contrast. */
-function family(an: Analysis, t0: number, t1: number, step: number, before: Family | null): Family {
+export function family(an: Analysis, t0: number, t1: number, step: number, before: Family | null): Family {
   if (flowsAt(an, t0)) return 'flow';
   const notes = an.events.t.filter((t) => t >= t0 && t < t1).length / Math.max(t1 - t0, 1);
   const kit = kitAt(an, (t0 + t1) / 2);
@@ -231,7 +231,7 @@ function playPassages(cars: Car[], an: Analysis) {
  * playing one move for half a minute), else the least used of the family, and of those the one the figure's
  * register points to, so songs and figures don't all walk the catalogue in the same order. No sparse move
  * at the peak. */
-function chooseMove(an: Analysis, fam: Family, g0: number, g1: number, replay: string | undefined,
+export function chooseMove(an: Analysis, fam: Family, g0: number, g1: number, replay: string | undefined,
   prev: string | null, used: Map<string, number>): string {
   const peak = stepOf(levelOver(an, g0, g1)) === 4;
   const allowed = (m: string) => !(peak && CAT.SPARSE_MOVES.includes(m));
