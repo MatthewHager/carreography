@@ -133,7 +133,7 @@ function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
   const used = new Map<string, number>();
   const byLetter = new Map<string, string[]>();
   let prev: string | null = null, prevFamily: 'note' | 'beat' | null = null;
-  const ps = passages(an).filter((p) => !flowsAt(an, (p.t0 + p.t1) / 2));
+  const ps = passages(an).filter((p) => phrases.some((ph) => ph.t0 >= p.t0 - 0.01 && ph.t0 < p.t1));
   for (const p of ps) {
     let move = byLetter.get(p.letters[0])?.[p.piece];
     if (move === undefined) {
@@ -155,13 +155,19 @@ function playPassages(cars: Car[], an: Analysis, phrases: Phrase[]) {
       // the beat move across the passage, around the phrases that play their own
       let t = p.t0;
       for (const ph of [...own.filter((q) => q.move !== move), { t0: p.t1, t1: p.t1 } as Phrase]) {
-        if (ph.t0 - t >= 1.0) M.MOVES[move](cars, an, stretch(an, t, ph.t0));
+        for (const [a, b] of beating(an, t, ph.t0)) if (b - a >= 1.0) M.MOVES[move](cars, an, stretch(an, a, b));
         t = Math.max(t, ph.t1);
       }
     }
     for (const ph of own) if (ph.move !== move || prevFamily === 'note') M.MOVES[ph.move!](cars, an, ph);
     for (const ph of own) arrivals(cars, an, ph);
   }
+}
+
+/** The parts of [t0, t1] where the music beats (feel.ts). */
+function beating(an: Analysis, t0: number, t1: number): [number, number][] {
+  return feel(an).filter((f) => !f.flow && f.t1 > t0 && f.t0 < t1)
+    .map((f) => [Math.max(f.t0, t0), Math.min(f.t1, t1)] as [number, number]);
 }
 
 /** A stretch of a passage as a phrase, for a beat move. */
