@@ -572,18 +572,20 @@ const MAX_RATE = 5;        // lightings a second a car can make before it reads 
 const ON_GRID_S = 0.06;    // a lighting this close to a beat or a note is on it
 const FAST = new Set(['run_up', 'run_down', 'zigzag', 'trill']);     // textures that play faster than that
 
-/** A car lights a lamp at most MAX_RATE times a second: past that, only a lighting on a beat, or on a note
- * of a run, a zigzag or a trill, keeps its flash; any other (a hat, the next note of a busy accompaniment, a
- * ring of a figure between the beats) joins the lighting before it on its lamp, or is left out where there
- * is none within a second, so the car holds light instead of blinking. A truck's bar counts as a lamp lit
+/** A car lights a lamp at most MAX_RATE times a second, a lighting just after a beat brought onto it: past
+ * that, only a lighting on a beat, or on a note of a run, a zigzag or a trill, keeps its flash; any other (a
+ * hat, the next note of a busy accompaniment, a ring of a figure between the beats) joins the lighting
+ * before it on its lamp, or is left out where there is none within a second, so the car holds light instead
+ * of blinking. A truck's bar counts as a lamp lit
  * when over half of it is: past the rate, a flash of it stays under half. */
 function steady(car: Car, an: Analysis) {
   const n = car.nFrames, near = Math.round(ON_GRID_S / an.step), second = Math.round(1 / an.step);
-  const onGrid = new Uint8Array(n), ev = an.events;
+  const onGrid = new Uint8Array(n), ev = an.events, beatFrame = new Int32Array(n).fill(-1);
   for (const t of [...an.beats, ...ev.t.filter((_, i) => FAST.has(ev.phrase[i]))]) {
     const f = car.fr(t);
     onGrid.fill(1, Math.max(0, f - near), Math.min(n, f + near + 1));
   }
+  for (const t of an.beats) beatFrame.fill(car.fr(t), car.fr(t) + 1, Math.min(n, car.fr(t) + near + 1));
   const cols: Uint8Array[] = [];
   for (let ch = C.L_OUTER_MAIN; ch <= C.LICENSE_PLATE; ch++) cols.push(car.column(ch));
   const lastLit = new Int32Array(cols.length).fill(-n);
@@ -602,6 +604,11 @@ function steady(car: Car, an: Analysis) {
       while (kept.length && kept[0] <= f - second) kept.shift();
       if (kept.length < MAX_RATE || onGrid[f]) {
         kept.push(f);
+        // a lighting just after a beat lands with the beat's own (the eye takes them as one flash)
+        const b = beatFrame[f];
+        for (const k of b >= 0 ? rising : []) {
+          for (let g = b; g < f; g++) if (cols[k][g] < 128) cols[k][g] = cols[k][f];
+        }
       } else {
         let top = 0, end = f;
         for (; barRises && end < n && barMean(end) >= 0.5; end++) top = Math.max(top, barMean(end));
