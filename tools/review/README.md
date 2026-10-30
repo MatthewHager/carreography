@@ -17,7 +17,6 @@ npm run review -- song.mp3 --lineup YCY --from 60 --to 90 --video
 | `--out DIR` | where to write (default `review-out/<song>_<lineup>/` at the top of the checkout) |
 | `--video` | film the 3D preview with the sound, from `--from` to `--to` |
 | `--fps N`, `--camera NAME` | the film's frame rate (30) and camera: `Stage` (the default: the crowd's view, close and low enough that the whole lineup fills the frame), or the app's `Front`, `3/4`, `Rear`, `Top` |
-| `--lyrics` | look the lyrics up on LRCLIB, as the page does (needs the network; off by default) |
 | `--fresh` | listen again instead of reusing the beats and notes heard last time |
 
 `review-out/` keeps itself out of git (the tool writes a `.gitignore` into it).
@@ -62,7 +61,6 @@ uses `src/` as it is, with no build. `npx tsc -p tools/review` type-checks it.
 | beats, downbeats | as the lights use them (after `tempo.ts` moved them onto what's played) |
 | kick, snare, hats | the drum voices' hits (`an.kick`, `an.snare`, `an.hats`), brightness = strength |
 | notes | a piano roll of every transcribed note (brighter = louder), the melody the moves follow as red dots, the song's stage range (`pitchLo`, `pitchHi`) in dark red |
-| lyrics | each line at its start, with `--lyrics` |
 
 ## The film
 

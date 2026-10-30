@@ -28,14 +28,14 @@ gh release download examples --dir public/examples
 ```
 
 **Never commit recordings, Tesla's files or anything in `cache/`.** Keep songs for trying shows in
-`songs/`, which git ignores. The tests make up their own signals and lyrics.
+`songs/`, which git ignores. The tests make up their own signals.
 
 ## Where things are
 
 | Folder | What |
 |---|---|
-| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts` (with the breath where the music flows), `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, builds, drops and accents), `motors.ts` (the closures), `lyrics.ts`, `car.ts` (one car's frames, lamp groups and the 2025+ Model Y's lamps), `vehicles.ts` (the lineup letters), and the reading of the music (`feel.ts`, `phrases.ts`, `tempo.ts`). |
-| `src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend), song tags, LRCLIB and lyric alignment. |
+| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts` (with the breath where the music flows), `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, builds, drops and accents), `motors.ts` (the closures), `car.ts` (one car's frames, lamp groups and the 2025+ Model Y's lamps), `vehicles.ts` (the lineup letters), and the reading of the music (`feel.ts`, `phrases.ts`, `tempo.ts`). |
+| `src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend). |
 | `src/viewer/` | The 3D preview (three.js), adapted from Tesla Lightshow Studio (AGPL-3.0): `core/` reads, writes and simulates show files, `car/appBody.ts` draws Tesla's app models. |
 | `src/app/` | The page: the 3D stage, the panels, the worker that makes a show (`show.worker.ts`), the WAV and the ZIP. |
 | `src/components/ui/` | shadcn/ui components, as the shadcn CLI writes them. Don't edit them; restyle through the theme in `src/index.css`. |

@@ -9,7 +9,6 @@
 | [ONNX Runtime Web](https://onnxruntime.ai/) | running both models in the browser | MIT |
 | [librosa](https://librosa.org/) | the analysis is a TypeScript port of the parts it uses | ISC |
 | [numpy](https://numpy.org/) | its rounding, quantiles and random generator, ported where they decide a frame | BSD-3-Clause |
-| [LRCLIB](https://lrclib.net) | synced lyrics, looked up by artist, title and length | free API |
 | [Tesla Lightshow Studio](https://github.com/nathanjgrace/tesla-lightshow-studio) by Nathan Grace | the 3D preview (below) | AGPL-3.0-only |
 | [three.js](https://threejs.org/) | the 3D preview | MIT |
 | [React](https://react.dev/), [Vite](https://vite.dev/), [Tailwind CSS](https://tailwindcss.com/) | the page | MIT |

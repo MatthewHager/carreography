@@ -41,13 +41,6 @@ export interface Phrase {
   move?: string;
 }
 
-/** One sung line of the lyrics, timed by line only (LRCLIB): when it starts and stops, and what it says. */
-export interface LyricLine {
-  t: number;
-  end: number;
-  text: string;
-}
-
 /** The energy in four bands, per frame 0..1: a level meter's, rising at once and falling over about 0.1 s. */
 export interface Bands {
   low: Float32Array;      // below 150 Hz: kick and bass, the thump
@@ -90,7 +83,6 @@ export interface Analysis {
   noveltyPeaks: number[][];     // the moments it changes most (an entry, a drop, a new texture), 1 s apart
   kit: Float32Array;            // how much a drum kit is playing: the drum-kit layer vs. gentle percussion
   beatConfidence: Float32Array; // how clearly the beats land on accents: beat lights vs. flowing (0: no beat)
-  lyricLines?: LyricLine[] | null;                   // LRCLIB's lines, lined up with this recording
   // set while choreographing
   phrases?: Phrase[];
   level?: Float32Array;  // per frame 0..1: how big the show is (level.ts)

@@ -32,9 +32,7 @@ export function SongDrop({ song, dragging, disabled, onFiles }: {
         </span>
       </label>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        {!song && `The example is ${EXAMPLE.credit}. `}Your song stays on this device. Its artist, title and length go
-        to <a href="https://lrclib.net" target="_blank" rel="noreferrer" className="underline underline-offset-2
-        hover:text-foreground">LRCLIB</a> to find its lyrics.
+        {!song && `The example is ${EXAMPLE.credit}. `}Your song stays on this device.
       </p>
     </div>
   );

@@ -1,9 +1,7 @@
 // Making a show: the work runs in a worker (show.worker.ts); this side sends it the song and reports
 // progress.
 
-import { vocalCurve } from '@/engine/listen/align';
 import { mixdown } from '@/engine/listen/resample';
-import { readTags } from '@/engine/listen/tags';
 import type { Reply, Request } from './show.worker';
 import { explain, outOfMemory, unsupported } from './errors';
 import type { Show } from './show';
@@ -81,21 +79,16 @@ export async function showFromFile(file: File, lineup: string, onProgress: Progr
   if (why) throw new Error(why);
   onProgress('Opening the song');
   const bytes = await file.arrayBuffer();
-  const tags = readTags(new Uint8Array(bytes), file.name);     // before decoding, which may take the buffer
   const { channels, sampleRate } = await decode(file, bytes);
   const audio = encodeWav(channels, sampleRate);
   const title = file.name.replace(/\.[^.]+$/, '');
-  // mixed down here, as the worker would, so only one channel is copied over; the lyrics only need where
-  // the voice is in the stereo mix
+  // mixed down here, as the worker would, so only one channel is copied over
   const mono = mixdown(channels);
-  const vocals = channels.length > 1 ? vocalCurve(channels[0], channels[1], sampleRate) : null;
   const start = performance.now();
-  const done = await run({ channels: [mono], sampleRate, lineup, tags, vocals },
-    onProgress, [mono.buffer]);
+  const done = await run({ channels: [mono], sampleRate, lineup }, onProgress, [mono.buffer]);
   // The one place the listening backend shows: for bug reports, and the README's table of browsers.
   console.info(`Made the show in ${((performance.now() - start) / 1000).toFixed(1)} s, listening on ${done.backend}`);
   return {
     title, lineup, nFrames: done.nFrames, cars: done.cars.map((c, i) => ({ ...c, letter: lineup[i] })), audio,
-    lyrics: { ...done.lyrics, tags },
   };
 }

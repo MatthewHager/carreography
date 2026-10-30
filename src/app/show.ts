@@ -1,8 +1,6 @@
 // A finished show: one frame array per car, plus the song it plays to.
 
 import { N_CHANNELS, STEP_MS } from '@/engine/channels';
-import type { LyricsReport } from '@/engine/listen/align';
-import type { SongTags } from '@/engine/listen/tags';
 import { VEHICLES } from '@/engine/vehicles';
 import type { AppModelId } from '@/viewer/car/appBody';
 import { stringHeader, writeFseq } from '@/viewer/core/fseq';
@@ -19,7 +17,6 @@ export interface Show {
   nFrames: number;
   cars: ShowCar[];
   audio: Blob;           // the song as a 44.1 kHz WAV: what plays in the preview and goes on the drives
-  lyrics: LyricsReport & { tags: SongTags };   // what LRCLIB had for the song, looked up by these tags
 }
 
 export const STEP_S = STEP_MS / 1000;

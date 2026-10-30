@@ -7,7 +7,6 @@ import { Separator } from '@/components/ui/separator';
 import { DownloadSheet } from '@/app/DownloadSheet';
 import { unsupported } from '@/app/errors';
 import { DEFAULT_PAINT, LineupEditor } from '@/app/LineupEditor';
-import { LyricsNote } from '@/app/LyricsNote';
 import { exampleSong, showFromFile, SONG_EXTENSIONS, SONG_TYPES } from '@/app/pipeline';
 import { Player } from '@/app/player';
 import { PlayerBar } from '@/app/PlayerBar';
@@ -166,10 +165,7 @@ export default function App() {
               <Progress value={(busy.fraction ?? 0) * 100} className={busy.fraction === undefined ? 'invisible' : ''} />
             </div>
           ) : made ? (
-            <>
-              <LyricsNote lyrics={made.lyrics} />
-              <DownloadSheet show={made} />
-            </>
+            <DownloadSheet show={made} />
           ) : (
             <Button size="lg" className="h-11 w-full rounded-full text-[0.9375rem]" onClick={() => void make()}>
               Make the show

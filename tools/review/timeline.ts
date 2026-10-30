@@ -225,16 +225,6 @@ export function drawTimeline(r: Review, t0: number, t1: number, pxPerS: number):
     pic.text(4, y + 22, 'dark red:', [170, 70, 70]);
     pic.text(4, y + 32, 'stage range', [170, 70, 70]);
   } });
-  const lyrics = an.lyricLines ?? [];
-  if (lyrics.length) {
-    bands.push({ h: PITCH + 2, label: 'lyrics', draw: (y) => lyrics.forEach((l, i) => {
-      if (l.end < t0 || l.t >= t1) return;
-      const a = X(Math.max(t0, l.t)), b = X(Math.min(t1, lyrics[i + 1]?.t ?? l.end));
-      pic.rect(a, y, 1, PITCH, [255, 220, 60]);
-      pic.text(a + 3, y + 1, l.text, TEXT, b - a - 4);
-    }) });
-  }
-
   pic = new Picture(W, bands.reduce((s, b) => s + b.h, 0) + 6, BG);
   let y = 2;
   for (const b of bands) {

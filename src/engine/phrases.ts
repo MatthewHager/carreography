@@ -14,22 +14,16 @@
 //   recitative   slow single notes with space between them
 
 import type { Events, Phrase } from './analysis';
-import { mean, quantiles, searchsorted } from './np';
+import { mean, quantiles } from './np';
 
 const MAX_PHRASE = 8.0;
 
-/** `cutsAt`: extra phrase boundaries in seconds (sung lines), snapped to the nearest event. */
-export function segment(ev: Events, cutsAt?: number[] | null): Phrase[] {
+export function segment(ev: Events): Phrase[] {
   const n = ev.t.length;
   if (n === 0) return [];
   const t = ev.t, top = ev.top, kind = ev.kind;
   const dur = ev.dur.map((d) => Math.min(d, 4.0));
   const endT = t.map((x, i) => x + dur[i]);
-  const forced = new Set<number>();
-  for (const ct of cutsAt ?? []) {
-    const i = searchsorted(t, ct);
-    if (i > 0 && i < n && Math.abs(t[i] - ct) < 0.6) forced.add(i);
-  }
   const maxEnd = (a: number, b: number) => {
     let m = -Infinity;
     for (let k = a; k < b; k++) m = Math.max(m, endT[k]);
@@ -45,7 +39,7 @@ export function segment(ev: Events, cutsAt?: number[] | null): Phrase[] {
       && [i, i + 1, i + 2, i + 3].every((j) => ph[j] === ph[i])
       && ['chords', 'arrival', 'trill'].includes(ph[i]))
       || (['chords', 'trill'].includes(ph[i - 1]) && !['chords', 'trill'].includes(ph[i]));
-    if (gap >= 0.3 || heldBefore || ev.arrival[i] || textureChange || forced.has(i)) {
+    if (gap >= 0.3 || heldBefore || ev.arrival[i] || textureChange) {
       if (i - cuts[cuts.length - 1] >= 2) cuts.push(i);
     }
   }

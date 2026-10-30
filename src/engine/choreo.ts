@@ -6,7 +6,6 @@
 //   drums     each drum voice on lamps of its own wherever it keeps time (drums.ts)
 //   pulse     the beat on the headlights, the builds that speed up into a drop, and the whole stage at once
 //             for what stands out most (pulse.ts)
-//   lyrics    what the words say (lyrics.ts)
 //   motors    lids, windows, mirrors, the charge port and a Model X's doors (motors.ts)
 //   the end   everything on at the music's last strong hit, then a fade
 //
@@ -20,7 +19,6 @@ import * as C from './channels';
 import * as DRUMS from './drums';
 import { feel, flowsAt, followable, held, kitAt } from './feel';
 import { levelCurve, levelOver, musicSpan, silence, stepOf } from './level';
-import * as LY from './lyrics';
 import * as motors from './motors';
 import * as M from './moves';
 import { clip, linspace, median, searchsorted } from './np';
@@ -40,8 +38,7 @@ export function choreograph(heard: Analysis, layout = 'YCY'): Car[] {
  * these). */
 export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: Analysis } {
   const an = structuredClone(heard);
-  const sung = an.lyricLines?.length ? an.lyricLines : null;     // a sung line starts a phrase
-  an.phrases = segment(an.events, sung ? sung.map((l) => l.t) : null);
+  an.phrases = segment(an.events);
   feel(an, an.phrases);     // heard before tempo.ts moves the beats
   TEMPO.apply(an);          // beats moved onto what is played (rubato-aware)
   // Durations in the moves (a bar, a sixteenth) come from the tempo: make it the tracked beats' own
@@ -50,13 +47,11 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
   an.level = levelCurve(an);
   for (const ph of an.phrases) ph.level = levelOver(an, ph.t0, ph.t1);
   const cars = makeLineup(layout, an.nFrames, an.step, silence(an), PULSE.ownership(an));
-  const said = sung ? LY.moments(sung, an) : [];
-  BED.apply(cars, an, said);
+  BED.apply(cars, an);
   playPassages(cars, an);
   DRUMS.apply(cars, an);
   PULSE.apply(cars, an);
-  LY.apply(cars, an, said);
-  PULSE.accents(cars, an, said);
+  PULSE.accents(cars, an);
   motors.choreograph(cars, an);
   finale(cars, an);
   for (const car of cars) {

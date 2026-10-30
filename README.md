@@ -2,7 +2,7 @@
 
 A light show for one to five Teslas, made from your song in your browser. You line up the cars as the
 crowd will see them, drop in a song, and Carreography listens to it (the beat, the notes, the loudness,
-the drums, the harmony, the shape of the song, and the lyrics when it can find them) and choreographs
+the drums, the harmony and the shape of the song) and choreographs
 every car's lights and motors to the music. The lineup plays as one instrument that grows with the song:
 a pianissimo is a lamp at a time, notes run across the cars like a keyboard, the beat thumps through every
 headlight, each drum has lamps of its own, builds speed up into a beat of black before the drop hits every
@@ -53,9 +53,8 @@ memory and the details are in [How it works](docs/HOW_IT_WORKS.md#browsers).
 
 ## Privacy
 
-The song never leaves your device: the listening, the choreography and the preview all run in the page.
-To find the lyrics, the song's artist, title and length (from its tags, or its file name) are sent to
-[LRCLIB](https://lrclib.net). The site downloads the listening models and Tesla's car models once, and the
+The song never leaves your device: the listening, the choreography and the preview all run in the page,
+and nothing about it is sent anywhere. The site downloads the listening models and Tesla's car models once, and the
 browser keeps them.
 
 ## More

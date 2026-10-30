@@ -1,4 +1,4 @@
-// npm run review -- SONG [--lineup YCY] [--from S] [--to S] [--out DIR] [--video] [--lyrics] [--fresh]
+// npm run review -- SONG [--lineup YCY] [--from S] [--to S] [--out DIR] [--video] [--fresh]
 //
 // Makes a song's show in Node the way the page's worker does (show.worker.ts), then writes what it looks
 // like: timeline pictures, a text summary, the show files and, with --video, the 3D preview playing it
@@ -12,13 +12,10 @@ import { parseArgs } from 'node:util';
 import { STEP_MS } from '@/engine/channels';
 import { makeShow } from '@/engine/choreo';
 import { builds, drops } from '@/engine/pulse';
-import { place, vocalCurve } from '@/engine/listen/align';
 import { analyze } from '@/engine/listen/audio';
 import { trackBeats } from '@/engine/listen/beats';
-import { lookup } from '@/engine/listen/lrclib';
 import { transcribe } from '@/engine/listen/notes';
 import { mixdown, monoAt22050 } from '@/engine/listen/resample';
-import { readTags } from '@/engine/listen/tags';
 import { parseLineup } from '@/engine/vehicles';
 import { fileName, showFile } from '@/app/show';
 import { readWav } from '@/app/wav';
@@ -41,7 +38,6 @@ const USAGE = `npm run review -- SONG [options]
   --fps N          the video's frame rate (default 30)
   --camera NAME    Stage (the crowd's view of the whole lineup, close up: the default), Front, 3/4, Rear
                    or Top
-  --lyrics         look the lyrics up on LRCLIB, as the page does (needs the network)
   --fresh          listen again rather than reuse the beats and notes heard last time`;
 
 const ab = (b: Buffer) => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
@@ -106,7 +102,7 @@ export async function main(argv: string[]): Promise<number> {
       lineup: { type: 'string', default: 'YCY' }, from: { type: 'string' }, to: { type: 'string' },
       stretch: { type: 'string', default: '30' }, out: { type: 'string' }, video: { type: 'boolean' },
       fps: { type: 'string', default: '30' }, camera: { type: 'string', default: 'Stage' },
-      lyrics: { type: 'boolean' }, fresh: { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+      fresh: { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     },
   });
   if (o.help || positionals.length !== 1) {
@@ -134,16 +130,6 @@ export async function main(argv: string[]): Promise<number> {
   const y = monoAt22050([mixdown(channels)], sampleRate);
   const heard = await listen(y, path.join(outRoot, '.listen'), !!o.fresh);     // shared, whatever --out says
   const listened = analyze(y, { stepMs: STEP_MS, notes: heard.notes, neuralBeats: heard.beats });
-  if (o.lyrics) {
-    const tags = readTags(new Uint8Array(bytes), path.basename(song));
-    const found = await lookup(tags, channels[0].length / sampleRate).catch(() => null);
-    const vocals = channels.length > 1 ? vocalCurve(channels[0], channels[1], sampleRate) : null;
-    const placed = found?.status === 'found' ? place(found.candidates, vocals, listened.duration) : null;
-    listened.lyricLines = placed?.lines ?? null;
-    const report = placed?.report;
-    const got = report ? `${report.lines} lines, offset ${report.offset ?? '-'} s` : found?.status ?? 'failed';
-    console.log(`Lyrics: ${got}`);
-  }
   const t = Date.now();
   const { cars, an } = makeShow(listened, lineup);     // the analysis as the show used it
   console.log(`Choreographed in ${Date.now() - t} ms`);
@@ -161,7 +147,6 @@ export async function main(argv: string[]): Promise<number> {
     title, lineup, duration: an.duration, tempo: an.tempo, beatScore: an.beatScore,
     sections: an.sections, phrases: an.phrases, beats: an.beats,
     downbeats: an.downbeats, hits: an.hits, builds: builds(an), drops: drops(an),
-    lyricLines: an.lyricLines ?? null,
     curves: { hz: 10, loudness: tenth(an.loudness), level: tenth(an.level) },
     drums: { kick: an.kick, snare: an.snare, hats: an.hats },
   }, null, 1));

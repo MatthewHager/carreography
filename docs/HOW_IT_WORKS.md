@@ -37,14 +37,14 @@ black for a beat before the drop lands on every lamp at once. Four principles fo
 
 ```
 song ─► decode ─► listen (beats, notes, loudness, drums, harmony, form) ─► phrases and passages
-                         │                                                        │
-                  lyrics (LRCLIB) ───────────────────────► the level ─► bed, moves, drums, pulse, drops
+                                                                                  │
+                                                                   the level ─► bed, moves, drums, pulse, drops
                                                                                   │
               motors (lids, windows, mirrors, port, doors) ◄──────────────────────┘ ─► FSEQ per car ─► ZIP
 ```
 
 The page (`app/pipeline.ts`) decodes the song and hands it to a worker (`app/show.worker.ts`), which
-listens, looks up the lyrics at the same time, and choreographs. The page then shows the result in 3D
+listens and choreographs. The page then shows the result in 3D
 and packs the download.
 
 ### Listening (`engine/listen/`)
@@ -80,25 +80,6 @@ and packs the download.
   strongest attack near it, or onto the smooth local tempo through its neighbours; runs of beats locked
   onto the off-beat are shifted back. Sweeps snap to a sixteenth grid built from each beat's own length,
   then onto a note played within 40 ms.
-
-### Lyrics (`engine/listen/`, `engine/lyrics.ts`)
-
-The song's artist and title come from its tags (ID3 in MP3, Vorbis comments in FLAC, iTunes atoms in M4A,
-RIFF INFO in WAV), else its file name (`tags.ts`). [LRCLIB](https://lrclib.net) is asked for synced
-lyrics with those and the song's length while the song is being listened to (`lrclib.ts`); it's busy at
-times, so requests are retried, and a song without lyrics plays without lyric effects.
-
-LRCLIB's times belong to some release of the song, so the lines are slid, up to 15 s either way, to where
-the singing is in this file (`align.ts`). The singer is nearly always in the middle of the stereo picture,
-so the voice band leaning to the middle marks it. The slide counts only when the song's first, middle
-and last thirds mostly agree on it; otherwise LRCLIB's own times are kept for a release of the same
-length, or the lyrics are left out. On five sung songs, line starts landed a median 0.13–0.75 s from
-word-level timing, about what LRCLIB's own times allow.
-
-Lyrics are line-level, so the show reacts to what a line says, not to one word in it. The moments come
-from one table of words (`LYRIC_WORDS` in `lyrics.ts`): a colour word colours the interiors for the line,
-a scream-type word strikes lightning on its loudest attack, a word sung twice in a line pings across the
-cars on its beats, and every line start is a phrase cut.
 
 ### Choreography (`engine/choreo.ts`)
 
@@ -136,13 +117,12 @@ table below), so no layer has to dodge another and nothing is cleaned up after t
 | tails, brake, plates, rear fog, a truck's bed lights | the bed; the kick on the brake | the breath (tails) |
 | a truck's bars, the cabins | the bed's glow under the moves' comets and sweeps | the same, breathing |
 
-An accent, a drop, the peak's downbeat, a cadence, lightning, a chanted word and the end light whole cars
+An accent, a drop, the peak's downbeat, a cadence and the end light whole cars
 for a moment (`Car.lightOver`). The pulse's hold on the inner beams is kept where lamps are written:
 `Car.light` leaves them out of every other write, frame by frame, while one of its hits rings.
 
 - **The bed** (`bed.ts`): the rear lamps from a groove up, the trucks' rear bars pumping with the bass and
-  their front bars glowing, the cabins in the harmony's colour bar by bar (a sung colour word's while the
-  line is sung), all brighter as the level rises. Where the music flows it **breathes**: with each phrase's
+  their front bars glowing, the cabins in the harmony's colour bar by bar, all brighter as the level rises. Where the music flows it **breathes**: with each phrase's
   swell the free front lamps join one layer at a time and leave together, as many as the level allows.
 - **The drums** (`drums.ts`): kicks on the fogs, snares, claps and snaps on the turn signals, hats on the
   markers at the peak, each wherever that voice keeps time (its hits on the beat or halfway, a few every

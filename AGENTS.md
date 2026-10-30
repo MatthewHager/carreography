@@ -33,15 +33,14 @@ gh release download examples --dir public/examples                      # the ex
     `moves.ts` (every move as `(cars, an, ph) => void`, sized by the level, the `MOVES` table,
     `centreTruck`), `catalog.ts` (the catalogue; `MOVES.md` is generated from it), `drums.ts`
     (kick, snare, hats), `pulse.ts` (the beat, builds, drops and accents), `motors.ts` (closures),
-    `lyrics.ts` (lyric moments), `channels.ts` (Tesla's channel map and limits). Each layer lights lamps of
+    `channels.ts` (Tesla's channel map and limits). Each layer lights lamps of
     its own: docs/HOW_IT_WORKS.md has the table.
   - `feel.ts` (flow or beat, kit), `phrases.ts`, `tempo.ts` (the beat map and its grid): reading the
     music.
 - `src/engine/listen/`: decoding helpers, resampling, the librosa subset (`dsp.ts`, `cqt.ts`),
   `audio.ts` (the analysis), `texture.ts` (notes into events), `form.ts` (the sections), `visual.ts`
   (loudness, bands, the drum voices, harmony, novelty, kit, beat confidence), beat-this and basic-pitch
-  (`beats.ts`, `notes.ts`) on the backend `infer.ts` picks,
-  `tags.ts`, `lrclib.ts`, `align.ts`.
+  (`beats.ts`, `notes.ts`) on the backend `infer.ts` picks.
 - `src/app/`: the page (`App.tsx` is in `src/`), the show worker (`show.worker.ts`), `pipeline.ts`,
   the WAV and the ZIP.
 - `src/viewer/`: the 3D preview, AGPL code adapted from Tesla Lightshow Studio. The cars are Tesla's
