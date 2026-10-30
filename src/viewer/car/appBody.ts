@@ -81,6 +81,8 @@ interface ModelRules {
   foldMirrors?: { nodes: RegExp; x: [number, number]; y: [number, number]; absZ: number; deg: number };
   /** The headlight beams start at these lamp nodes. */
   beamFrom: string[];
+  /** Options the app hides until they're chosen, shown here (the Cybertruck's tonneau cover, shut). */
+  show?: RegExp;
 }
 
 const W = COLORS.white;
@@ -194,6 +196,7 @@ const RULES: Record<AppModelId, ModelRules> = {
     portLed: 'Chargeport_Light2',
     portDoor: 'Charge_Cap_Spatial',
     beamFrom: ['Headlights2'],
+    show: /^Tonneau$/,
   },
   // Model S 2021+ (Tesla's README, "Model S"): the ring around the headlight is the signature on
   // reflector headlights and channels 4-6 on projector ones, so it lights for all four; the bumper lamp
@@ -360,7 +363,8 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
     return paints.get(m)!;
   };
   root.traverse((o) => {
-    if ((o.userData as { visible?: boolean }).visible === false || APP_ONLY.test(o.name)) o.visible = false;
+    const hidden = (o.userData as { visible?: boolean }).visible === false && !rules.show?.test(o.name);
+    if (hidden || APP_ONLY.test(o.name)) o.visible = false;
     if (o instanceof THREE.Mesh) {
       o.frustumCulled = false;
       for (const m of [o.material].flat()) nightLot(m as THREE.Material);
