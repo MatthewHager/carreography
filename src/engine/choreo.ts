@@ -23,20 +23,23 @@ import * as motors from './motors';
 import * as M from './moves';
 import { clip, linspace, median, searchsorted } from './np';
 import * as PULSE from './pulse';
+import { DEFAULT_SCHEME, SCHEMES, type SchemeId } from './schemes';
 import { segment } from './phrases';
 import * as TEMPO from './tempo';
 import { barLen } from './tempo';
 
-/** The show for a lineup (car letters, crowd-left to right), from the song's analysis (which it leaves as
- * it was heard, so the same analysis can be choreographed again, for another lineup, to the same bytes). */
-export function choreograph(heard: Analysis, layout = 'YCY'): Car[] {
-  return makeShow(heard, layout).cars;
+/** The show for a lineup (car letters, crowd-left to right) in a colour scheme, from the song's analysis
+ * (which it leaves as it was heard, so the same analysis can be choreographed again, for another lineup or
+ * scheme, to the same bytes). */
+export function choreograph(heard: Analysis, layout = 'YCY', scheme: SchemeId = DEFAULT_SCHEME): Car[] {
+  return makeShow(heard, layout, scheme).cars;
 }
 
 /** The show, and the analysis it was made from: a copy of what was heard, with the beats moved onto what
  * is played, the level, the phrases and their moves, and the headlights the beat owns (the review draws
  * these). */
-export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: Analysis } {
+export function makeShow(heard: Analysis, layout = 'YCY', scheme: SchemeId = DEFAULT_SCHEME)
+  : { cars: Car[]; an: Analysis } {
   const an = structuredClone(heard);
   an.phrases = segment(an.events);
   feel(an, an.phrases);     // heard before tempo.ts moves the beats
@@ -47,7 +50,7 @@ export function makeShow(heard: Analysis, layout = 'YCY'): { cars: Car[]; an: An
   an.level = levelCurve(an);
   for (const ph of an.phrases) ph.level = levelOver(an, ph.t0, ph.t1);
   const cars = makeLineup(layout, an.nFrames, an.step, silence(an), PULSE.ownership(an));
-  BED.apply(cars, an);
+  BED.apply(cars, an, SCHEMES[scheme]);
   playPassages(cars, an);
   DRUMS.apply(cars, an);
   PULSE.apply(cars, an);

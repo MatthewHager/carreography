@@ -8,11 +8,13 @@ import { trackBeats } from '@/engine/listen/beats';
 import { lastBackend } from '@/engine/listen/infer';
 import { transcribe } from '@/engine/listen/notes';
 import { monoAt22050 } from '@/engine/listen/resample';
+import type { SchemeId } from '@/engine/schemes';
 
 export interface Request {
   channels: Float32Array[];
   sampleRate: number;
   lineup: string;
+  scheme: SchemeId;
 }
 
 export type Reply =
@@ -39,7 +41,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     const req = e.data;
     const an = await listen(req);
     progress('Choreographing');
-    const cars = choreograph(an, req.lineup);
+    const cars = choreograph(an, req.lineup, req.scheme);
     post({
       kind: 'done', nFrames: an.nFrames, cars: cars.map((c) => ({ name: c.name, frames: c.frames })),
       backend: lastBackend(),

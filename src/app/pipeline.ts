@@ -2,6 +2,7 @@
 // progress.
 
 import { mixdown } from '@/engine/listen/resample';
+import type { SchemeId } from '@/engine/schemes';
 import type { Reply, Request } from './show.worker';
 import { explain, outOfMemory, unsupported } from './errors';
 import type { Show } from './show';
@@ -74,7 +75,8 @@ async function decode(file: File, bytes: ArrayBuffer): Promise<{ channels: Float
 
 /** A song from this device: decoded at 44.1 kHz (Tesla's rate, and the one the analysis was tuned on),
  * then listened to and choreographed in the worker. */
-export async function showFromFile(file: File, lineup: string, onProgress: Progress): Promise<Show> {
+export async function showFromFile(file: File, lineup: string, scheme: SchemeId, onProgress: Progress)
+  : Promise<Show> {
   const why = unsupported();
   if (why) throw new Error(why);
   onProgress('Opening the song');
@@ -85,10 +87,11 @@ export async function showFromFile(file: File, lineup: string, onProgress: Progr
   // mixed down here, as the worker would, so only one channel is copied over
   const mono = mixdown(channels);
   const start = performance.now();
-  const done = await run({ channels: [mono], sampleRate, lineup }, onProgress, [mono.buffer]);
+  const done = await run({ channels: [mono], sampleRate, lineup, scheme }, onProgress, [mono.buffer]);
   // The one place the listening backend shows: for bug reports, and the README's table of browsers.
   console.info(`Made the show in ${((performance.now() - start) / 1000).toFixed(1)} s, listening on ${done.backend}`);
   return {
-    title, lineup, nFrames: done.nFrames, cars: done.cars.map((c, i) => ({ ...c, letter: lineup[i] })), audio,
+    title, lineup, scheme, nFrames: done.nFrames, audio,
+    cars: done.cars.map((c, i) => ({ ...c, letter: lineup[i] })),
   };
 }

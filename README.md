@@ -16,14 +16,17 @@ lamp at once, and the liftgates, frunks, windows, mirrors and charge ports move 
 ## Make a show
 
 1. **Pick the cars**, from the crowd's left to right, and a paint for each.
-2. **Drop in a song**: MP3, WAV, FLAC or M4A.
-3. **Make the show.** It takes from about ten seconds to a minute or so, depending on the song, the
+2. **Drop in a song**: MP3, WAV, FLAC or M4A. Or keep the example, Hall of the Mountain King.
+3. **Pick the colours** for the cabin lights: Party, the whole spectrum as a visualizer has it, or an
+   occasion's own (Halloween, Christmas, the Fourth of July, Valentine's Day). The music picks the colour bar
+   by bar either way.
+4. **Make the show.** It takes from about ten seconds to a minute or so, depending on the song, the
    browser and the device. Then watch it in 3D.
-4. **Download the ZIP.** It has a folder for each car, named after its place (`Car1_ModelY_Left`), with
+5. **Download the ZIP.** It has a folder for each car, named after its place (`Car1_ModelY_Left`), with
    that car's `LightShow` folder inside. The files differ from car to car.
-5. **Put each car's `LightShow` folder on its own USB drive**, at the top level of a drive formatted
+6. **Put each car's `LightShow` folder on its own USB drive**, at the top level of a drive formatted
    exFAT or FAT32.
-6. **Plug the drive into the car** and open **Toybox → Light Show**. To play several cars together,
+7. **Plug the drive into the car** and open **Toybox → Light Show**. To play several cars together,
    schedule the same start time on each of them in the Tesla app.
 
 Keep people clear of the cars: liftgates, frunks, mirrors, windows and a Model X's doors move during the

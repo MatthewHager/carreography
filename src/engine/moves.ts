@@ -675,19 +675,6 @@ export function allOn(cars: Car[], t: number, hold: number) {
   }
 }
 
-/** Three stage-wide strobes, 100 ms on and 80 ms off, then black for a quarter of a second. */
-export function lightning(cars: Car[], t: number) {
-  for (const c of cars) {
-    for (let k = 0; k < 3; k++) {
-      const t0 = t + k * 0.18;
-      c.lightOver(c.everything(), t0, t0 + 0.1);
-      if (c.isCt) barFlash(c, t0, 0.1, 1.0);
-      c.dark(c.everything(), t0 + 0.1, t0 + (k < 2 ? 0.18 : 0.45));
-      c.set(C.FRONT_BAR, t0 + 0.1, t0 + (k < 2 ? 0.18 : 0.45), 0);
-    }
-  }
-}
-
 /** Every move by its catalogue name (catalog.ts). */
 export const MOVES: Record<string, Move> = {
   keyboard, relay, mirror, antiphony, block, shimmer, motif, cadence, swell,

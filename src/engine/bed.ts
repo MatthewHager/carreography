@@ -8,7 +8,8 @@
 //              600 Hz-4 kHz band), so the centrepiece is there even in a pianissimo
 //   cabins     the interiors take the harmony's colour, bar by bar (the pitch class leading the bar, round
 //              the circle of fifths, so related keys sit near each other), else the sound's own (purple when
-//              dull, amber when bright), brighter as the level rises (and, where the music flows, as it
+//              dull, amber when bright), in the show's colour scheme (schemes.ts: the whole spectrum, or an
+//              occasion's own colours, the dull and bright ones its second and first), brighter as the level rises (and, where the music flows, as it
 //              breathes); a white flash on each big accent from a groove up, and on each downbeat from
 //              drive up, where there is a beat
 //   breath     where the music flows (feel.ts) the front lamps the moves leave free come in by the breath:
@@ -20,6 +21,7 @@ import type { Car } from './car';
 import { flowsAt } from './feel';
 import { CALM, DRIVE, GROOVE, musicSpan, PEAK } from './level';
 import { clip, runs } from './np';
+import type { Scheme } from './schemes';
 
 const DWELL_S = 4.0;          // a lamp of the bed stays at least this long once it changes
 const METER = 0.7;            // the rear bar's level meter at the top, so a kick's flash still stands out
@@ -27,6 +29,7 @@ const GLOW = 0.15, GLOW_UP = 0.5;   // a truck's front bar: lit this much even i
                                     // at the top (by the level to the power 1.5, as the level's own steps)
 const VOICE = 0.4;            // ... and up to this share of it follows the voice and the lead
 const DULL = [110, 0, 200], BRIGHT = [255, 140, 20];
+const SURE = 0.5;             // an occasion's cabins take the harmony's colour once it is this clear
 
 /** Per frame, whether the level is at `at` or above where the music beats, held for DWELL_S so a lamp never
  * flickers. */
@@ -41,7 +44,7 @@ function above(an: Analysis, at: number): boolean[] {
   return out;
 }
 
-export function apply(cars: Car[], an: Analysis): void {
+export function apply(cars: Car[], an: Analysis, scheme: Scheme): void {
   const lv = an.level!, step = an.step;
   const lit: [number, (c: Car) => number[]][] = [
     [GROOVE, (c) => c.tails()],
@@ -64,12 +67,12 @@ export function apply(cars: Car[], an: Analysis): void {
     c.pixels(C.FRONT_BAR, 0, front);
     c.pixels(C.REAR_BAR, 0, rear);
   }
-  cabins(cars, an, B);
+  cabins(cars, an, B, scheme);
   breathe(cars, an, B);
 }
 
 /** A colour for pitch class `pc` (0 C .. 11 B): its place on the circle of fifths as a hue. */
-function hueOf(pc: number): number[] {
+function hueOf(pc: number): readonly number[] {
   const h = (((pc * 7) % 12) / 12) * 6, x = 1 - Math.abs((h % 2) - 1);
   const [r, g, b] = h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x]
     : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1] : [1, 0, x];
@@ -91,8 +94,11 @@ function bars(an: Analysis): [number, number][] {
 }
 
 /** The interiors (see the module notes). */
-function cabins(cars: Car[], an: Analysis, B: Float64Array): void {
-  const lv = an.level!, step = an.step, votes = new Float64Array(12);
+function cabins(cars: Car[], an: Analysis, B: Float64Array, scheme: Scheme): void {
+  const lv = an.level!, step = an.step, votes = new Float64Array(12), own = scheme.colours;
+  const [dull, bright] = own ? [own[1], own[0]] : [DULL, BRIGHT];
+  // an occasion's colours share the circle of fifths, so related keys still keep a colour
+  const colourOf = own ? (pc: number) => own[Math.trunc((((pc * 7) % 12) * own.length) / 12)] : hueOf;
   for (const [t0, t1] of bars(an)) {
     const a = Math.trunc(t0 / step), b = Math.min(an.nFrames, Math.trunc(t1 / step));
     votes.fill(0);
@@ -101,8 +107,11 @@ function cabins(cars: Car[], an: Analysis, B: Float64Array): void {
     for (let k = 1; k < 12; k++) if (votes[k] > votes[pc]) pc = k;
     const sure = clip(votes[pc] / Math.max(1, b - a), 0, 1);
     for (let f = a; f < b; f += 5) {
-      const s = lv[f], base = DULL.map((d, i) => d + (BRIGHT[i] - d) * an.brightness[f]);
-      const colour = hueOf(pc).map((h, i) => h * sure + base[i] * (1 - sure));
+      const s = lv[f], base = dull.map((d, i) => d + (bright[i] - d) * an.brightness[f]);
+      // the spectrum blends the harmony into the sound's own colour by how sure it is; an occasion's colours
+      // would blend into ones it doesn't have, so it takes one or the other
+      const colour = own ? (sure >= SURE ? colourOf(pc) : base)
+        : colourOf(pc).map((h, i) => h * sure + base[i] * (1 - sure));
       const scale = Number.isNaN(B[f]) ? 0.1 + 0.9 * s * s : 0.2 + 0.4 * B[f] + 0.4 * s;
       for (const c of cars) c.rgb(f * step, Math.min(f + 5, b) * step, colour, scale);
     }

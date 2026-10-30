@@ -12,6 +12,7 @@ npm run review -- song.mp3 --lineup YCY --from 60 --to 90 --video
 | Option | What |
 |---|---|
 | `--lineup YCY` | the cars, crowd's left to right (default `YCY`) |
+| `--colours NAME` | the cabins' colour scheme (`engine/schemes.ts`): `party` (the default), `halloween`, `christmas`, `july4`, `valentines` |
 | `--from S --to S` | the stretch to draw and film; the show is always made for the whole song |
 | `--stretch S` | seconds per timeline picture (default 30) |
 | `--out DIR` | where to write (default `review-out/<song>_<lineup>/` at the top of the checkout) |

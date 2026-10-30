@@ -29,7 +29,8 @@ gh release download examples --dir public/examples                      # the ex
   - `choreo.ts`: `choreograph()` (the pipeline: the layers in order), the passages, their figures and the
     move each plays, and the end.
   - `level.ts`: one level per frame from the loudness, its top kept for the peak; every layer sizes by it.
-  - `bed.ts` (steady lamps, the trucks' bars, the cabins' colour, and the breath where the music flows),
+  - `bed.ts` (steady lamps, the trucks' bars, the cabins' colour in the scheme from `schemes.ts`, and the
+    breath where the music flows),
     `moves.ts` (every move as `(cars, an, ph) => void`, sized by the level, the `MOVES` table,
     `centreTruck`), `catalog.ts` (the catalogue; `MOVES.md` is generated from it), `drums.ts`
     (kick, snare, hats), `pulse.ts` (the beat, builds, drops and accents), `motors.ts` (closures),

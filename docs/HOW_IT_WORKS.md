@@ -14,7 +14,7 @@ How a song becomes a light show for a lineup of one to five Teslas, all in the b
 | R5 | **The same music reads as the same idea**: material that comes back gets the same move, bigger as it grows. |
 | R6 | **Motors where they matter most**, timed to arrive on the music, within Tesla's limits. |
 | R7 | **The cars work as one instrument**, for any lineup. |
-| R8 | **No settings**: everything comes from the music. |
+| R8 | **No settings** but the cars and the colours: everything else comes from the music. |
 | R9 | **The same input gives the same show.** |
 | R10 | **Easy to add moves and vehicles.** |
 
@@ -122,8 +122,10 @@ for a moment (`Car.lightOver`). The pulse's hold on the inner beams is kept wher
 `Car.light` leaves them out of every other write, frame by frame, while one of its hits rings.
 
 - **The bed** (`bed.ts`): the rear lamps from a groove up, the trucks' rear bars pumping with the bass and
-  their front bars glowing, the cabins in the harmony's colour bar by bar, all brighter as the level rises. Where the music flows it **breathes**: with each phrase's
-  swell the free front lamps join one layer at a time and leave together, as many as the level allows.
+  their front bars glowing, the cabins in the harmony's colour bar by bar, all brighter as the level rises.
+  The colour comes from the scheme picked on the page (`schemes.ts`): Party maps the harmony round the whole
+  spectrum, an occasion (Halloween, Christmas...) round its own few colours. Where the music flows it
+  **breathes**: with each phrase's swell the free front lamps join one layer at a time and leave together, as many as the level allows.
 - **The drums** (`drums.ts`): kicks on the fogs, snares, claps and snaps on the turn signals, hats on the
   markers at the peak, each wherever that voice keeps time (its hits on the beat or halfway, a few every
   few beats) and lit on the beat or half beat it keeps, so the Addams Family's finger snaps tick from the

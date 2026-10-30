@@ -1,10 +1,12 @@
-// The same song and lineup always give the same show, byte for byte, whatever was made before it; the show
-// hears from the music alone where to flow and where a rhythm section plays; and each figure's family of
-// moves follows the music, the peak never getting a move that lights only a car or two.
+// The same song and lineup always give the same show, byte for byte, whatever was made before it, and a
+// colour scheme only recolours the cabins; the show hears from the music alone where to flow and where a
+// rhythm section plays; and each figure's family of moves follows the music, the peak never getting a move
+// that lights only a car or two.
 
 import { describe, expect, it } from 'vitest';
 import type { Analysis } from './analysis';
 import { BEAT_MOVES, FLOW_MOVES, SPARSE_MOVES } from './catalog';
+import { ALL_RGB, N_CHANNELS } from './channels';
 import { chooseMove, choreograph, family, makeShow } from './choreo';
 import { feel } from './feel';
 import { FIXTURES, fixture } from './fixtures';
@@ -20,6 +22,18 @@ describe('the same input gives the same show', () => {
       expect(show(song, 'YCY')).toEqual(first);
     });
   }
+
+  it('a colour scheme changes the cabin lights and nothing else', () => {
+    const an = fixture('groove'), party = choreograph(an, 'YCY'), halloween = choreograph(an, 'YCY', 'halloween');
+    const cabins = new Set(ALL_RGB.flatMap((base) => [base, base + 1, base + 2]));
+    let differ = 0;
+    party.forEach((c, k) => c.frames.forEach((v, i) => {
+      if (v === halloween[k].frames[i]) return;
+      expect(cabins.has(i % N_CHANNELS)).toBe(true);
+      differ++;
+    }));
+    expect(differ).toBeGreaterThan(0);
+  });
 
   it('choreographing one analysis again, for another lineup and back, gives the same bytes', () => {
     const an = fixture('groove'), first = choreograph(an, 'YCY').map((c) => c.frames);

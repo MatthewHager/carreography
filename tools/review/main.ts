@@ -1,4 +1,4 @@
-// npm run review -- SONG [--lineup YCY] [--from S] [--to S] [--out DIR] [--video] [--fresh]
+// npm run review -- SONG [--lineup YCY] [--colours party] [--from S] [--to S] [--out DIR] [--video] [--fresh]
 //
 // Makes a song's show in Node the way the page's worker does (show.worker.ts), then writes what it looks
 // like: timeline pictures, a text summary, the show files and, with --video, the 3D preview playing it
@@ -12,6 +12,7 @@ import { parseArgs } from 'node:util';
 import { STEP_MS } from '@/engine/channels';
 import { makeShow } from '@/engine/choreo';
 import { builds, drops } from '@/engine/pulse';
+import { SCHEMES, type SchemeId } from '@/engine/schemes';
 import { analyze } from '@/engine/listen/audio';
 import { trackBeats } from '@/engine/listen/beats';
 import { transcribe } from '@/engine/listen/notes';
@@ -31,6 +32,7 @@ const FFMPEG = process.env.FFMPEG ?? (existsSync(BREW_FFMPEG) ? BREW_FFMPEG : 'f
 
 const USAGE = `npm run review -- SONG [options]
   --lineup YCY     the cars, crowd's left to right (default YCY)
+  --colours NAME   the cabins' colour scheme: party (the default), halloween, christmas, july4, valentines
   --from S --to S  the stretch to draw and film, in seconds (the show is always made for the whole song)
   --stretch S      seconds per timeline picture (default 30)
   --out DIR        where to write (default review-out/<song>/ at the top of the checkout)
@@ -99,7 +101,7 @@ async function listen(y: Float32Array, cacheDir: string, fresh: boolean): Promis
 export async function main(argv: string[]): Promise<number> {
   const { values: o, positionals } = parseArgs({
     args: argv, allowPositionals: true, options: {
-      lineup: { type: 'string', default: 'YCY' }, from: { type: 'string' }, to: { type: 'string' },
+      lineup: { type: 'string', default: 'YCY' }, colours: { type: 'string', default: 'party' }, from: { type: 'string' }, to: { type: 'string' },
       stretch: { type: 'string', default: '30' }, out: { type: 'string' }, video: { type: 'boolean' },
       fps: { type: 'string', default: '30' }, camera: { type: 'string', default: 'Stage' },
       fresh: { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
@@ -111,9 +113,12 @@ export async function main(argv: string[]): Promise<number> {
   }
   const song = path.resolve(positionals[0]);
   const lineup = parseLineup(o.lineup!);
+  const scheme = o.colours as SchemeId;
+  if (!(scheme in SCHEMES)) throw new Error(`--colours ${scheme}: one of ${Object.keys(SCHEMES).join(', ')}`);
   const title = path.basename(song).replace(/\.[^.]+$/, '');
   const outRoot = path.join(ROOT, 'review-out');
-  const out = path.resolve(o.out ?? path.join(outRoot, `${fileName(title)}_${lineup}`));
+  const named = `${fileName(title)}_${lineup}${scheme === 'party' ? '' : `_${scheme}`}`;
+  const out = path.resolve(o.out ?? path.join(outRoot, named));
   mkdirSync(out, { recursive: true });
   // what an earlier run left (another stretch, another lineup's cars) would be mistaken for this show
   for (const f of readdirSync(out)) if (/^timeline_.*\.png$|^video\.mp4$/.test(f)) rmSync(path.join(out, f));
@@ -131,7 +136,7 @@ export async function main(argv: string[]): Promise<number> {
   const heard = await listen(y, path.join(outRoot, '.listen'), !!o.fresh);     // shared, whatever --out says
   const listened = analyze(y, { stepMs: STEP_MS, notes: heard.notes, neuralBeats: heard.beats });
   const t = Date.now();
-  const { cars, an } = makeShow(listened, lineup);     // the analysis as the show used it
+  const { cars, an } = makeShow(listened, lineup, scheme);     // the analysis as the show used it
   console.log(`Choreographed in ${Date.now() - t} ms`);
 
   mkdirSync(path.join(out, 'show'), { recursive: true });

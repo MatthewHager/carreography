@@ -1,6 +1,7 @@
 // A finished show: one frame array per car, plus the song it plays to.
 
 import { N_CHANNELS, STEP_MS } from '@/engine/channels';
+import type { SchemeId } from '@/engine/schemes';
 import { VEHICLES } from '@/engine/vehicles';
 import type { AppModelId } from '@/viewer/car/appBody';
 import { stringHeader, writeFseq } from '@/viewer/core/fseq';
@@ -14,6 +15,7 @@ export interface ShowCar {
 export interface Show {
   title: string;
   lineup: string;
+  scheme: SchemeId;
   nFrames: number;
   cars: ShowCar[];
   audio: Blob;           // the song as a 44.1 kHz WAV: what plays in the preview and goes on the drives

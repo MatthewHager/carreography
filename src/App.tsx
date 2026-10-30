@@ -11,8 +11,10 @@ import { exampleSong, showFromFile, SONG_EXTENSIONS, SONG_TYPES } from '@/app/pi
 import { Player } from '@/app/player';
 import { PlayerBar } from '@/app/PlayerBar';
 import type { Show } from '@/app/show';
+import { SchemePicker } from '@/app/SchemePicker';
 import { SongDrop } from '@/app/SongDrop';
 import { Stage } from '@/app/Stage';
+import { DEFAULT_SCHEME, type SchemeId } from '@/engine/schemes';
 import { parseLineup } from '@/engine/vehicles';
 
 const SAVED = 'carreography.cars';
@@ -42,6 +44,7 @@ export default function App() {
   const [cars, setCars] = useState(savedCars);
   const { lineup } = cars;
   const [song, setSong] = useState<File | null>(null);   // null: the example song
+  const [scheme, setScheme] = useState<SchemeId>(DEFAULT_SCHEME);
   const [show, setShow] = useState<Show | null>(null);
   const [busy, setBusy] = useState<{ step: string; fraction?: number } | null>(null);
   const [camera, setCamera] = useState('3/4');
@@ -50,7 +53,7 @@ export default function App() {
   const clear = useRef<HTMLDivElement>(null);
 
   const onMissing = useCallback(() => toast.error("The 3D cars couldn't load. The show files still work."), []);
-  const made = show !== null && show.lineup === lineup ? show : null;
+  const made = show !== null && show.lineup === lineup && show.scheme === scheme ? show : null;
   const paints = useMemo(() => [...lineup].map((_, i) => cars.paints[i] ?? DEFAULT_PAINT), [lineup, cars.paints]);
 
   useEffect(() => player.load(made?.audio, made ? made.nFrames * 0.02 : 0), [player, made]);
@@ -85,7 +88,7 @@ export default function App() {
     setBusy({ step: song ? 'Starting' : 'Fetching the example song' });
     try {
       const file = song ?? await exampleSong();
-      setShow(await showFromFile(file, lineup, (step, fraction) => setBusy({ step, fraction })));
+      setShow(await showFromFile(file, lineup, scheme, (step, fraction) => setBusy({ step, fraction })));
       setOpen(false);                                  // on a phone, make room for the cars
     } catch (err) {
       toast.error((err as Error).message);
@@ -140,6 +143,12 @@ export default function App() {
           <section className="space-y-3" aria-labelledby="song-heading">
             <h2 id="song-heading" className="text-sm font-medium">Song</h2>
             <SongDrop song={song} dragging={dragging} disabled={!!busy} onFiles={choose} />
+          </section>
+          <section className="space-y-3" aria-labelledby="colours-heading">
+            <h2 id="colours-heading" className="text-sm font-medium">
+              Colours <span className="font-normal text-muted-foreground">· the cabin lights</span>
+            </h2>
+            <SchemePicker scheme={scheme} disabled={!!busy} onChange={setScheme} />
           </section>
           <Separator />
           <section className="space-y-3" aria-labelledby="cars-heading">
