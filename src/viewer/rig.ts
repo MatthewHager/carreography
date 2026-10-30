@@ -78,15 +78,20 @@ interface Pool {
 
 const RGB = (base: string): [string, string, string] => [`${base}Red`, `${base}Green`, `${base}Blue`];
 
-interface CabinGlow {
-  ids: [string, string, string][];
-  entry: GlowEntry;
+/** A cabin surface lit by the interior RGB: its own copy of the material, and how strongly it glows. */
+interface CabinSurface {
+  material: THREE.MeshStandardMaterial;
   gain: number;
 }
 
 /** The centre screen in every app model: the 2025+ Model Y's is "Display", the others' "Screen_Front". */
 const SCREEN = /^(Screen_Front|Display)\d*$/;
 const DISPLAY = RGB('centerFrontDisplay');
+const CABIN_RGB = [DISPLAY, ...['centerFront', 'leftFront', 'rightFront', 'leftRear', 'rightRear'].map((p) => RGB(`${p}Accent`))];
+/** What the interior lights fall on, in every app model, and the inside of the glass they glow through. */
+const CABIN_SURFACE = /^(Interior|InteriorSeats|Seats|[A-Za-z_]*_Seats|Carpet|Carpet_Black|Upper_Trim)$/;
+const CABIN_GLASS = /^Glass_Interior/;
+const SURFACE_GAIN = 0.9, GLASS_GAIN = 0.35;
 
 /** Lamp glow sprite gain per lamp emissive gain. */
 const GLOW_GAIN = 0.4;
@@ -105,7 +110,7 @@ export class CarRig {
   private closures: { id: string; apply: (p: number, d: boolean, t: number) => void }[] = [];
   private pools: Pool[] = [];
   private freeGlows: { handle: GlowHandle; entry: GlowEntry }[] = [];
-  private cabin: CabinGlow[] = [];
+  private cabin: CabinSurface[] = [];
   private screens: THREE.MeshStandardMaterial[] = [];
   private sim: Simulation | undefined;
   private frame = 0;
@@ -287,21 +292,22 @@ export class CarRig {
   }
 
   /**
-   * Interior RGB (centre display plus five accent strips): the screen itself glowing in its colour, and soft
-   * coloured glows inside the greenhouse, visible through the glass. The screen lights the whole interior
-   * (Tesla's README), so every glow takes its colour as well as its own strip's.
+   * Interior RGB (centre display plus five accent strips): the screen's face glowing in its colour, and the
+   * cabin's own surfaces (seats, trim, carpet, the inside of the glass) lit by it, so the colour shows
+   * through the windows and the bodywork hides it as it would. The screen lights the whole interior
+   * (Tesla's README), so the cabin takes the brightest of the screen and the strips.
    */
   private placeCabin(): void {
     // the cars face +x, so the screen's face, turned to the driver, points to -x; its back stays dark
     const toDriver = new THREE.Vector3(-1, 0, 0).transformDirection(this.car.matrixWorld);
-    this.car.traverse((o) => {
-      if (!(o instanceof THREE.Mesh) || !o.visible) return;
-      if (!SCREEN.test(o.name) && !SCREEN.test(o.parent?.name ?? '')) return;
-      const own = (m: THREE.Material) => {
-        const lit = m instanceof THREE.MeshStandardMaterial ? m.clone() : new THREE.MeshStandardMaterial();
-        lit.emissive.set(0, 0, 0);
-        lit.emissiveMap = null;
-        lit.onBeforeCompile = (sh) => {
+    const copies = new Map<THREE.Material, THREE.Material>();
+    const lit = (m: THREE.Material, gain: number, screen: boolean) => {
+      if (copies.has(m)) return copies.get(m)!;
+      const c = m instanceof THREE.MeshStandardMaterial ? m.clone() : new THREE.MeshStandardMaterial();
+      c.emissive.set(0, 0, 0);
+      c.emissiveMap = null;
+      if (screen) {
+        c.onBeforeCompile = (sh) => {
           sh.uniforms.toDriver = { value: toDriver };
           sh.vertexShader = sh.vertexShader
             .replace('#include <common>', '#include <common>\nvarying vec3 vFacing;')
@@ -312,40 +318,21 @@ export class CarRig {
             .replace('#include <emissivemap_fragment>',
               '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= step(0.2, dot(normalize(vFacing), toDriver));');
         };
-        this.screens.push(lit);
-        return lit;
-      };
-      o.material = Array.isArray(o.material) ? o.material.map(own) : own(o.material);
-    });
-    const box = new THREE.Box3();
-    this.car.traverse((o) => {
-      // The greenhouse: the model's visible glass.
-      if (o instanceof THREE.Mesh && o.visible && [o.material].flat().some((m) => m.transparent && /glass|window/i.test(m.name))) {
-        box.expandByObject(o);
+        this.screens.push(c);
+      } else {
+        this.cabin.push({ material: c, gain });
       }
+      copies.set(m, c);
+      return c;
+    };
+    this.car.traverse((o) => {
+      if (!(o instanceof THREE.Mesh) || !o.visible) return;
+      const screen = SCREEN.test(o.name) || SCREEN.test(o.parent?.name ?? '');
+      const pick = (m: THREE.Material) => screen ? lit(m, 0, true)
+        : CABIN_SURFACE.test(m.name) ? lit(m, SURFACE_GAIN, false)
+          : CABIN_GLASS.test(m.name) ? lit(m, GLASS_GAIN, false) : m;
+      o.material = Array.isArray(o.material) ? o.material.map(pick) : pick(o.material);
     });
-    if (box.isEmpty()) box.set(new THREE.Vector3(-1, 0.9, -0.7), new THREE.Vector3(0.8, 1.4, 0.7));
-    const inv = new THREE.Matrix4().copy(this.car.matrixWorld).invert();
-    box.applyMatrix4(inv);
-    const size = box.getSize(new THREE.Vector3());
-    const ct = this.app.id === 'cybertruck';
-    // Greenhouse: the cabin sits in its lower part, between the pillars.
-    const x0 = box.min.x + size.x * (ct ? 0.3 : 0.2);
-    const x1 = box.max.x - size.x * (ct ? 0.22 : 0.25);
-    const y = box.min.y + size.y * 0.3;
-    const zw = Math.min(0.62, size.z * 0.33);
-    const spots: [string[], number, number, number, number, number][] = [
-      [['centerFrontAccent'], x1, y, 0, 2.4, 1.5],
-      [['leftFrontAccent'], x1 - 0.25, y, -zw, 1.6, 1.0],
-      [['rightFrontAccent'], x1 - 0.25, y, zw, 1.6, 1.0],
-      [['leftRearAccent'], x0 + 0.2, y, -zw, 1.6, 1.0],
-      [['rightRearAccent'], x0 + 0.2, y, zw, 1.6, 1.0],
-    ];
-    for (const [bases, x, yy, z, size, gain] of spots) {
-      const entry: GlowEntry = { object: this.car, local: new THREE.Vector3(x, yy, z), size, color: new THREE.Color(0, 0, 0) };
-      this.cabin.push({ ids: [DISPLAY, ...bases.map(RGB)], entry, gain });
-      this.glowEntries.push(entry);
-    }
   }
 
   setSimulation(sim: Simulation | undefined): void {
@@ -398,16 +385,17 @@ export class CarRig {
     }
     for (const { handle, entry } of this.freeGlows) entry.color.copy(handle.color).multiplyScalar(handle.level);
     // Interior RGB.
+    let cr = 0;
+    let cg = 0;
+    let cb = 0;
+    for (const [ri, gi, bi] of CABIN_RGB) {
+      cr = Math.max(cr, this.level(ri));
+      cg = Math.max(cg, this.level(gi));
+      cb = Math.max(cb, this.level(bi));
+    }
     for (const c of this.cabin) {
-      let cr = 0;
-      let cg = 0;
-      let cb = 0;
-      for (const [ri, gi, bi] of c.ids) {
-        cr = Math.max(cr, this.level(ri));
-        cg = Math.max(cg, this.level(gi));
-        cb = Math.max(cb, this.level(bi));
-      }
-      c.entry.color.setRGB(cr, cg, cb).multiplyScalar(c.gain);
+      c.material.emissive.setRGB(cr, cg, cb);
+      c.material.emissiveIntensity = c.gain;
     }
     const [r, g, b] = DISPLAY.map((id) => this.level(id));
     for (const m of this.screens) {
