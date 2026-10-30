@@ -29,6 +29,8 @@ const GLOW = 0.15, GLOW_UP = 0.5;   // a truck's front bar: lit this much even i
                                     // at the top (by the level to the power 1.5, as the level's own steps)
 const VOICE = 0.4;            // ... and up to this share of it follows the voice and the lead
 const DULL = [110, 0, 200], BRIGHT = [255, 140, 20];
+const CABIN_LOW = 0.35;       // the cabins at the quietest: the screen lights the whole interior, so the colour
+                              // reads from outside even in a pianissimo, and grows with the level from there
 const SURE = 0.5;             // an occasion's cabins take the harmony's colour once it is this clear
 
 /** Per frame, whether the level is at `at` or above where the music beats, held for DWELL_S so a lamp never
@@ -112,7 +114,7 @@ function cabins(cars: Car[], an: Analysis, B: Float64Array, scheme: Scheme): voi
       // would blend into ones it doesn't have, so it takes one or the other
       const colour = own ? (sure >= SURE ? colourOf(pc) : base)
         : colourOf(pc).map((h, i) => h * sure + base[i] * (1 - sure));
-      const scale = Number.isNaN(B[f]) ? 0.1 + 0.9 * s * s : 0.2 + 0.4 * B[f] + 0.4 * s;
+      const scale = CABIN_LOW + (1 - CABIN_LOW) * (Number.isNaN(B[f]) ? s : (B[f] + s) / 2);
       for (const c of cars) c.rgb(f * step, Math.min(f + 5, b) * step, colour, scale);
     }
   }

@@ -76,12 +76,17 @@ interface Pool {
   max: number;
 }
 
+const RGB = (base: string): [string, string, string] => [`${base}Red`, `${base}Green`, `${base}Blue`];
+
 interface CabinGlow {
   ids: [string, string, string][];
   entry: GlowEntry;
+  gain: number;
 }
 
-const RGB = (base: string): [string, string, string] => [`${base}Red`, `${base}Green`, `${base}Blue`];
+/** The centre screen in every app model: the 2025+ Model Y's is "Display", the others' "Screen_Front". */
+const SCREEN = /^(Screen_Front|Display)\d*$/;
+const DISPLAY = RGB('centerFrontDisplay');
 
 /** Lamp glow sprite gain per lamp emissive gain. */
 const GLOW_GAIN = 0.4;
@@ -101,6 +106,7 @@ export class CarRig {
   private pools: Pool[] = [];
   private freeGlows: { handle: GlowHandle; entry: GlowEntry }[] = [];
   private cabin: CabinGlow[] = [];
+  private screens: THREE.MeshStandardMaterial[] = [];
   private sim: Simulation | undefined;
   private frame = 0;
 
@@ -281,10 +287,23 @@ export class CarRig {
   }
 
   /**
-   * Interior RGB (centre display plus five accent strips): soft colored glows
-   * inside the greenhouse, visible through the glass.
+   * Interior RGB (centre display plus five accent strips): the screen itself glowing in its colour, and soft
+   * coloured glows inside the greenhouse, visible through the glass. The screen lights the whole interior
+   * (Tesla's README), so every glow takes its colour as well as its own strip's.
    */
   private placeCabin(): void {
+    this.car.traverse((o) => {
+      if (!(o instanceof THREE.Mesh) || !o.visible) return;
+      if (!SCREEN.test(o.name) && !SCREEN.test(o.parent?.name ?? '')) return;
+      const own = (m: THREE.Material) => {
+        const lit = m instanceof THREE.MeshStandardMaterial ? m.clone() : new THREE.MeshStandardMaterial();
+        lit.emissive.set(0, 0, 0);
+        lit.emissiveMap = null;
+        this.screens.push(lit);
+        return lit;
+      };
+      o.material = Array.isArray(o.material) ? o.material.map(own) : own(o.material);
+    });
     const box = new THREE.Box3();
     this.car.traverse((o) => {
       // The greenhouse: the model's visible glass.
@@ -302,16 +321,16 @@ export class CarRig {
     const x1 = box.max.x - size.x * (ct ? 0.22 : 0.25);
     const y = box.min.y + size.y * 0.3;
     const zw = Math.min(0.62, size.z * 0.33);
-    const spots: [string[], number, number, number][] = [
-      [['centerFrontDisplay', 'centerFrontAccent'], x1, y, 0],
-      [['leftFrontAccent'], x1 - 0.25, y, -zw],
-      [['rightFrontAccent'], x1 - 0.25, y, zw],
-      [['leftRearAccent'], x0 + 0.2, y, -zw],
-      [['rightRearAccent'], x0 + 0.2, y, zw],
+    const spots: [string[], number, number, number, number, number][] = [
+      [['centerFrontAccent'], x1, y, 0, 2.4, 1.5],
+      [['leftFrontAccent'], x1 - 0.25, y, -zw, 1.6, 1.0],
+      [['rightFrontAccent'], x1 - 0.25, y, zw, 1.6, 1.0],
+      [['leftRearAccent'], x0 + 0.2, y, -zw, 1.6, 1.0],
+      [['rightRearAccent'], x0 + 0.2, y, zw, 1.6, 1.0],
     ];
-    for (const [bases, x, yy, z] of spots) {
-      const entry: GlowEntry = { object: this.car, local: new THREE.Vector3(x, yy, z), size: 0.9, color: new THREE.Color(0, 0, 0) };
-      this.cabin.push({ ids: bases.map(RGB), entry });
+    for (const [bases, x, yy, z, size, gain] of spots) {
+      const entry: GlowEntry = { object: this.car, local: new THREE.Vector3(x, yy, z), size, color: new THREE.Color(0, 0, 0) };
+      this.cabin.push({ ids: [DISPLAY, ...bases.map(RGB)], entry, gain });
       this.glowEntries.push(entry);
     }
   }
@@ -375,7 +394,12 @@ export class CarRig {
         cg = Math.max(cg, this.level(gi));
         cb = Math.max(cb, this.level(bi));
       }
-      c.entry.color.setRGB(cr, cg, cb).multiplyScalar(0.32);
+      c.entry.color.setRGB(cr, cg, cb).multiplyScalar(c.gain);
+    }
+    const [r, g, b] = DISPLAY.map((id) => this.level(id));
+    for (const m of this.screens) {
+      m.emissive.setRGB(r, g, b);
+      m.emissiveIntensity = 3;
     }
   }
 
