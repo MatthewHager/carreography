@@ -50,12 +50,9 @@ National Symphony Orchestra (credited as the Musopen Symphony Orchestra) for
 [Musopen](https://musopen.org)'s Kickstarter project, which released its recordings into the public
 domain. It's served from the repository's `examples` release, not the git history.
 
-The shows were tuned on the twelve songs of a Halloween 2026 show for two Model Ys and a Cybertruck. They
-are not in the repository; several are commercial recordings. No song gets settings of its own: every show
+The shows were tuned on a dozen recordings: organ and orchestral pieces, film and TV themes, and pop
+songs. None of them is in the repository or its releases, and no song gets settings of its own: every show
 comes from the music alone.
-
-| File name | Piece | Recording | Source |
-|---|---|---|---|
 
 ## Study material
 
