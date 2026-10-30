@@ -292,6 +292,8 @@ export class CarRig {
    * (Tesla's README), so every glow takes its colour as well as its own strip's.
    */
   private placeCabin(): void {
+    // the cars face +x, so the screen's face, turned to the driver, points to -x; its back stays dark
+    const toDriver = new THREE.Vector3(-1, 0, 0).transformDirection(this.car.matrixWorld);
     this.car.traverse((o) => {
       if (!(o instanceof THREE.Mesh) || !o.visible) return;
       if (!SCREEN.test(o.name) && !SCREEN.test(o.parent?.name ?? '')) return;
@@ -299,6 +301,17 @@ export class CarRig {
         const lit = m instanceof THREE.MeshStandardMaterial ? m.clone() : new THREE.MeshStandardMaterial();
         lit.emissive.set(0, 0, 0);
         lit.emissiveMap = null;
+        lit.onBeforeCompile = (sh) => {
+          sh.uniforms.toDriver = { value: toDriver };
+          sh.vertexShader = sh.vertexShader
+            .replace('#include <common>', '#include <common>\nvarying vec3 vFacing;')
+            .replace('#include <beginnormal_vertex>',
+              '#include <beginnormal_vertex>\nvFacing = mat3(modelMatrix) * objectNormal;');
+          sh.fragmentShader = sh.fragmentShader
+            .replace('#include <common>', '#include <common>\nvarying vec3 vFacing;\nuniform vec3 toDriver;')
+            .replace('#include <emissivemap_fragment>',
+              '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= step(0.2, dot(normalize(vFacing), toDriver));');
+        };
         this.screens.push(lit);
         return lit;
       };
