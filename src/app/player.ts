@@ -5,6 +5,8 @@ export class Player {
   readonly audio = new Audio();
   duration = 0;
   playing = false;
+  /** Starts over at the end instead of stopping (the move gallery's shows). */
+  private loop = false;
   private url: string | undefined;
   private audioReady = false;
   private pausedAt = 0;
@@ -17,7 +19,8 @@ export class Player {
   constructor() {
     this.audio.preload = 'auto';
     this.audio.addEventListener('ended', () => {
-      if (this.playing) {
+      if (this.playing && this.loop) this.restart();
+      else if (this.playing) {
         this.pause();
         this.pausedAt = this.duration;
       }
@@ -33,9 +36,10 @@ export class Player {
     for (const fn of this.listeners) fn();
   }
 
-  /** A new song (or none): stops playback and rewinds. */
-  load(audio: Blob | undefined, duration: number) {
+  /** A new song (or none): stops playback and rewinds. `loop`: start over at the end. */
+  load(audio: Blob | undefined, duration: number, loop = false) {
     this.pause();
+    this.loop = loop;
     if (this.url) URL.revokeObjectURL(this.url);
     this.url = audio ? URL.createObjectURL(audio) : undefined;
     this.audioReady = !!audio;
@@ -64,8 +68,13 @@ export class Player {
     else t = this.pausedAt + (performance.now() - this.wallStart) / 1000;
     if (this.playing && t < this.shown && this.shown - t < 0.12) t = this.shown;
     if (this.playing && this.duration > 0 && t >= this.duration) {
-      this.pause();
-      t = this.pausedAt = this.duration;
+      if (this.loop) {
+        this.restart();
+        t = 0;
+      } else {
+        this.pause();
+        t = this.pausedAt = this.duration;
+      }
     }
     this.shown = t;
     return t;
@@ -88,6 +97,17 @@ export class Player {
       }
     }
     this.wallStart = performance.now();
+  }
+
+  /** Back to the start, still playing. */
+  private restart() {
+    this.pausedAt = this.shown = 0;
+    this.wallStart = performance.now();
+    if (this.audioReady) {
+      this.audio.currentTime = 0;
+      this.lastAudioT = -1;
+      if (this.audio.paused) void this.audio.play().catch(() => undefined);
+    }
   }
 
   pause() {

@@ -40,8 +40,9 @@ npm run review -- SONG --lineup YCY   # the show for a song, drawn and summed up
   `audio.ts` (the analysis), `texture.ts` (notes into events), `form.ts` (the sections), `visual.ts`
   (loudness, bands, the drum voices, harmony, novelty, kit, beat confidence), beat-this and basic-pitch
   (`beats.ts`, `notes.ts`) on the backend `infer.ts` picks.
-- `src/app/`: the page (`App.tsx` is in `src/`), the show worker (`show.worker.ts`), `pipeline.ts`,
-  the WAV and the ZIP.
+- `src/app/`: the page (`App.tsx` is in `src/`), the show worker (`show.worker.ts`), the move gallery
+  (`MoveGallery.tsx`, `moves.worker.ts`, over `engine/gallery.ts` and the songs in `engine/fixtures/`),
+  `pipeline.ts`, the WAV and the ZIP.
 - `src/viewer/`: the 3D preview, AGPL code adapted from Tesla Lightshow Studio. The cars are Tesla's
   own models from the Tesla app only (`car/appBody.ts`, served from the `car-models` release). Don't add
   hand-built or approximated car models.

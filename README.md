@@ -36,6 +36,9 @@ No account, no settings, nothing to install. The song never leaves your device.
 7. **Plug the drive into the car** and open **Toybox → Light Show**. To play several cars together,
    schedule the same start time on each of them in the Tesla app.
 
+To see what's possible first, switch the panel to **See the moves**: every move of the choreographer on
+its own, on your lineup, at any level from calm to the peak, with what it does.
+
 **Keep people clear of the cars**: liftgates, frunks, mirrors, windows and a Model X's doors move during
 the show. The music plays from the cabin speakers, so the windows go down and stay down; close them
 afterwards.

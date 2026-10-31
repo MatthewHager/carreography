@@ -4,7 +4,9 @@ import { toast, Toaster } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { DownloadSheet } from '@/app/DownloadSheet';
+import { MoveGallery } from '@/app/MoveGallery';
 import { unsupported } from '@/app/errors';
 import { DEFAULT_PAINT, LineupEditor } from '@/app/LineupEditor';
 import { exampleSong, showFromFile, SONG_EXTENSIONS, SONG_TYPES } from '@/app/pipeline';
@@ -47,6 +49,9 @@ export default function App() {
   const [song, setSong] = useState<File | null>(null);   // null: the example song
   const [scheme, setScheme] = useState<SchemeId>(DEFAULT_SCHEME);
   const [show, setShow] = useState<Show | null>(null);
+  // 'moves': the move gallery, each move on its own (MoveGallery), instead of making a show
+  const [mode, setMode] = useState<'make' | 'moves'>('make');
+  const [moveShow, setMoveShow] = useState<Show | null>(null);
   const [busy, setBusy] = useState<{ step: string; fraction?: number } | null>(null);
   const [camera, setCamera] = useState('3/4');
   const [open, setOpen] = useState(true);              // the sheet, on a phone
@@ -55,9 +60,13 @@ export default function App() {
 
   const onMissing = useCallback(() => toast.error("The 3D cars couldn't load. The show files still work."), []);
   const made = show !== null && show.lineup === lineup && show.scheme === scheme ? show : null;
+  const playing = mode === 'moves' ? (moveShow?.lineup === lineup ? moveShow : null) : made;
   const paints = useMemo(() => [...lineup].map((_, i) => cars.paints[i] ?? DEFAULT_PAINT), [lineup, cars.paints]);
 
-  useEffect(() => player.load(made?.audio, made ? made.nFrames * STEP_S : 0), [player, made]);
+  useEffect(() => {
+    player.load(playing?.audio, playing ? playing.nFrames * STEP_S : 0, mode === 'moves');
+    if (mode === 'moves' && playing) void player.play();      // a move plays as soon as it's picked
+  }, [player, playing, mode]);
 
   useEffect(() => {
     try {
@@ -110,7 +119,7 @@ export default function App() {
         setDragging(false);
         choose(e.dataTransfer.files);
       }}>
-      <Stage lineup={lineup} paints={paints} show={made} player={player} camera={camera} clear={clear}
+      <Stage lineup={lineup} paints={paints} show={playing} player={player} camera={camera} clear={clear}
         onMissing={onMissing} />
 
       {/* first for the keyboard and screen readers, last on screen */}
@@ -141,16 +150,31 @@ export default function App() {
 
         <div id="steps" className={`min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-4 md:block md:px-8 md:py-6
           ${open ? '' : 'hidden'}`}>
-          <section className="space-y-3" aria-labelledby="song-heading">
-            <h2 id="song-heading" className="text-sm font-medium">Song</h2>
-            <SongDrop song={song} dragging={dragging} disabled={!!busy} onFiles={choose} />
-          </section>
-          <section className="space-y-3" aria-labelledby="colours-heading">
-            <h2 id="colours-heading" className="text-sm font-medium">
-              Colours <span className="font-normal text-muted-foreground">· the cabin lights</span>
-            </h2>
-            <SchemePicker scheme={scheme} disabled={!!busy} onChange={setScheme} />
-          </section>
+          <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as 'make' | 'moves')}
+            aria-label="What to do" spacing={0} className="w-full rounded-full border p-1">
+            <ToggleGroupItem value="make" disabled={!!busy} className="h-9 flex-1 rounded-full text-sm
+              text-muted-foreground data-[state=on]:bg-secondary data-[state=on]:text-foreground">
+              Make a show
+            </ToggleGroupItem>
+            <ToggleGroupItem value="moves" disabled={!!busy} className="h-9 flex-1 rounded-full text-sm
+              text-muted-foreground data-[state=on]:bg-secondary data-[state=on]:text-foreground">
+              See the moves
+            </ToggleGroupItem>
+          </ToggleGroup>
+          {mode === 'make' && (
+            <section className="space-y-3" aria-labelledby="song-heading">
+              <h2 id="song-heading" className="text-sm font-medium">Song</h2>
+              <SongDrop song={song} dragging={dragging} disabled={!!busy} onFiles={choose} />
+            </section>
+          )}
+          {mode === 'make' && (
+            <section className="space-y-3" aria-labelledby="colours-heading">
+              <h2 id="colours-heading" className="text-sm font-medium">
+                Colours <span className="font-normal text-muted-foreground">· the cabin lights</span>
+              </h2>
+              <SchemePicker scheme={scheme} disabled={!!busy} onChange={setScheme} />
+            </section>
+          )}
           <Separator />
           <section className="space-y-3" aria-labelledby="cars-heading">
             <h2 id="cars-heading" className="text-sm font-medium">
@@ -159,6 +183,17 @@ export default function App() {
             <LineupEditor lineup={lineup} paints={paints} disabled={!!busy}
               onChange={(l, p) => setCars({ lineup: l, paints: p })} />
           </section>
+          {mode === 'moves' && (
+            <>
+              <Separator />
+              <section className="space-y-3" aria-labelledby="moves-heading">
+                <h2 id="moves-heading" className="text-sm font-medium">
+                  Moves <span className="font-normal text-muted-foreground">· pick one to play it</span>
+                </h2>
+                <MoveGallery lineup={lineup} onShow={setMoveShow} />
+              </section>
+            </>
+          )}
           <p className="text-xs text-muted-foreground">
             <a href={FEEDBACK} target="_blank" rel="noreferrer"
               className="underline underline-offset-2 hover:text-foreground">Send feedback or report a bug</a>.
@@ -168,7 +203,8 @@ export default function App() {
           </p>
         </div>
 
-        <footer className="space-y-3 border-t px-5 pt-4 pb-5 md:px-8 md:pb-8">
+        <footer className={`space-y-3 border-t px-5 pt-4 pb-5 md:px-8 md:pb-8
+          ${mode === 'moves' ? 'hidden' : ''}`}>
           {busy ? (
             <div className="space-y-2.5" role="status">
               <div className="flex items-center gap-2 text-sm">
