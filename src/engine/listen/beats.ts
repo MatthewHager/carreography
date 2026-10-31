@@ -1,7 +1,7 @@
 // Beats and downbeats with Beat This! (CPJKU; Foscarin, Schlueter & Widmer 2024), the final0 checkpoint
 // exported to ONNX with fp16 weights. The same steps as beat_this.inference.File2Beats(dbn=False):
 // torchaudio's log-mel spectrogram, 1500-frame chunks with 6-frame borders (keep_first), and the
-// "minimal" postprocessor. Given the same samples it finds the same beats.
+// "minimal" postprocessor.
 
 import { hann } from './dsp';
 import { realFft } from './fft';
@@ -17,7 +17,7 @@ const MODEL = {
   outputs: ['beat', 'downbeat'],
 };
 
-interface Beats {
+export interface Beats {
   beats: number[];       // seconds
   downbeats: number[];   // seconds, each one of the beats
 }

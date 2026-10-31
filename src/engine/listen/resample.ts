@@ -18,10 +18,12 @@ function i0(x: number): number {
 
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 const MAX_PHASES = 4096;
+const ZERO_CROSSINGS = 20, BETA = 9;     // the Kaiser-windowed sinc's half-length and window shape
 
 /** x resampled from srIn to srOut Hz. The filter's taps are tabulated per phase: one phase for
  * 44.1 kHz to 22050 Hz, 147 for 48 kHz; odd or fractional rates round to 4096 phases. */
-export function resample(x: Float32Array, srIn: number, srOut: number, zeroCrossings = 20, beta = 9) {
+function resample(x: Float32Array, srIn: number, srOut: number) {
+  const zeroCrossings = ZERO_CROSSINGS, beta = BETA;
   if (srIn === srOut) return x.slice();
   const r = srIn / srOut;
   const fc = (0.97 * 0.5) / Math.max(r, 1);         // cutoff, cycles per input sample

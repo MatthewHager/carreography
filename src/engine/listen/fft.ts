@@ -35,9 +35,9 @@ export class ComplexFft {
     return p;
   }
 
-  /** Forward DFT of (re, im) in place; `inverse` uses e^(+2 pi i jk / n) and divides by n. */
-  transform(re: Float64Array, im: Float64Array, inverse = false): void {
-    const n = this.n, rev = this.rev, cos = this.cos, sin = this.sin, s = inverse ? -1 : 1;
+  /** Forward DFT of (re, im) in place. */
+  transform(re: Float64Array, im: Float64Array): void {
+    const n = this.n, rev = this.rev, cos = this.cos, sin = this.sin, s = 1;
     for (let i = 0; i < n; i++) {
       const j = rev[i];
       if (j > i) {
@@ -68,12 +68,6 @@ export class ComplexFft {
           re[a] += tre;
           im[a] += tim;
         }
-      }
-    }
-    if (inverse) {
-      for (let i = 0; i < n; i++) {
-        re[i] /= n;
-        im[i] /= n;
       }
     }
   }

@@ -7,13 +7,12 @@
 //   novelty           how much the sound is changing, and the moments it changes most
 //   kit               how much a drum kit is playing
 //   beatConfidence    how clearly the beats land on the music's accents
-// All read off the spectrum audio.ts already took (and the chroma form.ts takes), so they cost little:
+// All read off the spectrum and the chroma audio.ts already took (for the form map too), so they cost little:
 // about 50 ms for a 2.5-minute song in Node. Every curve is 0..1 over the song, but kit and beatConfidence,
 // which mean the same in every song.
 
 import type { Analysis, Bands } from '../analysis';
 import { clip, quantile } from '../np';
-import { chromaCqt } from './cqt';
 import { HOP, melFrequencies, onsetStrength, peakPick, powerToDb, SR, type Spectrum } from './dsp';
 
 const FPS = SR / HOP;                                       // STFT frames per second
@@ -318,7 +317,7 @@ type Visuals = Pick<Analysis, 'loudness' | 'bands' | 'kick' | 'snare' | 'hats' |
 
 /** The visualizer's measurements of `y`, from its spectrum `spec`, the onset curve `env` (the mean flux of
  * the 96-band mel, one value per spectrum frame) and the beats, on a grid of `nFrames` frames of `step` s. */
-export function visuals(y: Float32Array, spec: Spectrum, env: Float32Array, beats: number[], nFrames: number,
+export function visuals(spec: Spectrum, chroma: Float32Array, env: Float32Array, beats: number[], nFrames: number,
   step: number): Visuals {
   const T = spec.T, mel = spec.mel128, db = powerToDb(mel, 'max');
   const g: Grid = (x) => onGrid(x, nFrames, step);
@@ -330,7 +329,7 @@ export function visuals(y: Float32Array, spec: Spectrum, env: Float32Array, beat
     bands: bandsOf(mel, T, g, step),
     kick, snare, hats,
     brightness: g(brightnessOf(mel, T, loud)),
-    ...harmony(chromaCqt(y, spec.tuning), T, g(loud), beats, nFrames, step, g),
+    ...harmony(chroma, T, g(loud), beats, nFrames, step, g),
     ...noveltyOf(db, T, g, step),
     kit: kitOf(beats, kick, snare, hats, nFrames, step),
     beatConfidence: beatConfidenceOf(env, beats, nFrames, step),

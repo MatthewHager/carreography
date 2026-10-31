@@ -4,17 +4,15 @@
 //   letters    repeated material gets the same letter (A, B, A', ...) by chroma/timbre similarity
 
 import type { Section } from '../analysis';
-import { chromaCqt } from './cqt';
 import {
-  agglomerative, beatTrackY, framesToTime, mfcc, normalizeColumns, SR, sync, type Spectrum,
+  agglomerative, beatTrackY, framesToTime, mfcc, normalizeColumns, sync, type Spectrum,
 } from './dsp';
 import { clip, mean } from '../np';
 
 /** The form map of `y` (mono, 22050 Hz): its sections, from the spectrum audio.ts already took of the
  * same samples. */
-export function analyzeForm(y: Float32Array, duration: number, s: Spectrum): Section[] {
+export function analyzeForm(y: Float32Array, duration: number, s: Spectrum, chroma: Float32Array): Section[] {
   const T = s.T;
-  const chroma = chromaCqt(y, s.tuning);
   const mf = mfcc(s.mel128, T);
   let beatFrames = beatTrackY(y, s).beats;
   if (beatFrames.length < 8) beatFrames = Array.from({ length: Math.ceil(T / 20) }, (_, i) => i * 20);
@@ -77,21 +75,6 @@ export function analyzeForm(y: Float32Array, duration: number, s: Spectrum): Sec
     if (f) {
       s.nth = sections.slice(0, s.index).filter((q) => q.letter === s.letter).length;
     } else first.set(s.letter, s);
-  }
-
-  // Per-section tempo and beats, so beat-locked moves survive tempo changes.
-  for (const s of sections) {
-    const a = Math.trunc(s.t0 * SR), b = Math.trunc(s.t1 * SR);
-    const seg = y.subarray(a, Math.max(a, b));
-    if (seg.length > SR * 3) {
-      try {
-        const { tempo, beats } = beatTrackY(seg);
-        s.tempo = tempo;
-        s.beats = beats.map((f) => framesToTime(f) + s.t0);
-      } catch {
-        // a section the tracker can't read keeps no tempo
-      }
-    }
   }
   return sections;
 }

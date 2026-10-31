@@ -1,12 +1,13 @@
-// The librosa 0.11 subset the analysis uses (sr 22050, hop 512, n_fft 2048), checked against librosa
-// when it was written. Matrices are row-major (rows x T) typed arrays.
+// The parts of librosa 0.11 the analysis uses (sr 22050, hop 512, n_fft 2048), each named after the librosa
+// function it follows. Matrices are row-major (rows x T) typed arrays.
 
 import { mean, median, round, sum } from '../np';
 import { realFft } from './fft';
+import { SR } from './resample';
 
-export const SR = 22050;
+export { SR };
 export const HOP = 512;
-export const N_FFT = 2048;
+const N_FFT = 2048;
 
 export const TINY32 = 1.1754943508222875e-38;   // np.finfo(np.float32).tiny
 const TINY64 = 2.2250738585072014e-308;

@@ -7,41 +7,40 @@
 //   chroma, novelty, how much a kit is playing and how clear the beat is (visual.ts)
 // Everything comes from the full mix: there is no source separation.
 
-import type { Analysis } from '../analysis';
+import type { Analysis, Section } from '../analysis';
+import type { Beats } from './beats';
+import { chromaCqt } from './cqt';
 import { analyzeForm } from './form';
 import { argmax, diff, mean, median, quantile, sum } from '../np';
 import { groupEvents, labelPhrases, pitchScale } from './texture';
 import {
-  beatTrack, framesToTime, HOP, localTempo, onsetDetect, onsetStrength, powerToDb, spectrum, SR,
+  beatTrack, beatTrackY, framesToTime, HOP, localTempo, onsetDetect, onsetStrength, powerToDb, spectrum, SR,
 } from './dsp';
 import { visuals } from './visual';
 
-interface NeuralBeats {
-  beats: number[];
-  downbeats: number[];
-}
 
 interface AnalyzeOptions {
   stepMs: number;
   /** basic-pitch notes: rows of (start s, end s, midi pitch, amplitude 0..1), sorted by start */
   notes: number[][];
   /** the neural beat tracker's grid (beat-this), if it ran */
-  neuralBeats?: NeuralBeats | null;
+  neuralBeats?: Beats | null;
 }
 
 const BREAK = 2.5;        // a gap this many times the usual one is a break in the music, not a beat
+const MIN_STEADY = 0.85;  // the share of steady gaps that makes the tracker's grid one to keep
 
 /** Each beat gap over the median of the eight around it (1 = in step with its neighbours). */
 function localRatio(g: ArrayLike<number>): Float64Array {
   return Float64Array.from(g, (x, i) => x / median(Array.from(g).slice(Math.max(0, i - 4), i + 5)));
 }
 
-/** Beats and downbeats from the neural tracker, where its grid keeps a pulse: at least `minSteady` of the
+/** Beats and downbeats from the neural tracker, where its grid keeps a pulse: at least MIN_STEADY of the
  * beat gaps within 10 % of the gaps around them. Measured locally, so a performer who speeds up (Hall of
  * the Mountain King doubles its tempo) or holds back keeps the tracker's beats; an erratic grid, which is
  * where the tracker is guessing, gives null. Breaks (gaps over BREAK times the usual) don't count. Where
  * it slips into half time for a while, the missing beats are put back (mendHalves). */
-function neuralBeats(d: NeuralBeats | null | undefined, env: Float32Array, minSteady = 0.85)
+function neuralBeats(d: Beats | null | undefined, env: Float32Array)
   : [number[], number[]] | null {
   if (!d) return null;
   const b = d.beats, db = d.downbeats;
@@ -51,7 +50,7 @@ function neuralBeats(d: NeuralBeats | null | undefined, env: Float32Array, minSt
   if (g.length < 8) return null;
   let steady = 0;
   for (const r of localRatio(g)) if (Math.abs(r - 1) < 0.1) steady++;
-  if (steady / g.length < minSteady) return null;
+  if (steady / g.length < MIN_STEADY) return null;
   return [mendHalves(b, env), db.slice()];
 }
 
@@ -94,6 +93,22 @@ function gather(env: Float32Array, frames: ArrayLike<number>, start = 0, by = 1)
   const out: number[] = [];
   for (let i = start; i < frames.length; i += by) out.push(env[Math.min(frames[i], env.length - 1)]);
   return Float32Array.from(out);
+}
+
+/** Each section's own tempo and beats, where it is long enough to track. */
+function trackSections(y: Float32Array, sections: Section[]): void {
+  for (const s of sections) {
+    const a = Math.trunc(s.t0 * SR), b = Math.trunc(s.t1 * SR);
+    const seg = y.subarray(a, Math.max(a, b));
+    if (seg.length <= SR * 3) continue;
+    try {
+      const { tempo, beats } = beatTrackY(seg);
+      s.tempo = tempo;
+      s.beats = beats.map((f) => framesToTime(f) + s.t0);
+    } catch {
+      // a section the tracker can't read keeps no tempo
+    }
+  }
 }
 
 /** The analysis of `y` (mono, 22050 Hz samples) on a grid of `stepMs` frames. */
@@ -141,8 +156,12 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
 
   const beatScore = mean(gather(fullEnv, beatFrames)) / Math.max(mean(fullEnv), 1e-9);
 
-  // --- Form map: sections, repeats, per-section tempo ---
-  const sections = analyzeForm(y, duration, spec);
+  // --- Form map: sections and repeats ---
+  const chroma = chromaCqt(y, spec.tuning);
+  const sections = analyzeForm(y, duration, spec, chroma);
+  const neural = neuralBeats(opts.neuralBeats, fullEnv);
+  // without the neural tracker's grid, each section is tracked on its own, so a tempo change keeps its beats
+  if (neural === null) trackSections(y, sections);
   let secBeats: number[][] = [];
   const toFrames = (ts: number[]) => ts.map((t) => Math.min(Math.trunc((t * sr) / HOP), fullEnv.length - 1));
   for (const sec of sections) {
@@ -164,7 +183,6 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
       secBeats.push(sec.beats.filter((b) => b >= sec.t0 && b < sec.t1));
     }
   }
-  const neural = neuralBeats(opts.neuralBeats, fullEnv);
   if (neural !== null) {
     // the neural tracker's grid wherever it keeps a pulse: it reads swing, shuffles, fills and a
     // performer's tempo far better than onset autocorrelation, so it replaces the per-section tracking below
@@ -195,6 +213,6 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
     duration, nFrames, step, tempo, beats, downbeats, hits, events, pitchLo, pitchHi, beatScore, sections,
     heardBeats: opts.neuralBeats?.beats.slice() ?? null,
     pulseEnv: Array.from(fullEnv), pulseHop: HOP / SR,
-    ...visuals(y, spec, fullEnv, beats, nFrames, step),
+    ...visuals(spec, chroma, fullEnv, beats, nFrames, step),
   };
 }
