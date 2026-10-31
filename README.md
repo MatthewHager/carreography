@@ -87,7 +87,8 @@ byte.
 Issues and pull requests are welcome: a new move, a car that behaves differently from the preview, a
 browser that struggles. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup (`npm install`, `npm run assets`,
 `npm run dev`) and how to add a move or a car; [AGENTS.md](AGENTS.md) is the short version for coding
-agents. Security issues: see [SECURITY.md](SECURITY.md).
+agents. Security issues: see [SECURITY.md](SECURITY.md); everyone taking part follows the
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## Licence
 
