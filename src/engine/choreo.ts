@@ -147,9 +147,10 @@ type Family = 'note' | 'beat' | 'held' | 'flow';
  * otherwise (feel.followable: none, or one the music doesn't strike), the swell where a chord is held
  * (feel.held), else the melody. From drive up, and from a groove where a drum kit plays, the beat: the whole
  * stage moves together on it, with the melody along the trucks' bars. Below that, the melody where there are
- * notes enough to follow, the beat under sparse notes (a singer over a band), and in between the one the
- * previous figure didn't take, for contrast. */
-export function family(an: Analysis, t0: number, t1: number, step: number, before: Family | null): Family {
+ * notes enough to follow, the beat under sparse notes (a singer over a band), and in between the melody
+ * while it's calm and the beat in a groove. It depends on the music alone, so the same material gets the
+ * same family wherever it comes at the same level. */
+export function family(an: Analysis, t0: number, t1: number, step: number): Family {
   if (flowsAt(an, t0)) return 'flow';
   const notes = an.events.t.filter((t) => t >= t0 && t < t1).length / Math.max(t1 - t0, 1);
   const kit = kitAt(an, (t0 + t1) / 2);
@@ -157,7 +158,7 @@ export function family(an: Analysis, t0: number, t1: number, step: number, befor
   if (step >= 3 || (step >= 2 && kit)) return 'beat';
   if (notes >= DENSE) return 'note';
   if (notes < SPARSE || (kit && notes < SUNG)) return 'beat';
-  return before === 'note' ? 'beat' : 'note';
+  return step <= 1 ? 'note' : 'beat';     // in between: the melody while it's calm, the beat in a groove
 }
 
 const POOLS: Record<Family, CAT.MoveName[]> = { note: CAT.NOTE_MOVES, beat: CAT.BEAT_MOVES, held: CAT.HELD_MOVES,
@@ -166,17 +167,22 @@ const familyOf = (move: CAT.MoveName) => (Object.keys(POOLS) as Family[]).find((
 
 const FIGURE_BARS = 8;     // a figure plays at most this long before the next phrase changes it: a period
 
-/** A run's phrases as figures of at most FIGURE_BARS bars (and at least half that), each cut where a phrase
- * starts: [t0, t1, its phrases]. Bars are counted on the tracked downbeats, so they follow the performer. */
+/** A run's phrases as figures of at most FIGURE_BARS bars (and at least half that, but where a section of the
+ * form map starts), each cut where a phrase starts: [t0, t1, its phrases]. Bars are counted on the tracked
+ * downbeats, so they follow the performer. */
 function figures(an: Analysis, t0: number, t1: number, own: Phrase[]): [number, number, Phrase[]][] {
   const bars = (a: number, b: number) => {
     const n = searchsorted(an.downbeats, b - 0.1) - searchsorted(an.downbeats, a - 0.1);
     return n >= 1 ? n : (b - a) / TEMPO.barLen(an);
   };
+  // a section of the form map starts a figure (at the first phrase in it), so a section heard again can
+  // replay its figures one for one
+  const sectionStarts = new Set(an.sections.map((s) => own.find((ph) => ph.t0 >= s.t0 - 0.01)).filter(Boolean));
   const out: [number, number, Phrase[]][] = [[t0, t1, []]];
   for (const ph of own) {
     const last = out[out.length - 1];
-    if (last[2].length && bars(last[0], ph.t1) > FIGURE_BARS && bars(last[0], ph.t0) >= FIGURE_BARS / 2) {
+    const long = bars(last[0], ph.t1) > FIGURE_BARS && bars(last[0], ph.t0) >= FIGURE_BARS / 2;
+    if (last[2].length && (long || sectionStarts.has(ph))) {
       last[1] = ph.t0;
       out.push([ph.t0, t1, [ph]]);
     } else {
@@ -188,9 +194,16 @@ function figures(an: Analysis, t0: number, t1: number, own: Phrase[]): [number, 
 
 /** Every figure's move, and every phrase's. A passage's runs at one level are cut into figures at phrase
  * starts (figures), each with its family (a chord held on into the next figure is one swell), each playing
- * the move chooseMove gives it; material heard again at the same level replays its figures' moves. */
+ * the move chooseMove gives it. Material heard again replays its figures' moves, family by family in order:
+ * a chorus looks like the chorus, and where it has grown from following the melody to following the beat,
+ * like the chorus grown (the moves themselves grow with the level). */
 function playPassages(cars: Car[], an: Analysis) {
-  const used = new Map<CAT.MoveName, number>(), byKey = new Map<string, CAT.MoveName[]>();
+  const used = new Map<CAT.MoveName, number>();
+  // per section letter of the form map, the moves its figures played, family by family in order; and per
+  // section heard, how many figures of each family it has had
+  const byLetter = new Map<string, Partial<Record<Family, CAT.MoveName[]>>>();
+  const nth = new Map<number, Partial<Record<Family, number>>>();
+  const sectionAt = (t: number) => Math.max(0, an.sections.findLastIndex((s) => s.t0 <= t + 0.01));
   let prev: CAT.MoveName | null = null;
   for (const p of passages(an)) {
     const mine = an.phrases!.filter((ph) => ph.t0 >= p.t0 - 0.01 && ph.t0 < p.t1);
@@ -198,12 +211,10 @@ function playPassages(cars: Car[], an: Analysis) {
     const runs = bands(mine);
     runs.forEach(([step, own], r) => {
       const t0 = r === 0 ? p.t0 : own[0].t0, t1 = r === runs.length - 1 ? p.t1 : runs[r + 1][1][0].t0;
-      const keys = p.letters.map((letter) => `${letter}:${p.piece}:${step}`);  // heard again at this level
-      const moves = byKey.get(keys[0]) ?? [];
       const figs: [number, number, Phrase[], Family][] = [];
       for (const [g0, g1, group] of figures(an, t0, t1, own)) {
         const last = figs[figs.length - 1];
-        const fam = family(an, g0, g1, step, last ? last[3] : prev === null ? null : familyOf(prev));
+        const fam = family(an, g0, g1, step);
         if (last && fam === 'held' && last[3] === 'held') {
           last[1] = g1;
           last[2].push(...group);
@@ -211,22 +222,24 @@ function playPassages(cars: Car[], an: Analysis) {
           figs.push([g0, g1, group, fam]);
         }
       }
-      figs.forEach(([g0, g1, group, fam], j) => {
+      for (const [g0, g1, group, fam] of figs) {
+        const k = sectionAt(g0), letter = an.sections[k]?.letter ?? '';
+        const known = byLetter.get(letter) ?? byLetter.set(letter, {}).get(letter)!;
+        const seen = nth.get(k) ?? nth.set(k, {}).get(k)!;
+        const moves = (known[fam] ??= []), j = (seen[fam] = (seen[fam] ?? -1) + 1);
         const move = chooseMove(an, fam, g0, g1, moves[j], prev, used);
         moves[j] ??= move;
         used.set(move, (used.get(move) ?? 0) + 1);
         prev = move;
         drawFigure(cars, an, move, group, g0, g1);
-      });
-      for (const k of keys) if (!byKey.has(k)) byKey.set(k, moves);
+      }
     });
   }
 }
 
 /** The move a figure of family `fam` plays: its material's move from before (`replay`) where the music still
- * allows it (a beat to follow for a beat move, a held chord for a swell, flowing music for a flowing move)
- * and the figure before didn't just play it (material repeated back to back changes its figure rather than
- * playing one move for half a minute), else the least used of the family, and of those the one the figure's
+ * allows it (a beat to follow for a beat move, a held chord for a swell, flowing music for a flowing move),
+ * else the least used of the family that the figure before didn't just play, and of those the one the figure's
  * register points to, so songs and figures don't all walk the catalogue in the same order. No sparse move
  * at the peak, and no bar-long sweep where a drum kit keeps time. */
 export function chooseMove(an: Analysis, fam: Family, g0: number, g1: number, replay: CAT.MoveName | undefined,
@@ -239,7 +252,7 @@ export function chooseMove(an: Analysis, fam: Family, g0: number, g1: number, re
   const fits = (m: CAT.MoveName) => {
     const f = familyOf(m);
     return (f === 'held') === (fam === 'held') && (f === 'flow') === (fam === 'flow') && allowed(m)
-      && (m !== prev || POOLS[f].length === 1) && (f !== 'beat' || fam === 'beat' || followable(an, g0, g1));
+      && (f !== 'beat' || fam === 'beat' || followable(an, g0, g1));
   };
   if (replay !== undefined && fits(replay)) return replay;
   const pool = POOLS[fam].filter(allowed);
@@ -249,7 +262,7 @@ export function chooseMove(an: Analysis, fam: Family, g0: number, g1: number, re
   return ties[Math.min(ties.length - 1, Math.floor(register(an, g0, g1) * ties.length))];
 }
 
-/** A figure drawn with its move. A phrase whose shape asks for its own move (chords, a trill, a cadence, the
+/** A figure drawn with its move. A phrase whose shape asks for its own move (a trill, the
  * motif) plays that, but where the music flows. A note move plays each phrase's notes; any other plays
  * across the whole figure, rests included: a beat move around the phrases that play their own, with the
  * melody riding the trucks' bars on top, and a swell or a flowing move holding on under them. */

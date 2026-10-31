@@ -6,7 +6,7 @@
 //               note   the transcribed notes
 //               beat   the tracked beats at the level's pace (every one, 1 and 3, or the downbeat)
 //               bar    the tracked downbeats, a whole bar at a time
-//               self   its own timing (a cadence's chords, the Toccata's motif, a trill)
+//               self   its own timing (a motif, a trill, a held chord)
 //
 // Every move lights the whole lineup and grows with the level (level.ts): at a hush a single lamp a hit,
 // from drive up whole halves of cars with their headlights, but for those the beat plays (pulse.ts).
@@ -29,12 +29,9 @@ export const MOVES = {
     + 'rising line opens out and a falling one closes in', 'note'),
   antiphony: mv('call and response: bar by bar the melody passes between the left and the right half of the '
     + 'stage', 'note'),
-  block: mv('chords as blocks of light from their lowest note to their highest, held with the chord; a big '
-    + 'chord fills the stage', 'note'),
   shimmer: mv('a trill flickers between the two halves of a car, and across every car when loud', 'self'),
   motif: mv('the signature motif: an ornament on the middle car, a sweep across, a hold where it lands',
     'self'),
-  cadence: mv('a big closing chord: the whole stage on for the chord', 'self'),
   swell: mv('held chords with no beat to hit: the whole stage swells from the middle car out and holds while '
     + 'the chord sounds, breathing out and in again from the middle at each new chord', 'self'),
   march: mv('one light marches car to car on the beat, left, centre, right, centre', 'beat'),
@@ -69,8 +66,7 @@ export const HELD_MOVES: MoveName[] = ['swell'];
 export const FLOW_MOVES: MoveName[] = ['glide', 'bloom'];
 
 /** The move a phrase's shape asks for whatever its passage plays. */
-export const FOR_GESTURE: Record<string, MoveName> = { chords: 'block', cadence: 'cadence', trill: 'shimmer',
-  motif: 'motif' };
+export const FOR_GESTURE: Record<string, MoveName> = { trill: 'shimmer', motif: 'motif' };
 
 /** MOVES.md at the repository root: the catalogue as a table to read (catalog.test.ts keeps it current). */
 export function markdown(): string {

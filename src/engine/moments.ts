@@ -73,7 +73,7 @@ export const builds = (an: Analysis) => plan(an).builds;
 
 // ---- Accents -----------------------------------------------------------------------------------
 // The whole stage at once is the show's exclamation mark, so it is kept for the moments that stand out most.
-// Besides the drops and the cadences' closing chords (the cadence move), the strongest of
+// Besides the drops, the strongest of
 //   arrivals   a phrase's arrival chord in lively music where the music steps up: its level LIFT over the
 //              seconds before, or a jump of BLAST
 //   blasts     a strike out of a breath that lands loud (LOUD: within 16 dB of the song's loud end, the show
@@ -81,7 +81,7 @@ export const builds = (an: Analysis) => plan(an).builds;
 //              the BREATH_S before (an orchestra's tutti after a rest, a band's hit after a stop)
 // light the whole stage, at most one for every ACCENT_EVERY_S of the song, strongest first: a strike out of
 // silence (the breath before it at REST: 30 dB under the loud end) at least STRIKE_GAP_S after another, as
-// the Toccata's opening calls are, anything else ACCENT_GAP_S clear of every other, a drop or a cadence.
+// the Toccata's opening calls are, anything else ACCENT_GAP_S clear of every other and of a drop.
 
 export const LOUD = 0.6;
 const BLAST = 0.4, LIFT = 0.08, REST = 0.25, RING_S = 0.8;
@@ -90,7 +90,7 @@ const BREATH_S = 0.4, STRIKE_S = 0.15;     // the breath before a strike, and it
 const LIFT_WEIGHT = 2;     // a step up in the level counts twice a jump in loudness: it lasts
 const STRIKE_HOLD_S = 0.3;     // a strike holds the whole stage this long at most, and under a beat
 
-/** The accents (see above), clear of the drops and the cadences. */
+/** The accents (see above), clear of the drops. */
 export function accents(cars: Car[], an: Analysis) {
   const x = an.loudness, ev = an.events, at = (t: number) => clip(Math.round(t / an.step), 0, an.nFrames - 1);
   /** [the quietest moment of the breath before t (silence before the song), the loudest of its attack] */
@@ -103,9 +103,8 @@ export function accents(cars: Car[], an: Analysis) {
   const lift = (t: number) => levelOver(an, t, t + 2) - levelOver(an, t - 4, t - 0.3);
   const strength = (t: number, [before, after]: [number, number]) =>
     after - before + LIFT_WEIGHT * Math.max(0, lift(t));
-  const taken = [...drops(an)];     // a copy: the plan is cached, and the motors read the drops after
+  const taken = drops(an);
   const phrases = an.phrases!.filter((ph) => !flowsAt(an, ph.t0));
-  for (const ph of phrases) if (ph.move === 'cadence') for (let i = ph.a; i < ph.b; i++) taken.push(ev.t[i]);
   const cands: { t: number; strength: number; hold: number; strike: boolean }[] = [];
   for (const h of an.hits) {
     const [before, after] = around(h);
@@ -116,7 +115,7 @@ export function accents(cars: Car[], an: Analysis) {
   for (const ph of phrases) {
     for (let i = ph.a; i < ph.b; i++) {
       const t = ev.t[i], [before, after] = around(t);
-      if (!ev.arrival[i] || ph.move === 'cadence' || levelAt(an, t) < DRIVE
+      if (!ev.arrival[i] || levelAt(an, t) < DRIVE
         || (lift(t) < LIFT && after - before < BLAST)) continue;
       cands.push({ t, strength: strength(t, [before, after]), hold: clip(ev.dur[i], 0.3, 1.2), strike: false });
     }

@@ -74,7 +74,7 @@ about it stay on your device; the site has no server and no analytics.
 Two neural networks running in the browser hear the music: [Beat This!](https://github.com/CPJKU/beat_this)
 finds the beats and downbeats, Spotify's [basic-pitch](https://github.com/spotify/basic-pitch) the notes.
 A choreographer then reads the song's level, sections, phrases, drums and harmony and draws the show in
-layers, each lighting lamps of its own: a steady bed, a move per phrase from a catalogue of 18, the drums,
+layers, each lighting lamps of its own: a steady bed, a move per phrase from a catalogue of 16, the drums,
 the beat, the big moments and the motors. The same song and lineup always give the same files, byte for
 byte.
 

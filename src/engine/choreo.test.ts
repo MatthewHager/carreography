@@ -8,8 +8,7 @@ import type { Analysis } from './analysis';
 import { BEAT_MOVES, FLOW_MOVES, type MoveName, SPARSE_MOVES } from './catalog';
 import { ALL_RGB, N_CHANNELS } from './channels';
 import { chooseMove, choreograph, family, makeShow } from './choreo';
-import { feel, flowsAt } from './feel';
-import { accents, drops } from './moments';
+import { feel } from './feel';
 import { FIXTURES, fixture } from './fixtures';
 
 const show = (song: (typeof FIXTURES)[number], lineup: string) =>
@@ -34,15 +33,6 @@ describe('the same input gives the same show', () => {
       differ++;
     }));
     expect(differ).toBeGreaterThan(0);
-  });
-
-  it('placing the accents leaves the drops as they were, a cadence in the music included', () => {
-    const { cars, an } = makeShow(fixture('groove'), 'YCY');
-    const before = [...drops(an)];
-    const ph = an.phrases!.find((p) => !flowsAt(an, p.t0) && p.b > p.a)!;
-    ph.move = 'cadence';     // the accents keep clear of a cadence's chords
-    accents(cars, an);
-    expect(drops(an)).toEqual(before);
   });
 
   it('choreographing one analysis again, for another lineup and back, gives the same bytes', () => {
@@ -99,22 +89,22 @@ function stretch(o: { level: number; notes?: number; held?: [number, number][]; 
 
 describe('a figure plays the family of moves the music asks for', () => {
   it('drive with a drum kit moves the whole stage on the beat', () => {
-    expect(family(stretch({ level: 0.7, notes: 6, kit: true }), 2, 18, 3, null)).toBe('beat');
+    expect(family(stretch({ level: 0.7, notes: 6, kit: true }), 2, 18, 3)).toBe('beat');
   });
 
   it('a groove without a kit follows notes enough to follow, and the beat under sparse ones', () => {
-    expect(family(stretch({ level: 0.5, notes: 6 }), 2, 18, 2, null)).toBe('note');
-    expect(family(stretch({ level: 0.5, notes: 1 }), 2, 18, 2, null)).toBe('beat');
+    expect(family(stretch({ level: 0.5, notes: 6 }), 2, 18, 2)).toBe('note');
+    expect(family(stretch({ level: 0.5, notes: 1 }), 2, 18, 2)).toBe('beat');
   });
 
   it('a chord held where nothing strikes the beat swells', () => {
     const an = stretch({ level: 0.5, held: [[1, 18], [1, 18], [1, 18]], struck: false });
-    expect(family(an, 2, 18, 2, null)).toBe('held');
+    expect(family(an, 2, 18, 2)).toBe('held');
   });
 
   it('music with no steady beat, and none struck, flows', () => {
     const an = stretch({ level: 0.5, notes: 3, steady: false, struck: false });
-    expect(family(an, 2, 18, 2, null)).toBe('flow');
+    expect(family(an, 2, 18, 2)).toBe('flow');
   });
 
   it('no figure at the peak plays a sparse move, however little used or replayed', () => {

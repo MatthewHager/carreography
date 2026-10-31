@@ -302,24 +302,6 @@ const antiphony: Move = (cars, an, ph) => {
   barMelody(cars, an, ph);
 };
 
-/** Chords as blocks of light across the slots between their lowest and highest notes, held as long as the
- * chord; a big chord fills the stage. Quiet chords swell in and fade, loud ones are struck. */
-const block: Move = (cars, an, ph) => {
-  const ev = an.events, ranges = localRanges(an, ph), all = slots(cars);
-  for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t), nxt = ev.t[i + 1] ?? Infinity, [lo, hi] = ranges[i - ph.a];
-    const a = slotFor(cars, ev.low[i], lo, hi), b = slotFor(cars, ev.high[i], lo, hi);
-    const ia = slotIndex(all, a), ib = slotIndex(all, b);
-    const big = ev.kind[i] === 3 || Math.abs(ib - ia) + 1 >= all.length - 1;
-    const span = big ? all : all.slice(Math.min(ia, ib), Math.max(ia, ib) + 1);
-    const dur = Math.max(ev.dur[i], 0.3);
-    for (const [car, side] of span) {
-      note(car, car.half(side, s), t, dur, s, nxt);
-      if (car.isCt) barSpan(car, t, Math.min(dur, nxt - t), ...barHalf(side), 0.4 + 0.6 * s);
-    }
-  }
-};
-
 /** A trill shimmers: the two halves of the car where it sits flicker in turn, and from the middle level up
  * every car flickers, mirrored. */
 const shimmer: Move = (cars, an, ph) => {
@@ -391,12 +373,6 @@ const swell: Move = (cars, an, ph) => {
       barFill(c, t0, t1 - t0, Array.from({ length: n }, (_, f) => Math.min(1, f / up) * lv[f0 + f]));
     }
   });
-};
-
-/** A big closing chord: the whole stage on for the chord. */
-const cadence: Move = (cars, an, ph) => {
-  const ev = an.events;
-  for (let i = ph.a; i < ph.b; i++) allOn(cars, ev.t[i], clip(ev.dur[i], 0.3, 1.5));
 };
 
 const ON_GRID_S = 0.05;     // a note this close to a beat (or an eighth) of the beat map is on it
@@ -696,6 +672,6 @@ export function allOn(cars: Car[], t: number, hold: number) {
 
 /** Every move by its catalogue name (catalog.ts). */
 export const MOVES: Record<MoveName, Move> = {
-  keyboard, relay, mirror, antiphony, block, shimmer, motif, cadence, swell,
+  keyboard, relay, mirror, antiphony, shimmer, motif, swell,
   march, lr_channel: lrChannel, checker, tug_of_war: tugOfWar, beam, converge, shockwave, glide, bloom,
 };

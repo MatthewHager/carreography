@@ -36,7 +36,7 @@ import * as M from './moves';
 import { clip } from './np';
 import { barPositions, beatAt, beatLen } from './tempo';
 
-const OWNERS = new Set(['cadence', 'motif']);     // phrase shapes whose moves own the whole stage
+const OWNERS = new Set(['motif']);                 // phrase shapes whose moves own the whole stage
 const CLEAR = 0.6, FAINT = 0.25, SURE = 0.9;       // how clear the beat is (an.beatConfidence): a full pulse,
                                                    // downbeats only, a calm tick
 /** How clear the beat at t is: the listening's beat confidence, or CLEAR where the tracker keeps steady

@@ -9,10 +9,8 @@ What each move looks like, when the choreographer plays it, and what it locks to
 | relay | one light runs the stage note by note, through every lamp and along the bar, end to end and back | a figure that follows its melody | note |
 | mirror | pitch is the distance from the middle: low notes light the centre, high notes both ends, so a rising line opens out and a falling one closes in | a figure that follows its melody | note |
 | antiphony | call and response: bar by bar the melody passes between the left and the right half of the stage | a figure that follows its melody | note |
-| block | chords as blocks of light from their lowest note to their highest, held with the chord; a big chord fills the stage | every phrase shaped as chords | note |
 | shimmer | a trill flickers between the two halves of a car, and across every car when loud | every phrase shaped as trill | self |
 | motif | the signature motif: an ornament on the middle car, a sweep across, a hold where it lands | every phrase shaped as motif | self |
-| cadence | a big closing chord: the whole stage on for the chord | every phrase shaped as cadence | self |
 | swell | held chords with no beat to hit: the whole stage swells from the middle car out and holds while the chord sounds, breathing out and in again from the middle at each new chord | a chord held with no beat to follow | self |
 | march | one light marches car to car on the beat, left, centre, right, centre | a figure that follows its beat, below the peak | beat |
 | lr_channel | left channel, right channel: the whole left half of the stage on one beat, the right on the next | a figure that follows its beat | beat |

@@ -90,16 +90,18 @@ table below), so no layer has to dodge another and nothing is cleaned up after t
    second and a half), two fifths how loud the music is against the rest of the song, a tenth how busy it
    is. Its five steps are *hush*, *calm*, *groove*, *drive* and the *peak*, which is kept for the loudest
    twenty seconds from 45 % of the way into the song and the nearly as loud music around them.
-2. **Passages and figures.** The song is cut into passages where its material changes: a section that
-   brings back earlier material replays that material's moves, so a chorus looks like the chorus; a long
-   passage splits where its sound changes most and where the level settles on another step for 8 s. Each
-   stretch is cut at phrase starts (`phrases.ts`) into **figures** of at most eight bars, and each figure
+2. **Passages and figures.** The song is cut into passages where its material changes; a long passage
+   splits where its sound changes most and where the level settles on another step for 8 s. Each stretch is
+   cut at phrase starts (`phrases.ts`) into **figures** of at most eight bars, a section of the form map
+   always starting one. A section heard again replays the moves its figures played the first time, family
+   by family, so a chorus looks like the chorus (grown, where the music has grown). Each figure
    plays **one move** ([MOVES.md](../MOVES.md)), the least used of the family the music asks for
    (`choreo.family`): where it flows (`feel.ts`: no steady beat, and none struck) a flowing move; with no
    beat to follow, a swell where a chord is held, else the melody; from drive up, or a groove with a drum
-   kit, the beat; below that, the melody where there are notes to follow and the beat under sparse ones.
-   Moves that light only a car or two are kept below the peak, and chords, trills, cadences and the motif
-   take their own move. So Hall of the Mountain King's theme, eighteen times and growing, goes from a
+   kit, the beat; below that, the melody where there are notes to follow, the beat under sparse ones, and
+   in between the melody while it's calm and the beat in a groove. Moves that light only a car or two are
+   kept below the peak, bar-long sweeps out of a drum kit's groove, and trills and the motif take their own
+   move. So Hall of the Mountain King's theme, eighteen times and growing, goes from a
    keyboard in its pianissimo through marches and mirrors to rings and fills at the climax.
 3. **Every hit is sized by the level at its moment** (`Car.half`): a single lamp at a hush, a half car's
    signature and DRL when calm, its inner beam from a groove, its outer beam too from drive. A beat move's
@@ -117,7 +119,7 @@ table below), so no layer has to dodge another and nothing is cleaned up after t
 | tails, brake, plates, rear fog, a truck's bed lights | the bed; the kick on the brake | the breath (tails) |
 | a truck's bars, the cabins | the bed's glow under the moves' comets and sweeps | the same, breathing |
 
-An accent, a drop, the peak's downbeat, a cadence and the end light whole cars
+An accent, a drop, the peak's downbeat and the end light whole cars
 for a moment (`Car.lightOver`). The pulse's hold on the inner beams is kept where lamps are written:
 `Car.light` leaves them out of every other write, frame by frame, while one of its hits rings.
 
@@ -215,7 +217,7 @@ lock to:
 | flowing | the melody's place, smoothed | `glide` (across the stage by pitch), `bloom` (out from the middle as it rises) |
 | beat | the beat: every one from drive up, 1 and 3 in a groove, the downbeat when calm | `march`, `lr_channel`, `checker`, `tug_of_war`, `converge`, `shockwave` |
 | bar | the downbeats | `beam` |
-| their own | the phrase | `block` (chords), `shimmer` (trills), `cadence`, `motif`, `swell` (chords held with no beat, swelling again at each new one) |
+| their own | the phrase | `shimmer` (trills), `motif`, `swell` (chords held with no beat, swelling again at each new one) |
 
 `march` and `beam` light only a car or two at a time, so they play below the peak.
 
