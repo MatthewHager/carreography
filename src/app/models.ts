@@ -12,25 +12,35 @@ const arrived = new Map<AppModelId, number>();
 const listeners = new Set<() => void>();
 let paints: Promise<Paint[]> | undefined;
 
-/** A file from models/tesla-app/, reporting the share of it that has arrived as it downloads. */
+/** A file from models/tesla-app/, reporting the share of it that has arrived as it downloads. A server that
+ * compresses it (GitHub Pages gzips the models) announces the compressed length, so that share is an
+ * estimate there, held under 1 until the file is whole. */
 async function fetchModelFile(name: string, onProgress?: (fraction: number) => void)
   : Promise<ArrayBuffer | undefined> {
   const res = await fetch(`${import.meta.env.BASE_URL}models/tesla-app/${name}`).catch(() => undefined);
   if (!res?.ok) return undefined;
-  const total = Number(res.headers.get('content-length')) || 0;
-  if (!onProgress || !total || !res.body) return res.arrayBuffer();
-  const out = new Uint8Array(total), reader = res.body.getReader();
+  const length = Number(res.headers.get('content-length')) || 0;
+  if (!onProgress || !length || !res.body) return res.arrayBuffer();
+  const expect = length * (res.headers.get('content-encoding') ? GZIP_RATIO : 1);
+  const chunks: Uint8Array[] = [], reader = res.body.getReader();
   let at = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    if (at + value.length > total) return undefined;     // not the file its length said
-    out.set(value, at);
+    chunks.push(value);
     at += value.length;
-    onProgress(at / total);
+    onProgress(Math.min(at / expect, 0.99));
   }
-  return at === total ? out.buffer : undefined;
+  const out = new Uint8Array(at);
+  let k = 0;
+  for (const c of chunks) {
+    out.set(c, k);
+    k += c.length;
+  }
+  return out.buffer;
 }
+
+const GZIP_RATIO = 1.7;     // how much a model grows back from gzip: 1.4 to 2.3 for the nine
 
 function report(id: AppModelId, fraction: number) {
   arrived.set(id, fraction);
