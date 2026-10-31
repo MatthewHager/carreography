@@ -83,6 +83,9 @@ interface ModelRules {
   beamFrom: string[];
   /** Options the app hides until they're chosen, shown here (the Cybertruck's tonneau cover, shut). */
   show?: RegExp;
+  /** A finish for a named material where the app's own reads wrong outside its studio: the
+   * Cybertruck's stainless, which the app draws as a clear-coated mirror. */
+  finish?: { material: string; color: string; metalness: number; roughness: number };
 }
 
 const W = COLORS.white;
@@ -197,6 +200,9 @@ const RULES: Record<AppModelId, ModelRules> = {
     portDoor: 'Charge_Cap_Spatial',
     beamFrom: ['Headlights2'],
     show: /^Tonneau$/,
+    // brushed stainless: no clear coat, the brush marks spreading every reflection into a soft sheen and
+    // scattering a little light, so the truck reads grey from any side, not only where it mirrors a lamp
+    finish: { material: 'PaintMix', color: '#c4c7cb', metalness: 0.8, roughness: 0.42 },
   },
   // Model S 2021+ (Tesla's README, "Model S"): the ring around the headlight is the signature on
   // reflector headlights and channels 4-6 on projector ones, so it lights for all four; the bumper lamp
@@ -362,12 +368,23 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
     if (!paints.has(m)) paints.set(m, m.clone());
     return paints.get(m)!;
   };
+  const finish = rules.finish;
   root.traverse((o) => {
+    if (finish && o instanceof THREE.Mesh) {
+      for (const m of [o.material].flat()) {
+        if (!(m instanceof THREE.MeshPhysicalMaterial) || m.name !== finish.material || m.userData.finished) continue;
+        m.userData.finished = true;     // the material is shared by every car of the model
+        m.color.set(finish.color);
+        m.metalness = finish.metalness;
+        m.roughness = finish.roughness;
+        m.clearcoat = 0;
+      }
+    }
+    if (o instanceof THREE.Mesh) for (const m of [o.material].flat()) clearCoat(m as THREE.Material);
     const hidden = (o.userData as { visible?: boolean }).visible === false && !rules.show?.test(o.name);
     if (hidden || APP_ONLY.test(o.name)) o.visible = false;
     if (o instanceof THREE.Mesh) {
       o.frustumCulled = false;
-      for (const m of [o.material].flat()) nightLot(m as THREE.Material);
       o.material = Array.isArray(o.material) ? o.material.map(own) : own(o.material);
     }
   });
@@ -663,32 +680,16 @@ function carFrameMesh(src: THREE.Mesh, positions: number[], car: THREE.Object3D,
   return mesh;
 }
 
-/**
- * The app lights its cars with a studio panorama; our lot has no reflections, where a fully
- * metallic surface (the Cybertruck's stainless body, chrome trim) renders black. Keep some of the
- * metal's sheen but let the lot's lights show its colour. Materials are shared between cars of a
- * model, so each is adjusted once.
- */
-function nightLot(m: THREE.Material): void {
-  if (!(m instanceof THREE.MeshStandardMaterial) || (m.userData as { lot?: boolean }).lot) return;
-  m.userData.lot = true;
-  if (m.metalness > 0.4) {
-    m.metalness = 0.35;
-    m.roughness = Math.max(m.roughness, 0.35);
-    if (!m.map && m.color.getHSL({ h: 0, s: 0, l: 0 }).l < 0.35) m.color.set('#b9bcc0');
-  }
-  // The app's mirror-like clear coat and glass catch the moon as a pinpoint that reads as a lit lamp
-  // on a dark lot: spread the highlight so only the show's lights look like lights.
-  // (The viewer's own bodies use roughness 0.5-0.6 and no clear coat for the same reason.)
-  if (m instanceof THREE.MeshPhysicalMaterial && m.clearcoat > 0) {
-    m.clearcoat = Math.min(m.clearcoat, 0.3);
-    m.clearcoatRoughness = Math.max(m.clearcoatRoughness, 0.5);
-  }
-  m.roughness = Math.max(m.roughness, m.transparent ? 0.45 : 0.5);
+/** The app's clear coat and glass are perfect mirrors; real ones spread a reflection a little. */
+function clearCoat(m: THREE.Material): void {
+  if (!(m instanceof THREE.MeshStandardMaterial)) return;
+  if (m instanceof THREE.MeshPhysicalMaterial && m.clearcoat > 0) m.clearcoatRoughness = Math.max(m.clearcoatRoughness, GLOSS);
+  if (m.transparent) m.roughness = Math.max(m.roughness, GLOSS);
 }
+const GLOSS = 0.12;
 
 function lensMaterial(lens: THREE.Color): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
+  const m = new THREE.MeshStandardMaterial({
     color: lens,
     roughness: 0.25,
     metalness: 0.1,
@@ -697,6 +698,8 @@ function lensMaterial(lens: THREE.Color): THREE.MeshStandardMaterial {
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
   });
+  clearCoat(m);
+  return m;
 }
 
 function escapeRe(s: string): string {

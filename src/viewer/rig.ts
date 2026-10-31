@@ -40,16 +40,11 @@ export interface Paint {
  * factor tesla-model-extractor measured for its GLB export (`--paint-brightness`). */
 const PAINT_BRIGHTNESS = 8;
 
-/**
- * A paint's colour on our lot: the app's colour brightened as the extractor does (in gamma space,
- * keeping the hue). The lot has no studio reflections, so the share of the look the app's metal
- * leaves to reflections (its metallic beyond the base coat's 0.3) stays dark: black paint stays black.
- */
+/** A paint's colour: the app's colour brightened as the extractor does (in gamma space, keeping the hue). */
 export function paintColor(paint: Paint): THREE.Color {
   const { r, g, b } = new THREE.Color(paint.albedo).getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace);
   const k = Math.min(PAINT_BRIGHTNESS, 1 / Math.max(r, g, b, 1e-6));
-  const reflected = THREE.MathUtils.clamp((paint.metallic - 0.3) / 0.7, 0, 1);
-  return new THREE.Color().setRGB(r * k, g * k, b * k, THREE.SRGBColorSpace).multiplyScalar(1 - 0.85 * reflected);
+  return new THREE.Color().setRGB(r * k, g * k, b * k, THREE.SRGBColorSpace);
 }
 interface LightPart {
   ids: string[];
@@ -141,10 +136,9 @@ export class CarRig {
         m.roughness = own.roughness;
         return;
       }
-      // The metal and gloss tamed as nightLot (appBody.ts) does for every material.
       m.color.copy(paintColor(paint));
-      m.metalness = Math.min(paint.metallic, 0.35);
-      m.roughness = Math.max(paint.roughness, 0.5);
+      m.metalness = paint.metallic;
+      m.roughness = paint.roughness;
     });
   }
 

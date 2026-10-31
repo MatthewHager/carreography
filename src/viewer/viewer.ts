@@ -31,6 +31,30 @@ export const CAMERA_PRESETS: CameraPreset[] = [
 
 const MAX_DPR = 1.5;
 
+/** Bloom starts here: only what is brighter glows. */
+const BLOOM_FROM = 0.95;
+
+/**
+ * A lot lamp's reflection in the paint, the glass or the stainless is as bright as the lamp, and the bloom
+ * would make it glow like one of the show's lights. So every reflection stops just under where the bloom
+ * starts: still a crisp white gloss, while only the show's lamps (their emission, untouched) glow. Once, for
+ * every material.
+ */
+function reflectionsUnderBloom(): void {
+  const chunk = THREE.ShaderChunk as unknown as Record<string, string>;
+  if (chunk.lights_fragment_end!.includes('BLOOM_FROM')) return;
+  const max = `vec3(${(BLOOM_FROM - 0.15).toFixed(2)})`;
+  chunk.lights_fragment_end += `
+    // BLOOM_FROM: reflections stay under the bloom (viewer.ts)
+    reflectedLight.directSpecular = min(reflectedLight.directSpecular, ${max});
+    reflectedLight.indirectSpecular = min(reflectedLight.indirectSpecular, ${max});
+    #ifdef USE_CLEARCOAT
+      clearcoatSpecularDirect = min(clearcoatSpecularDirect, ${max});
+      clearcoatSpecularIndirect = min(clearcoatSpecularIndirect, ${max});
+    #endif
+  `;
+}
+
 export interface Rect {
   x: number;
   y: number;
@@ -66,20 +90,21 @@ export class Viewer {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(this.dpr);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    reflectionsUnderBloom();
+    this.renderer.toneMappingExposure = 1.0;
     container.appendChild(this.renderer.domElement);
 
     this.scene.background = new THREE.Color('#05070a');
     this.scene.fog = new THREE.Fog('#05070a', 28, 70);
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(lotEnvironment(), 0.02).texture;
-    this.scene.environmentIntensity = 0.25;
+    this.scene.environmentIntensity = 0.7;
     pmrem.dispose();
 
-    // Night: a soft sky fill and a high moon, enough to read the cars' shapes
-    // without competing with their lights.
-    this.scene.add(new THREE.HemisphereLight('#9aa6bd', '#262626', 1.1));
-    const moon = new THREE.DirectionalLight('#c9d4ff', 0.9);
+    // Night: a soft sky fill and a high moon under the lot's lamps (lot.ts), enough to read the cars'
+    // shapes without competing with their lights.
+    this.scene.add(new THREE.HemisphereLight('#8a96ad', '#1e1e1e', 0.8));
+    const moon = new THREE.DirectionalLight('#c9d4ff', 0.5);
     moon.position.set(-4, 8, 5);
     this.scene.add(moon);
 
@@ -101,7 +126,7 @@ export class Viewer {
     this.composer = new EffectComposer(this.renderer, target);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // Tight and gentle, so neighbouring LEDs of a light bar stay distinct.
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.05, 0.95);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.05, BLOOM_FROM);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 

@@ -1,7 +1,9 @@
 // The set the cars stand on (adapted from tesla-lightshow-studio, AGPL-3.0): an empty parking lot at
 // night, after rain, the lineup in a driving aisle with the stall rows and planted islands ahead of
-// and behind it. The lamp poles cast no real lights (too costly for an iPad); their pools of light, the
-// puddles and the stall lines are painted into the asphalt shader instead.
+// and behind it. The four poles round the lineup light it, as a lot's lamps do: enough to see the cars'
+// shapes and finishes, not so much that their own lights stop standing out. Farther lamps' pools, the
+// puddles and the stall lines are painted into the asphalt shader (real lights there would cost an iPad
+// too much).
 //
 // Layout (meters, x = forward, z = right): the car is backed into a stall,
 // facing +x toward the driving aisle, with a planted island just behind it.
@@ -10,6 +12,7 @@
 // the island edge x = -HEAD_X.
 
 import * as THREE from 'three';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
 const HEAD_X = -11.3;
 const ISLAND = 2;
@@ -21,10 +24,16 @@ const CURB_HEIGHT = 0.15;
 // Poles stand in the islands, clear of the side and front camera views.
 const POLE_Z = [-13.5, 13.5, -40.5, 40.5];
 const LAMP_HEIGHT = 8;
-const LAMP_COLOR = new THREE.Color('#ffe0b5');
+const LAMP_COLOR = new THREE.Color('#ffefd9');     // a lot's LED lamps: warm white
 const f = (n: number) => n.toFixed(3);
-/** Ground positions (x, z) under the nearest islands' lamps, lit in the asphalt shader. */
-const POOLS: [number, number][] = [0, -1].flatMap((k) => POLE_Z.slice(0, 2).map((z): [number, number] => [-(HEAD_X + ISLAND / 2 + k * MODULE), z]));
+/** The islands' lamps either side of the lineup's aisle, which light it for real (x, z). */
+const NEAR: [number, number][] = [0, 1].flatMap((k) => POLE_Z.slice(0, 2).map((z): [number, number] => [-(HEAD_X + ISLAND / 2 + k * MODULE), z]));
+/** Ground positions (x, z) under the next lamps out, lit in the asphalt shader. */
+const POOLS: [number, number][] = [-1, 2].flatMap((k) => POLE_Z.slice(0, 2).map((z): [number, number] => [-(HEAD_X + ISLAND / 2 + k * MODULE), z]));
+// Each near lamp's head, an LED panel: its glow (three.js nits) and size. A panel, not a point, so its
+// reflection on paint and glass is a soft square, as a real lot lamp's is, never a pinpoint like a lit lamp.
+const LAMP_NITS = 200;
+const LAMP_PANEL = 1.4;
 
 // Value noise and fbm for the asphalt's grain and puddles.
 const NOISE_GLSL = /* glsl */ `
@@ -79,7 +88,7 @@ export function buildLot(scene: THREE.Scene): { poles: THREE.Object3D[]; dispose
   // Lit asphalt, with the sky map off and its highlights kept low: broad glare from the fill lights
   // washed the whole lot out.
   const asphalt = own(
-    new THREE.MeshPhysicalMaterial({ color: '#16181c', roughness: 0.6, metalness: 0, envMapIntensity: 0, specularIntensity: 0.12 }),
+    new THREE.MeshPhysicalMaterial({ color: '#25282d', roughness: 0.6, metalness: 0, envMapIntensity: 0, specularIntensity: 0.12 }),
   );
   asphalt.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
@@ -156,6 +165,15 @@ export function buildLot(scene: THREE.Scene): { poles: THREE.Object3D[]; dispose
     }
   }
 
+  RectAreaLightUniformsLib.init();
+  for (const [x, z] of NEAR) {
+    const lamp = new THREE.RectAreaLight(LAMP_COLOR, LAMP_NITS, LAMP_PANEL, LAMP_PANEL);
+    lamp.position.set(x, CURB_HEIGHT + LAMP_HEIGHT - 0.1, z);
+    // tilted in toward the lineup, so each lamp's pool reaches the cars as well as its own island
+    lamp.lookAt(x * 0.35, 0, z * 0.35);
+    group.add(lamp);
+  }
+
   return {
     poles,
     dispose: () => {
@@ -166,45 +184,43 @@ export function buildLot(scene: THREE.Scene): { poles: THREE.Object3D[]; dispose
 }
 
 /**
- * A dim night sky for paint reflections: a dark gradient with a brighter
- * horizon and a few far-off lamps, so glossy paint reads as glossy without
- * bright studio panels that could be mistaken for the show's lights.
+ * What the cars' finishes reflect: a night sky over a lit lot, the lamp heads overhead bright and warm, and
+ * the asphalt round them catching their light. Stainless and chrome mirror it, paint shows it through its
+ * clear coat, as the app's studio does in daylight.
  */
 export function lotEnvironment(): THREE.Scene {
   const env = new THREE.Scene();
-  const sky = new THREE.SphereGeometry(50, 32, 16);
+  const sky = new THREE.SphereGeometry(50, 48, 24);
   const colors: number[] = [];
   const pos = sky.attributes.position as THREE.BufferAttribute;
-  const zenith = new THREE.Color('#06080c');
-  const horizon = new THREE.Color('#2a3446');
-  const ground = new THREE.Color('#0a0b0d');
+  const zenith = new THREE.Color('#121722');
+  const horizon = new THREE.Color('#68717e');
+  const ground = new THREE.Color('#3a3733');
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i) / 50;
-    if (y >= 0) c.lerpColors(horizon, zenith, Math.pow(y, 0.6));
-    else c.lerpColors(horizon, ground, Math.min(1, -y * 4));
+    if (y >= 0) c.lerpColors(horizon, zenith, Math.pow(y, 0.5));
+    else c.lerpColors(horizon, ground, Math.min(1, -y * 6));
     colors.push(c.r, c.g, c.b);
   }
   sky.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   env.add(new THREE.Mesh(sky, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
-  // Large and dim: they should read as a soft glow on glossy paint, never
-  // as a point of light that looks like part of the show.
-  const lamp = new THREE.MeshBasicMaterial({ color: LAMP_COLOR.clone().multiplyScalar(0.5) });
-  for (const [x, z, s] of [
-    [-20, -8, 1],
-    [22, -8, 1],
-    [-6, 25, 0.7],
-    [30, 18, 0.6],
-    [-35, 12, 0.6],
-  ] as const) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(6 * s, 1.5 * s, 4 * s), lamp);
-    m.position.set(x, 9, z);
+  // The lamp heads: the four round the lineup, and a ring of farther ones
+  const lamp = new THREE.MeshBasicMaterial({ color: LAMP_COLOR.clone().multiplyScalar(2) });
+  const heads: [number, number, number][] = [...NEAR.map(([x, z]): [number, number, number] => [x, z, 1]),
+    ...POOLS.map(([x, z]): [number, number, number] => [x, z, 0.6]), [-30, 35, 0.5], [35, -30, 0.5]];
+  for (const [x, z, s] of heads) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1.4 * s, 0.25 * s, 1.4 * s), lamp);
+    m.position.set(x, LAMP_HEIGHT + CURB_HEIGHT, z);
     env.add(m);
   }
-  // A faint, broad glow overhead: the city beyond the lot.
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ color: '#1b2230', side: THREE.DoubleSide }));
-  glow.rotation.x = Math.PI / 2;
-  glow.position.y = 30;
-  env.add(glow);
+  // The pools of light the lamps throw on the wet asphalt, which the lower body and glass reflect
+  const pool = new THREE.MeshBasicMaterial({ color: LAMP_COLOR.clone().multiplyScalar(0.35) });
+  for (const [x, z] of NEAR) {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(7, 24), pool);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x * 0.6, 0.01, z * 0.6);
+    env.add(m);
+  }
   return env;
 }
