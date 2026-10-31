@@ -10,7 +10,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { buildLot, lotEnvironment } from './car/lot';
+import { buildLot, lotEnvironment, REAR_CURB, STALL_WIDTH } from './car/lot';
 import { shadowTexture } from './car/kit';
 import { GlowLayer } from './glow';
 import type { CarRig } from './rig';
@@ -30,28 +30,57 @@ export const CAMERA_PRESETS: CameraPreset[] = [
 ];
 
 const MAX_DPR = 1.5;
+/** How far a car's rear stands off the curb it backed up to. */
+const CURB_GAP = 0.4;
 
 /** Bloom starts here: only what is brighter glows. */
 const BLOOM_FROM = 0.95;
 
 /**
  * A lot lamp's reflection in the paint, the glass or the stainless is as bright as the lamp, and the bloom
- * would make it glow like one of the show's lights. So every reflection stops just under where the bloom
- * starts: still a crisp white gloss, while only the show's lamps (their emission, untouched) glow. Once, for
- * every material.
+ * would make it glow like one of the show's lights. So all the light a surface gets from the lot (its lamps,
+ * the moon, the night sky, colour and reflection together) is held just under where the bloom starts: still
+ * a crisp white gloss. The cars' own lamps, the scene's point and spot lights, are left out of it, so the
+ * show's lights shine and glow as before. Once, for every material.
  */
 function reflectionsUnderBloom(): void {
   const chunk = THREE.ShaderChunk as unknown as Record<string, string>;
-  if (chunk.lights_fragment_end!.includes('BLOOM_FROM')) return;
-  const max = `vec3(${(BLOOM_FROM - 0.15).toFixed(2)})`;
+  if (chunk.lights_fragment_begin!.includes('BLOOM_FROM')) return;
+  const cap = (BLOOM_FROM - 0.15).toFixed(2);
+  const lamps = '#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )';
+  const rest = '#if ( NUM_SUN_LIGHTS > 0 ) && defined( RE_Direct )';
+  chunk.lights_fragment_begin = chunk.lights_fragment_begin!
+    .replace(lamps, `// BLOOM_FROM: the cars' lamps (point and spot lights) are kept apart (viewer.ts)
+      vec3 sLampD = reflectedLight.directDiffuse, sLampS = reflectedLight.directSpecular, sLampC = vec3(0.0);
+      #ifdef USE_CLEARCOAT
+        sLampC = clearcoatSpecularDirect;
+      #endif
+      ${lamps}`)
+    .replace(rest, `sLampD = reflectedLight.directDiffuse - sLampD;
+      sLampS = reflectedLight.directSpecular - sLampS;
+      #ifdef USE_CLEARCOAT
+        sLampC = clearcoatSpecularDirect - sLampC;
+      #endif
+      ${rest}`);
   chunk.lights_fragment_end += `
-    // BLOOM_FROM: reflections stay under the bloom (viewer.ts)
-    reflectedLight.directSpecular = min(reflectedLight.directSpecular, ${max});
-    reflectedLight.indirectSpecular = min(reflectedLight.indirectSpecular, ${max});
-    #ifdef USE_CLEARCOAT
-      clearcoatSpecularDirect = min(clearcoatSpecularDirect, ${max});
-      clearcoatSpecularIndirect = min(clearcoatSpecularIndirect, ${max});
-    #endif
+    {
+      // the lot's light: everything but the cars' lamps, held under the bloom
+      vec3 sLotD = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse - sLampD;
+      vec3 sLotS = reflectedLight.directSpecular + reflectedLight.indirectSpecular - sLampS;
+      vec3 sLot = sLotD + sLotS;
+      #ifdef USE_CLEARCOAT
+        sLot += (clearcoatSpecularDirect - sLampC + clearcoatSpecularIndirect) * material.clearcoat;
+      #endif
+      float sMost = max(sLot.r, max(sLot.g, sLot.b)), sKeep = sMost > ${cap} ? ${cap} / sMost : 1.0;
+      reflectedLight.directDiffuse = sLampD + (reflectedLight.directDiffuse - sLampD) * sKeep;
+      reflectedLight.directSpecular = sLampS + (reflectedLight.directSpecular - sLampS) * sKeep;
+      reflectedLight.indirectDiffuse *= sKeep;
+      reflectedLight.indirectSpecular *= sKeep;
+      #ifdef USE_CLEARCOAT
+        clearcoatSpecularIndirect *= sKeep;
+        clearcoatSpecularDirect = sLampC + (clearcoatSpecularDirect - sLampC) * sKeep;
+      #endif
+    }
   `;
 }
 
@@ -149,26 +178,16 @@ export class Viewer {
   setCars(cars: CarRig[]): void {
     for (const c of this.cars) c.dispose();
     this.cars = cars;
-    // Left to right facing the crowd (crowd at +x, so their left is +z):
-    // a shallow V with the centre car about 1 m forward, the outer cars
-    // toed in a little toward the crowd's centre.
+    // Left to right facing the crowd (crowd at +x, so their left is +z), each car backed into its own
+    // stall of the lot's row, square to it, its rear just off the island's curb.
     const n = cars.length;
-    const frontX = 1.9;
-    const gap = 0.85;
     const widths = cars.map((c) => c.bounds.halfWidth);
-    let z = 0;
-    const zs: number[] = [];
-    for (let i = 0; i < n; i++) {
-      if (i > 0) z -= widths[i - 1]! + widths[i]! + gap;
-      zs.push(z);
-    }
-    const mid = (zs[0]! + zs[n - 1]!) / 2;
-    this.halfSpan = Math.max(3, (zs[0]! - zs[n - 1]!) / 2 + Math.max(...widths) + 1.35);
+    const zs = cars.map((_, i) => ((n - 1) / 2 - i) * STALL_WIDTH);
+    this.lot.stallsFor(n);
+    this.halfSpan = Math.max(3, zs[0]! + Math.max(...widths) + 1.35);
     cars.forEach((car, i) => {
-      const offset = (i - (n - 1) / 2) / Math.max(1, (n - 1) / 2); // -1 .. 1
-      const forward = 1 - Math.abs(offset); // 1 at the centre
-      car.group.position.set(frontX + forward * 1.0 - car.bounds.halfLength, 0, zs[i]! - mid);
-      car.group.rotation.y = -offset * THREE.MathUtils.degToRad(6);
+      car.group.position.set(REAR_CURB + CURB_GAP + car.bounds.halfLength, 0, zs[i]!);
+      car.group.rotation.y = 0;
       this.lineup.add(car.group);
       // Contact shadow.
       const shadow = new THREE.Mesh(

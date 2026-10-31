@@ -5,21 +5,22 @@
 // puddles and the stall lines are painted into the asphalt shader (real lights there would cost an iPad
 // too much).
 //
-// Layout (meters, x = forward, z = right): the car is backed into a stall,
-// facing +x toward the driving aisle, with a planted island just behind it.
-// The lot repeats every MODULE meters along x: island, a row of stalls, a
-// driving aisle, and a row backing onto the next island. Our row starts at
-// the island edge x = -HEAD_X.
+// Layout (meters, x = forward, z = right): each car is backed into a stall of the row under the lineup,
+// facing +x toward the driving aisle, with a planted island just behind it (its curb at x = REAR_CURB).
+// The lot repeats every MODULE meters along x: island, a row of stalls, a driving aisle, and a row backing
+// onto the next island.
 
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
-const HEAD_X = -11.3;
 const ISLAND = 2;
 const STALL_LENGTH = 5.8;
-const STALL_WIDTH = 2.7;
+export const STALL_WIDTH = 2.7;
 const AISLE = 7;
 const MODULE = ISLAND + 2 * STALL_LENGTH + AISLE;
+/** The curb of the island behind the lineup's row: the cars back up to it. */
+export const REAR_CURB = -3.4;
+const HEAD_X = -(REAR_CURB + MODULE);
 const CURB_HEIGHT = 0.15;
 // Poles stand in the islands, clear of the side and front camera views.
 const POLE_Z = [-13.5, 13.5, -40.5, 40.5];
@@ -32,7 +33,7 @@ const NEAR: [number, number][] = [0, 1].flatMap((k) => POLE_Z.slice(0, 2).map((z
 const POOLS: [number, number][] = [-1, 2].flatMap((k) => POLE_Z.slice(0, 2).map((z): [number, number] => [-(HEAD_X + ISLAND / 2 + k * MODULE), z]));
 // Each near lamp's head, an LED panel: its glow (three.js nits) and size. A panel, not a point, so its
 // reflection on paint and glass is a soft square, as a real lot lamp's is, never a pinpoint like a lit lamp.
-const LAMP_NITS = 200;
+const LAMP_NITS = 150;
 const LAMP_PANEL = 1.4;
 
 // Value noise and fbm for the asphalt's grain and puddles.
@@ -67,7 +68,7 @@ const NOISE_GLSL = /* glsl */ `
   vec3 st_paint(vec2 p) {
     float u = mod(-p.x - (${f(HEAD_X)}), ${f(MODULE)});
     float inRow = step(${f(ISLAND)}, u) * step(u, ${f(ISLAND + STALL_LENGTH)}) + step(${f(ISLAND + STALL_LENGTH + AISLE)}, u);
-    float w = (p.y - ${f(STALL_WIDTH / 2)}) / ${f(STALL_WIDTH)};
+    float w = (p.y - ${f(STALL_WIDTH / 2)} - uStallShift) / ${f(STALL_WIDTH)};
     float d = abs(w - floor(w + 0.5)) * ${f(STALL_WIDTH)};
     float line = (1.0 - smoothstep(0.05, 0.07, d)) * inRow;
     // Worn paint: break it up a little.
@@ -76,9 +77,12 @@ const NOISE_GLSL = /* glsl */ `
   }
 `;
 
-/** Builds the lot into the scene: its lamp poles (each placed at its foot) and a function that takes it
- * down again. */
-export function buildLot(scene: THREE.Scene): { poles: THREE.Object3D[]; dispose: () => void } {
+/** Builds the lot into the scene: its lamp poles (each placed at its foot), a function that lines the stalls
+ * up with a lineup of n cars centred on z = 0 (an even lineup's middle falls on a line otherwise), and one
+ * that takes it down again. */
+export function buildLot(scene: THREE.Scene)
+  : { poles: THREE.Object3D[]; stallsFor: (n: number) => void; dispose: () => void } {
+  const stallShift = { value: 0 };
   const group = new THREE.Group();
   group.name = 'lot';
   scene.add(group);
@@ -124,8 +128,9 @@ export function buildLot(scene: THREE.Scene): { poles: THREE.Object3D[]; dispose
         }
         totalEmissiveRadiance += vec3(1.0, 0.86, 0.66) * diffuseColor.rgb * sPool * 0.9;`,
       )
-      .replace('#include <common>', `#include <common>\nuniform vec2 uPools[${POOLS.length}];`);
+      .replace('#include <common>', `#include <common>\nuniform vec2 uPools[${POOLS.length}];\nuniform float uStallShift;`);
     shader.uniforms.uPools = { value: POOLS.map(([x, z]) => new THREE.Vector2(x, z)) };
+    shader.uniforms.uStallShift = stallShift;
   };
   const ground = new THREE.Mesh(own(new THREE.PlaneGeometry(120, 120)), asphalt);
   ground.rotation.x = -Math.PI / 2;
@@ -176,6 +181,7 @@ export function buildLot(scene: THREE.Scene): { poles: THREE.Object3D[]; dispose
 
   return {
     poles,
+    stallsFor: (n) => (stallShift.value = n % 2 ? 0 : STALL_WIDTH / 2),
     dispose: () => {
       for (const o of owned) o.dispose();
       scene.remove(group);
