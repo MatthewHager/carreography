@@ -68,15 +68,16 @@ and packs the download.
 - **The analysis** (`audio.ts`, with `dsp.ts` and `cqt.ts`, the subset of librosa it needs): onsets, the
   strongest accents and the beat map; `texture.ts` turns notes into events (a key press or a chord) and
   labels each passage: melody, run, zigzag, trill, chords, arrival. `form.ts` maps the sections from
-  harmony and timbre and letters the repeats (A, B, A′).
+  harmony and timbre averaged beat by beat (and every half second where the beats leave a gap) and letters
+  the repeats (A, B, A′).
 - **What a music visualizer measures** (`visual.ts`): the whole mix's loudness in decibels (the song's loud
   end at 1, 40 dB below it at 0), four band levels, the drum kit piece by piece (kick, snare, hats, each a
   list of hits), brightness, the harmony's leading pitch class over each beat, novelty (how much the sound
   is changing), how much a kit is playing, and how clearly the beats land on accents.
-- **The beat map follows the performer.** The neural tracker's beats are kept wherever its grid keeps a
-  pulse, measured gap by gap against the gaps around it, so Hall of the Mountain King's accelerando from 100
-  to 190 bpm keeps its beats; where the tracker slips into half time while the music still hits between
-  its beats, those beats go back in (`audio.ts`). Then `tempo.ts` moves a beat that drifted onto the
+- **The beat map follows the performer.** The beats are the neural tracker's, so Hall of the Mountain
+  King's accelerando from 100 to 190 bpm keeps its beats; where the tracker slips into half time while the
+  music still hits between its beats, those beats go back in (`audio.ts`). Where it only guesses (music
+  with no beat to follow, chord changes seconds apart), `feel.ts` hears that and the show flows there. Then `tempo.ts` moves a beat that drifted onto the
   strongest attack near it, or onto the smooth local tempo through its neighbours; runs of beats locked
   onto the off-beat are shifted back. Sweeps snap to a sixteenth grid built from each beat's own length,
   then onto a note played within 40 ms.

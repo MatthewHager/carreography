@@ -4,7 +4,8 @@
 //               instead of hitting. Both signs of a beat must be missing: the neural tracker's beats don't
 //               keep time (fewer than STEADY of their gaps within STEADY_TOL of the gaps around them, so a
 //               performer speeding up still keeps time) and the music doesn't hit on them (clarity under
-//               FLOW_CLARITY): a band's groove can be syncopated, an orchestra's tutti hits everywhere but
+//               FLOW_CLARITY, or beats slower than SLOWEST_S apart: chord changes, not a pulse): a band's
+//               groove can be syncopated, an orchestra's tutti hits everywhere but
 //               its tracker hears a firm pulse. A section under ISLAND_S between two that agree goes their
 //               way, so the style doesn't flip for a few bars.
 //   kit         a rhythm section plays: the listening's kit measure at least KIT over the section
@@ -20,6 +21,7 @@ import { clip, mean, median, searchsorted } from './np';
 import { beatLen } from './tempo';
 
 const FLOW_CLARITY = 2.2;
+const SLOWEST_S = 1.5;     // beats further apart than this (40 bpm) are chord changes, not a pulse to follow
 const STEADY = 0.75, STEADY_TOL = 0.05;
 const ISLAND_S = 20;
 const KIT = 0.6;
@@ -85,7 +87,9 @@ export function feel(an: Analysis, phrases?: Phrase[]): Feel[] {
     const beats = an.beats.filter((b) => b >= t0 && b < t1);
     const heard = an.heardBeats ? an.heardBeats.filter((b) => b >= t0 && b < t1) : beats;
     const steady = steadiness(heard, STEADY_TOL) >= STEADY;
-    return { t0, t1, letter, flow: !steady && clarity(an, t0, t1) < FLOW_CLARITY, kit: false, steady };
+    const pulse = beats.length >= 3 && median(beats.slice(1).map((b, i) => b - beats[i])) <= SLOWEST_S;
+    const flow = !steady && (!pulse || clarity(an, t0, t1) < FLOW_CLARITY);
+    return { t0, t1, letter, flow, kit: false, steady };
   });
   // a short stretch between two that agree goes their way: the style doesn't flip for a few bars (judged on
   // the stretches as heard, so one flip doesn't lead to the next)

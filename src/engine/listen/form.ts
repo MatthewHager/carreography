@@ -1,23 +1,28 @@
 // The form map: the shape of the whole piece, read before any phrase is choreographed.
 //
-//   sections   boundaries from beat-synchronous chroma + timbre (agglomerative clustering)
+//   sections   boundaries from chroma + timbre averaged every half second (agglomerative clustering)
 //   letters    repeated material gets the same letter (A, B, A', ...) by chroma/timbre similarity
 
 import type { Section } from '../analysis';
-import {
-  agglomerative, beatTrackY, framesToTime, mfcc, normalizeColumns, sync, type Spectrum,
-} from './dsp';
+import { agglomerative, framesToTime, mfcc, normalizeColumns, sync, type Spectrum } from './dsp';
 import { clip, mean } from '../np';
 
-/** The form map of `y` (mono, 22050 Hz): its sections, from the spectrum audio.ts already took of the
- * same samples. */
-export function analyzeForm(y: Float32Array, duration: number, s: Spectrum, chroma: Float32Array): Section[] {
+const GRID = 22;     // spectrum frames: about half a second
+
+/** The form map: the song's sections, from its timbre and chroma averaged beat by beat (`beats`, spectrum
+ * frames), and every half second where the beats leave a gap of a second or more (a roll, a rubato
+ * passage, music with no beat), so music without a beat is mapped as finely as a groove. */
+export function analyzeForm(duration: number, s: Spectrum, chroma: Float32Array, beats: number[]): Section[] {
   const T = s.T;
   const mf = mfcc(s.mel128, T);
-  let beatFrames = beatTrackY(y, s).beats;
-  if (beatFrames.length < 8) beatFrames = Array.from({ length: Math.ceil(T / 20) }, (_, i) => i * 20);
-  const Cs = sync(chroma, 12, T, beatFrames, 'median');
-  const Ms = sync(mf, 13, T, beatFrames, 'mean');
+  const gridFrames: number[] = [];
+  for (const f of [...beats, T]) {
+    const from = gridFrames.length ? gridFrames[gridFrames.length - 1] : 0;
+    for (let g = from + GRID; f - g >= GRID; g += GRID) gridFrames.push(g);
+    if (f < T && f > from) gridFrames.push(f);
+  }
+  const Cs = sync(chroma, 12, T, gridFrames, 'median');
+  const Ms = sync(mf, 13, T, gridFrames, 'mean');
   const nc = Cs.nc, Cn = normalizeColumns(Cs.data, 12, nc), Mn = normalizeColumns(Ms.data, 13, nc);
   const X = new Float32Array(25 * nc);
   X.set(Cn);
@@ -25,7 +30,7 @@ export function analyzeForm(y: Float32Array, duration: number, s: Spectrum, chro
   let k = clip(Math.round(duration / 22.0), 3, 14);
   k = Math.min(k, nc - 1);
   const raw = agglomerative(X, 25, nc, k);
-  const bt = beatFrames.map((f) => framesToTime(f));
+  const bt = gridFrames.map((f) => framesToTime(f));
   const bounds = [...new Set([0, ...raw])].sort((a, b) => a - b);
   const colMean = (b: number, e: number) => {
     const n = Math.max(0, Math.min(e, nc) - b);
@@ -67,8 +72,7 @@ export function analyzeForm(y: Float32Array, duration: number, s: Spectrum, chro
     letters.push(letter);
   }
 
-  const sections: Section[] = spans.map(([t0, t1], i) => ({ t0, t1, letter: letters[i], index: i,
-    nth: 0, tempo: 0.0, beats: [] }));
+  const sections: Section[] = spans.map(([t0, t1], i) => ({ t0, t1, letter: letters[i], index: i, nth: 0 }));
   const first = new Map<string, Section>();
   for (const s of sections) {
     const f = first.get(s.letter);

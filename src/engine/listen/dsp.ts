@@ -1,7 +1,7 @@
 // The parts of librosa 0.11 the analysis uses (sr 22050, hop 512, n_fft 2048), each named after the librosa
 // function it follows. Matrices are row-major (rows x T) typed arrays.
 
-import { mean, median, round, sum } from '../np';
+import { mean, median } from '../np';
 import { realFft } from './fft';
 import { SR } from './resample';
 
@@ -10,7 +10,6 @@ export const HOP = 512;
 const N_FFT = 2048;
 
 export const TINY32 = 1.1754943508222875e-38;   // np.finfo(np.float32).tiny
-const TINY64 = 2.2250738585072014e-308;
 
 /** scipy.signal.get_window('hann', n): the periodic Hann window. */
 export function hann(n: number): Float64Array {
@@ -67,23 +66,23 @@ function melBasis(nMels: number, fmax: number, sr = SR, nFft = N_FFT): SparseRow
 
 export interface Spectrum {
   T: number;
-  mel96: Float32Array | null;    // (96 x T) power, fmax 8000 (the onsets and beats in audio.ts)
-  mel128: Float32Array;          // (128 x T) power, fmax sr/2 (librosa's default, for mfcc and beat_track(y))
+  mel96: Float32Array;           // (96 x T) power, fmax 8000 (the onsets in audio.ts)
+  mel128: Float32Array;          // (128 x T) power, fmax sr/2 (librosa's default: mfcc, the visualizer's bands)
   tuning: number;                // estimate_tuning(bins_per_octave=36), as chroma_cqt estimates it
 }
 
 /** Everything audio.ts and form.ts read off the n_fft 2048 / hop 512 STFT (centered, zero padded), in one
- * pass. `full: false` gives only mel128 (beat tracking a section). */
-export function spectrum(y: Float32Array, full = true): Spectrum {
+ * pass. */
+export function spectrum(y: Float32Array): Spectrum {
   const nFft = N_FFT, hop = HOP, half = nFft / 2, nb = half + 1;
   const T = 1 + Math.floor(y.length / hop);
   const win = hann(nFft), fft = realFft(nFft);
-  const m96 = full ? melBasis(96, 8000) : null, m128 = melBasis(128, SR / 2);
-  const mel96 = full ? new Float32Array(96 * T) : null, mel128 = new Float32Array(128 * T);
+  const m96 = melBasis(96, 8000), m128 = melBasis(128, SR / 2);
+  const mel96 = new Float32Array(96 * T), mel128 = new Float32Array(128 * T);
   const buf = new Float64Array(nFft), re = new Float64Array(nb), im = new Float64Array(nb);
   const P = new Float64Array(nb), S = new Float64Array(nb);
   const pitches: number[] = [], mags: number[] = [];
-  const bands: [SparseRow[], Float32Array][] = m96 && mel96 ? [[m96, mel96], [m128, mel128]] : [[m128, mel128]];
+  const bands: [SparseRow[], Float32Array][] = [[m96, mel96], [m128, mel128]];
   for (let t = 0; t < T; t++) {
     const s0 = t * hop - half;
     for (let n = 0; n < nFft; n++) {
@@ -96,7 +95,7 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
       S[k] = m;
       P[k] = m * m;
     }
-    if (full) piptrack(S, pitches, mags);
+    piptrack(S, pitches, mags);
     for (const [basis, dst] of bands) {
       for (let b = 0; b < basis.length; b++) {
         const { start, w } = basis[b];
@@ -106,7 +105,7 @@ export function spectrum(y: Float32Array, full = true): Spectrum {
       }
     }
   }
-  return { T, mel96, mel128, tuning: full ? pitchTuning(pitches, mags, 36) : 0 };
+  return { T, mel96, mel128, tuning: pitchTuning(pitches, mags, 36) };
 }
 
 /** librosa.piptrack on one magnitude frame (fmin 150, fmax 4000, threshold 0.1): appends the picked
@@ -253,195 +252,6 @@ export function onsetDetect(env: Float32Array,
   if (!any) return [];
   const fl = (s: number) => Math.floor((s * SR) / HOP);
   return peakPick(e, fl(0.03), fl(0.0) + 1, fl(0.1), fl(0.1) + 1, delta, wait ?? fl(0.03));
-}
-
-// ---------- tempo ----------
-
-const AC_SIZE = Math.floor(Math.trunc(8.0 * SR) / HOP);   // librosa.feature.tempo: 8 s of lags (344)
-
-/** librosa's tempogram (center, linear-ramp padding, Hann window, inf-normalised autocorrelation), one
- * frame at a time: `each(t, ac)` gets frame t's autocorrelation over lags 0 .. AC_SIZE - 1. */
-function eachTempogramFrame(env: Float32Array, each: (t: number, ac: Float64Array) => void) {
-  const win = AC_SIZE, n = env.length, pad = win >> 1;
-  const e = new Float64Array(n + 2 * pad);
-  for (let i = 0; i < pad; i++) e[i] = (env[0] * i) / pad;
-  e.set(env, pad);
-  for (let j = 0; j < pad; j++) e[pad + n + j] = (env[n - 1] * (pad - 1 - j)) / pad;
-  const w = hann(win), N = 1024, fft = realFft(N);
-  const a = new Float64Array(N), re = new Float64Array(N / 2 + 1), im = new Float64Array(N / 2 + 1);
-  const p = new Float64Array(N), ac = new Float64Array(win);
-  for (let t = 0; t < n; t++) {
-    for (let i = 0; i < win; i++) a[i] = e[t + i] * w[i];
-    fft.forward(a, re, im);
-    // the power spectrum is real and even, so its inverse DFT is its forward DFT over N
-    for (let k = 0; k <= N / 2; k++) p[k] = re[k] * re[k] + im[k] * im[k];
-    for (let k = N / 2 + 1; k < N; k++) p[k] = p[N - k];
-    fft.forward(p, re, im);
-    let m = 0;
-    for (let l = 0; l < win; l++) {
-      ac[l] = re[l] / N;
-      if (Math.abs(ac[l]) > m) m = Math.abs(ac[l]);
-    }
-    if (m < TINY64) m = 1;
-    for (let l = 0; l < win; l++) ac[l] /= m;
-    each(t, ac);
-  }
-}
-
-/** The log-normal tempo prior around 120 BPM, with lags faster than 320 BPM ruled out; and the BPM of
- * each lag. */
-function tempoPrior(): { bpms: Float64Array; logprior: Float64Array } {
-  const bpms = new Float64Array(AC_SIZE), logprior = new Float64Array(AC_SIZE);
-  bpms[0] = Infinity;
-  for (let i = 1; i < AC_SIZE; i++) bpms[i] = (60.0 * SR) / (HOP * i);
-  let maxIdx = 0;
-  while (!(bpms[maxIdx] < 320)) maxIdx++;
-  for (let i = 0; i < AC_SIZE; i++) {
-    logprior[i] = i < maxIdx ? -Infinity : -0.5 * (Math.log2(bpms[i]) - Math.log2(120)) ** 2;
-  }
-  return { bpms, logprior };
-}
-
-function bestBpm(tg: Float64Array, bpms: Float64Array, logprior: Float64Array): number {
-  let bi = 0, bv = -Infinity;
-  for (let i = 0; i < tg.length; i++) {
-    const v = Math.log1p(1e6 * tg[i]) + logprior[i];
-    if (v > bv) {
-      bv = v;
-      bi = i;
-    }
-  }
-  return bpms[bi];
-}
-
-/** librosa.feature.tempo(onset_envelope=env, aggregate=None): the tempo around every frame. */
-export function localTempo(env: Float32Array): Float64Array {
-  const { bpms, logprior } = tempoPrior(), out = new Float64Array(env.length);
-  eachTempogramFrame(env, (t, ac) => (out[t] = bestBpm(ac, bpms, logprior)));
-  return out;
-}
-
-/** librosa.feature.tempo(onset_envelope=env): one tempo for the whole envelope. */
-function globalTempo(env: Float32Array): number {
-  const { bpms, logprior } = tempoPrior(), acc = new Float64Array(AC_SIZE);
-  eachTempogramFrame(env, (_, ac) => {
-    for (let l = 0; l < AC_SIZE; l++) acc[l] += ac[l];
-  });
-  for (let l = 0; l < AC_SIZE; l++) acc[l] /= env.length;
-  return bestBpm(acc, bpms, logprior);
-}
-
-// ---------- beats ----------
-
-/** librosa.beat.beat_track(onset_envelope=env, bpm=...) with tightness 100 and trimming: the beat frames
- * of the dynamic-programming tracker (Ellis 2007). `bpm` is one tempo or one per frame. */
-export function beatTrack(env: Float32Array, bpm: number | Float64Array, tightness = 100): number[] {
-  const N = env.length;
-  if (!env.some((v) => v !== 0)) return [];
-  const frameRate = SR / HOP;
-  const fpb = (i: number) => round((frameRate * 60.0) / (typeof bpm === 'number' ? bpm : bpm[i]));
-
-  // onsets over their (ddof 1) standard deviation
-  const m = mean(env), dev = new Float32Array(N);
-  for (let i = 0; i < N; i++) {
-    const x = env[i] - m;
-    dev[i] = x * x;
-  }
-  const sd = Math.sqrt(sum(dev) / (N - 1)) + TINY32;
-  const o = new Float64Array(N);
-  for (let i = 0; i < N; i++) o[i] = env[i] / sd;
-
-  // local score: the onsets smoothed by a Gaussian a beat wide
-  const windows = new Map<number, Float64Array>();
-  const windowFor = (f: number) => {
-    let w = windows.get(f);
-    if (!w) {
-      w = new Float64Array(2 * f + 1);
-      for (let k = 0; k <= 2 * f; k++) w[k] = Math.exp(-0.5 * (((-f + k) * 32.0) / f) ** 2);
-      windows.set(f, w);
-    }
-    return w;
-  };
-  const ls = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
-    const f = fpb(i), w = windowFor(f), K = 2 * f + 1, h = K >> 1;
-    let s = 0;
-    for (let k = Math.max(0, i + h - N + 1); k < Math.min(i + h, K); k++) s += w[k] * o[i + h - k];
-    ls[i] = s;
-  }
-
-  // the dynamic program
-  let lmax = -Infinity;
-  for (const v of ls) if (v > lmax) lmax = v;
-  const thresh = 0.01 * lmax, back = new Int32Array(N), cum = new Float64Array(N);
-  let first = true;
-  back[0] = -1;
-  cum[0] = ls[0];
-  for (let i = 0; i < N; i++) {
-    const f = fpb(i), logF = Math.log(f);
-    let best = -Infinity, at = -1;
-    for (let loc = i - round(f / 2); loc > i - 2 * f - 1; loc--) {
-      if (loc < 0) break;
-      const score = cum[loc] - tightness * (Math.log(i - loc) - logF) ** 2;
-      if (score > best) {
-        best = score;
-        at = loc;
-      }
-    }
-    cum[i] = at >= 0 ? ls[i] + best : ls[i];
-    if (first && ls[i] < thresh) back[i] = -1;
-    else {
-      back[i] = at;
-      first = false;
-    }
-  }
-
-  // the last beat: the last local maximum of the cumulative score above half their median
-  const peaks: number[] = [];
-  const isMax = (i: number) => cum[i] > cum[Math.max(0, i - 1)] && cum[i] >= cum[Math.min(N - 1, i + 1)];
-  for (let i = 0; i < N; i++) if (isMax(i)) peaks.push(cum[i]);
-  const th = peaks.length ? 0.5 * median(peaks) : NaN;
-  let tail = N - 1;
-  for (let n = N - 1; n >= 0; n--) {
-    if (isMax(n) && cum[n] >= th) {
-      tail = n;
-      break;
-    }
-  }
-  const beats = new Uint8Array(N);
-  for (let n = tail; n >= 0; n = back[n]) beats[n] = 1;
-
-  // trim weak leading and trailing beats
-  const vals: number[] = [];
-  for (let i = 0; i < N; i++) if (beats[i]) vals.push(ls[i]);
-  const hw = [0, 0.5 - 0.5 * Math.cos(Math.PI / 2), 1, 0.5 - 0.5 * Math.cos((3 * Math.PI) / 2), 0];
-  const full = new Float64Array(vals.length + 4);
-  for (let i = 0; i < vals.length; i++) for (let j = 0; j < 5; j++) full[i + j] += vals[i] * hw[j];
-  const sm = full.subarray(2, Math.min(N + 2, full.length));
-  let ms = 0;
-  for (const x of sm) ms += x * x;
-  const threshold = 0.5 * Math.sqrt(ms / sm.length);
-  for (let n = 0; n < N && ls[n] <= threshold; n++) beats[n] = 0;
-  for (let n = N - 1; n >= 0 && ls[n] <= threshold; n--) beats[n] = 0;
-  const out: number[] = [];
-  for (let i = 0; i < N; i++) if (beats[i]) out.push(i);
-  return out;
-}
-
-/** librosa.onset.onset_strength(y=...) as beat_track computes it: the median flux of the 128-band mel
- * spectrogram in dB. */
-function medianOnsets(mel128: Float32Array, T: number): Float32Array {
-  return onsetStrength(powerToDb(mel128, 1.0), T, 0, 128, { aggregate: 'median' });
-}
-
-/** librosa.beat.beat_track(y=y): its tempo (0 for silence) and beat frames. `spec` reuses a spectrum
- * already taken of the same samples. */
-export function beatTrackY(y: Float32Array, spec?: Spectrum): { tempo: number; beats: number[] } {
-  const s = spec ?? spectrum(y, false);
-  const env = medianOnsets(s.mel128, s.T);
-  if (!env.some((v) => v !== 0)) return { tempo: 0, beats: [] };
-  const tempo = globalTempo(env);
-  return { tempo, beats: beatTrack(env, tempo) };
 }
 
 // ---------- form: mfcc, sync, normalize, agglomerative ----------

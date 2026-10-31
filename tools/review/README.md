@@ -52,7 +52,7 @@ uses `src/` as it is, with no build. `npx tsc -p tools/review` type-checks it.
 
 | Strip | What |
 |---|---|
-| header | song, lineup, stretch, tempo, beat score (2 and up: a beat to follow), the rhythm driver |
+| header | song, lineup, stretch, tempo, beat score (how much harder the music hits on the beats; 2 and up: a beat to follow) |
 | section, level | the form map's sections (letters repeat for repeated material) and each one's mean level (`level.ts`) |
 | move | the move each phrase got (`a \| b`: a split, side cars \| centrepiece) |
 | step, gesture | the phrase's level step (`level.ts`; colour: hush and calm blue, groove green, drive amber, the peak red) and gesture |

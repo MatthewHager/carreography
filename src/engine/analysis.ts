@@ -24,8 +24,6 @@ export interface Section {
   letter: string;       // sections with the same letter are the same material
   index: number;
   nth: number;          // how many times the letter was heard before
-  tempo: number;
-  beats: number[];
 }
 
 /** A phrase: the unit a move plays over (phrases.ts), events [a, b). The choreographer adds its level

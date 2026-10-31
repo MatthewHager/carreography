@@ -7,15 +7,13 @@
 //   chroma, novelty, how much a kit is playing and how clear the beat is (visual.ts)
 // Everything comes from the full mix: there is no source separation.
 
-import type { Analysis, Section } from '../analysis';
+import type { Analysis } from '../analysis';
 import type { Beats } from './beats';
 import { chromaCqt } from './cqt';
 import { analyzeForm } from './form';
-import { argmax, diff, mean, median, quantile, sum } from '../np';
+import { diff, mean, median, quantile } from '../np';
 import { groupEvents, labelPhrases, pitchScale } from './texture';
-import {
-  beatTrack, beatTrackY, framesToTime, HOP, localTempo, onsetDetect, onsetStrength, powerToDb, spectrum, SR,
-} from './dsp';
+import { framesToTime, HOP, onsetDetect, onsetStrength, powerToDb, spectrum, SR } from './dsp';
 import { visuals } from './visual';
 
 
@@ -23,36 +21,11 @@ interface AnalyzeOptions {
   stepMs: number;
   /** basic-pitch notes: rows of (start s, end s, midi pitch, amplitude 0..1), sorted by start */
   notes: number[][];
-  /** the neural beat tracker's grid (beat-this), if it ran */
+  /** the neural beat tracker's grid (beat-this); none only in tests of other measures */
   neuralBeats?: Beats | null;
 }
 
 const BREAK = 2.5;        // a gap this many times the usual one is a break in the music, not a beat
-const MIN_STEADY = 0.85;  // the share of steady gaps that makes the tracker's grid one to keep
-
-/** Each beat gap over the median of the eight around it (1 = in step with its neighbours). */
-function localRatio(g: ArrayLike<number>): Float64Array {
-  return Float64Array.from(g, (x, i) => x / median(Array.from(g).slice(Math.max(0, i - 4), i + 5)));
-}
-
-/** Beats and downbeats from the neural tracker, where its grid keeps a pulse: at least MIN_STEADY of the
- * beat gaps within 10 % of the gaps around them. Measured locally, so a performer who speeds up (Hall of
- * the Mountain King doubles its tempo) or holds back keeps the tracker's beats; an erratic grid, which is
- * where the tracker is guessing, gives null. Breaks (gaps over BREAK times the usual) don't count. Where
- * it slips into half time for a while, the missing beats are put back (mendHalves). */
-function neuralBeats(d: Beats | null | undefined, env: Float32Array)
-  : [number[], number[]] | null {
-  if (!d) return null;
-  const b = d.beats, db = d.downbeats;
-  if (b.length < 16) return null;
-  const all = diff(b), usual = median(all);
-  const g = all.filter((x) => x < BREAK * usual);
-  if (g.length < 8) return null;
-  let steady = 0;
-  for (const r of localRatio(g)) if (Math.abs(r - 1) < 0.1) steady++;
-  if (steady / g.length < MIN_STEADY) return null;
-  return [mendHalves(b, env), db.slice()];
-}
 
 const HALF = [1.75, 2.3];    // a gap this many times the steady one is a beat dropped (twice, give or take)
 const IN_STEP = 0.15;         // gaps within this share of each other keep the same pace
@@ -89,28 +62,6 @@ function mendHalves(b: number[], env: Float32Array): number[] {
   return out;
 }
 
-function gather(env: Float32Array, frames: ArrayLike<number>, start = 0, by = 1): Float32Array {
-  const out: number[] = [];
-  for (let i = start; i < frames.length; i += by) out.push(env[Math.min(frames[i], env.length - 1)]);
-  return Float32Array.from(out);
-}
-
-/** Each section's own tempo and beats, where it is long enough to track. */
-function trackSections(y: Float32Array, sections: Section[]): void {
-  for (const s of sections) {
-    const a = Math.trunc(s.t0 * SR), b = Math.trunc(s.t1 * SR);
-    const seg = y.subarray(a, Math.max(a, b));
-    if (seg.length <= SR * 3) continue;
-    try {
-      const { tempo, beats } = beatTrackY(seg);
-      s.tempo = tempo;
-      s.beats = beats.map((f) => framesToTime(f) + s.t0);
-    } catch {
-      // a section the tracker can't read keeps no tempo
-    }
-  }
-}
-
 /** The analysis of `y` (mono, 22050 Hz samples) on a grid of `stepMs` frames. */
 export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
   const sr = SR;
@@ -120,22 +71,17 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
 
   const spec = spectrum(y);
   const T = spec.T;
-  const melDb = powerToDb(spec.mel96!, 'max');
+  const melDb = powerToDb(spec.mel96, 'max');
 
-  // --- Beats, tempo-following ---
+  // --- Beats: the neural tracker's grid, its half-time slips mended. It reads swing, shuffles, fills and a
+  // performer's tempo far better than onset autocorrelation; where it guesses (music with no beat to follow),
+  // feel.ts hears that its grid wanders and the show flows there instead of hitting.
   const fullEnv = onsetStrength(melDb, T, 0, 96);
-  const localBpm = localTempo(fullEnv);
-  const beatFrames = beatTrack(fullEnv, localBpm);
-  let tempo = median(localBpm);
-  let beats = beatFrames.map((f) => framesToTime(f));
-  const every4 = (a: number[], from: number) => a.filter((_, i) => i >= from && (i - from) % 4 === 0);
-  let downbeats: number[];
-  if (beatFrames.length >= 8) {
-    const sums = [0, 1, 2, 3].map((p) => sum(gather(fullEnv, beatFrames, p, 4)));
-    downbeats = every4(beats, argmax(sums));
-  } else {
-    downbeats = every4(beats, 0);
-  }
+  const heard = opts.neuralBeats;
+  const beats = heard && heard.beats.length >= 4 ? mendHalves(heard.beats, fullEnv) : heard?.beats.slice() ?? [];
+  const downbeats = heard?.downbeats.slice() ?? [];
+  const tempo = beats.length > 1 ? 60.0 / median(diff(beats)) : 120.0;
+  const beatFrames = beats.map((t) => Math.min(Math.round(t / (HOP / SR)), fullEnv.length - 1));
 
   // --- Global accents: strongest onsets anywhere, >= 0.5 s apart ---
   const frames = onsetDetect(fullEnv);
@@ -154,57 +100,14 @@ export function analyze(y: Float32Array, opts: AnalyzeOptions): Analysis {
     });
   }
 
-  const beatScore = mean(gather(fullEnv, beatFrames)) / Math.max(mean(fullEnv), 1e-9);
+  // how much harder the music hits on the beats than on average (the strongest attack within ±2 frames: the
+  // tracker's beat can sit a frame off the onset's peak)
+  const onBeats = beatFrames.map((f) => Math.max(...fullEnv.subarray(Math.max(0, f - 2), f + 3)));
+  const beatScore = onBeats.length ? mean(onBeats) / Math.max(mean(fullEnv), 1e-9) : 1;
 
   // --- Form map: sections and repeats ---
   const chroma = chromaCqt(y, spec.tuning);
-  const sections = analyzeForm(y, duration, spec, chroma);
-  const neural = neuralBeats(opts.neuralBeats, fullEnv);
-  // without the neural tracker's grid, each section is tracked on its own, so a tempo change keeps its beats
-  if (neural === null) trackSections(y, sections);
-  let secBeats: number[][] = [];
-  const toFrames = (ts: number[]) => ts.map((t) => Math.min(Math.trunc((t * sr) / HOP), fullEnv.length - 1));
-  for (const sec of sections) {
-    if (sec.tempo > 0 && sec.beats.length >= 4) {
-      // fold half/double-time readings back toward the piece's tempo
-      if (sec.tempo > tempo * 1.6) {
-        // keep whichever half of the beats lands on the stronger hits - taking every other
-        // beat from the first can lock the whole section onto the off-beats
-        const fb = toFrames(sec.beats);
-        const odd = fb.length >= 4
-          ? mean(gather(fullEnv, fb, 1, 2)) > mean(gather(fullEnv, fb, 0, 2)) : false;
-        sec.beats = sec.beats.filter((_, i) => i % 2 === (odd ? 1 : 0));
-        sec.tempo = sec.tempo / 2;
-      } else if (sec.tempo < tempo / 1.6) {
-        const mids = sec.beats.slice(1).map((b, i) => (sec.beats[i] + b) / 2);
-        sec.beats = [...sec.beats, ...mids].sort((a, b) => a - b);
-        sec.tempo = sec.tempo * 2;
-      }
-      secBeats.push(sec.beats.filter((b) => b >= sec.t0 && b < sec.t1));
-    }
-  }
-  if (neural !== null) {
-    // the neural tracker's grid wherever it keeps a pulse: it reads swing, shuffles, fills and a
-    // performer's tempo far better than onset autocorrelation, so it replaces the per-section tracking below
-    [beats, downbeats] = neural;
-    tempo = 60.0 / median(diff(beats));
-    secBeats = [];
-  }
-  if (secBeats.length && secBeats.reduce((n, b) => n + b.length, 0) >= 0.7 * beats.length) {
-    beats = secBeats.flat();
-    // downbeats phased section by section (a section can start on any beat of the bar)
-    const downs: number[][] = [];
-    for (const sb of secBeats) {
-      if (sb.length >= 8) {
-        const bf = toFrames(sb);
-        const phase = argmax([0, 1, 2, 3].map((p) => sum(gather(fullEnv, bf, p, 4))));
-        downs.push(every4(sb, phase));
-      } else if (sb.length) {
-        downs.push(every4(sb, 0));
-      }
-    }
-    if (downs.length) downbeats = downs.flat();
-  }
+  const sections = analyzeForm(duration, spec, chroma, beatFrames);
 
   const events = labelPhrases(groupEvents(opts.notes));
   const [pitchLo, pitchHi] = pitchScale(events);
