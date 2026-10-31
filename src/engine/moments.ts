@@ -103,7 +103,7 @@ export function accents(cars: Car[], an: Analysis) {
   const lift = (t: number) => levelOver(an, t, t + 2) - levelOver(an, t - 4, t - 0.3);
   const strength = (t: number, [before, after]: [number, number]) =>
     after - before + LIFT_WEIGHT * Math.max(0, lift(t));
-  const taken = drops(an);
+  const taken = [...drops(an)];     // a copy: the plan is cached, and the motors read the drops after
   const phrases = an.phrases!.filter((ph) => !flowsAt(an, ph.t0));
   for (const ph of phrases) if (ph.move === 'cadence') for (let i = ph.a; i < ph.b; i++) taken.push(ev.t[i]);
   const cands: { t: number; strength: number; hold: number; strike: boolean }[] = [];

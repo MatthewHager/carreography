@@ -8,7 +8,8 @@ import type { Analysis } from './analysis';
 import { BEAT_MOVES, FLOW_MOVES, type MoveName, SPARSE_MOVES } from './catalog';
 import { ALL_RGB, N_CHANNELS } from './channels';
 import { chooseMove, choreograph, family, makeShow } from './choreo';
-import { feel } from './feel';
+import { feel, flowsAt } from './feel';
+import { accents, drops } from './moments';
 import { FIXTURES, fixture } from './fixtures';
 
 const show = (song: (typeof FIXTURES)[number], lineup: string) =>
@@ -33,6 +34,15 @@ describe('the same input gives the same show', () => {
       differ++;
     }));
     expect(differ).toBeGreaterThan(0);
+  });
+
+  it('placing the accents leaves the drops as they were, a cadence in the music included', () => {
+    const { cars, an } = makeShow(fixture('groove'), 'YCY');
+    const before = [...drops(an)];
+    const ph = an.phrases!.find((p) => !flowsAt(an, p.t0) && p.b > p.a)!;
+    ph.move = 'cadence';     // the accents keep clear of a cadence's chords
+    accents(cars, an);
+    expect(drops(an)).toEqual(before);
   });
 
   it('choreographing one analysis again, for another lineup and back, gives the same bytes', () => {
