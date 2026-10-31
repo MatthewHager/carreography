@@ -237,7 +237,11 @@ function windows(plan: Plan, peak: [number, number] | null, big: number[]): void
   // a window's six commands: down at the start, down again at the end, the peak's dance, and the bursts
   const most = C.CLOSURE_LIMITS[C.L_FRONT_WINDOW] - (dances ? 3 : 2), apart = an.duration / (most + 2);
   const times: number[] = [];
-  for (const m of big) if (times.length < most && times.every((u) => Math.abs(u - m) >= apart)) times.push(m);
+  // a burst only where the music keeps a groove through it, not on a landing that falls straight back to calm
+  const carried = (m: number) => holds(an, m, 2) >= half + burst;
+  for (const m of big) {
+    if (times.length < most && carried(m) && times.every((u) => Math.abs(u - m) >= apart)) times.push(m);
+  }
   times.sort((p, q) => p - q).forEach((m, k) => {
     const lag = relayWithin(an, WINDOW_S, holds(an, m, 2) - half - burst, n);
     cars.forEach((c, i) => {

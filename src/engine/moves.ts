@@ -578,6 +578,7 @@ function ring([car, side]: [Car, LR | null], t: number, end: number, s: number) 
 // --- flowing moves ---------------------------------------------------------------------------------
 // With no beat to follow, the light glides with the melody instead of hitting.
 
+const REST_S = 0.75;                  // in quiet music a lamp rests this long between breaths
 const GLIDE_S = 0.5, SPREAD_S = 3;     // the melody's place is smoothed over this, then spread over this
 const SPOT = 0.9, SPOT_LEDS = 6;       // its spot on a truck's bar: just under full, about this many LEDs wide
 const paths = new WeakMap<Analysis, Float64Array>();
@@ -630,6 +631,7 @@ const flowing = (places: (p: number) => number[]): Move => (cars, an, ph) => {
   const b = Math.min(path.length, Math.trunc(ph.t1 / step));
   const lit = new Map<string, [Car, number[], Uint8Array]>();   // per car and lamp (Car.at), the frames lit
   const spot = new Map<Car, Rows>();
+  const lv = an.level!;
   for (let f = a; f < b; f++) {
     if (Number.isNaN(path[f])) continue;
     for (const q of places(path[f])) {
@@ -648,11 +650,23 @@ const flowing = (places: (p: number) => number[]): Move => (cars, an, ph) => {
     }
   }
   for (const [car, chs, on] of lit.values()) {
+    let rested = -Infinity;     // in quiet music, when this lamp may swell again
     for (const [f0, f1] of runs(on)) {
-      const held = (f1 - f0) * step >= HELD_NOTE_S, t0 = (a + f0) * step;
-      const t1 = (a + f1) * step + (held ? 0.25 : 0.1);
-      car.light(chs, t0, t1, held ? C.ON_1000 : C.ON);
-      car.light(chs, t1, t1 + (held ? 1 : 0.5), held ? C.OFF_1000 : C.OFF_500);
+      const held = (f1 - f0) * step >= HELD_NOTE_S, end = (a + f1) * step + (held ? 0.25 : 0.1);
+      if (lv[Math.min(a + f0, lv.length - 1)] >= GROOVE) {
+        const t0 = (a + f0) * step;
+        car.light(chs, t0, end, held ? C.ON_1000 : C.ON);
+        car.light(chs, end, end + (held ? 1 : 0.5), held ? C.OFF_1000 : C.OFF_500);
+        continue;
+      }
+      // quiet: a lamp the melody rests on breathes - it swells in, holds at most SWELL_MAX_S, fades, and
+      // rests a moment before it swells again - instead of glowing on until the melody moves away
+      for (let t0 = Math.max((a + f0) * step, rested); t0 < end - 0.2; t0 = rested) {
+        const t1 = Math.min(end, t0 + SWELL_MAX_S);
+        car.light(chs, t0, t1, C.ON_1000);
+        car.light(chs, t1, t1 + 1, C.OFF_1000);
+        rested = t1 + 1 + REST_S;
+      }
     }
   }
   for (const [car, r] of spot) car.pixels(C.FRONT_BAR, ph.t0, r);
