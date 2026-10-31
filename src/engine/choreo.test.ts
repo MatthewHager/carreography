@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Analysis } from './analysis';
-import { BEAT_MOVES, FLOW_MOVES, SPARSE_MOVES } from './catalog';
+import { BEAT_MOVES, FLOW_MOVES, type MoveName, SPARSE_MOVES } from './catalog';
 import { ALL_RGB, N_CHANNELS } from './channels';
 import { chooseMove, choreograph, family, makeShow } from './choreo';
 import { feel } from './feel';
@@ -110,7 +110,7 @@ describe('a figure plays the family of moves the music asks for', () => {
   it('no figure at the peak plays a sparse move, however little used or replayed', () => {
     const an = stretch({ level: 0.9, notes: 3, kit: true });
     for (const sparse of SPARSE_MOVES) {
-      const used = new Map(BEAT_MOVES.map((m): [string, number] => [m, m === sparse ? 0 : 5]));
+      const used = new Map(BEAT_MOVES.map((m): [MoveName, number] => [m, m === sparse ? 0 : 5]));
       expect(SPARSE_MOVES).not.toContain(chooseMove(an, 'beat', 2, 18, undefined, null, used));
       expect(SPARSE_MOVES).not.toContain(chooseMove(an, 'beat', 2, 18, sparse, null, used));
     }

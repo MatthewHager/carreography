@@ -23,19 +23,20 @@ export function beatAt(an: Analysis, t: number): number {
   return Math.min(b[i] - b[i - 1], 1.5 * nominal);       // across a fermata: a normal beat
 }
 
-/** `t` on the nearest tracked beat within `reach` s, else as it is: a motor starting, a lid stopping or a
- * sung word's picture is an accent, and lands with the music. */
+/** `t` on the nearest tracked beat within `reach` s, else as it is: a motor starting or a lid stopping is an
+ * accent, and lands with the music. */
 export function onBeat(an: Analysis, t: number, reach = 0.35): number {
   let best = t;
   for (const b of an.beats) if (Math.abs(b - t) <= reach && Math.abs(b - t) < Math.abs(best - t)) best = b;
   return best;
 }
 
-const positions = new WeakMap<Analysis, Int32Array>();
+// keyed on the beat list, which TEMPO.apply replaces: a grid of the tracker's beats is never read after
+const positions = new WeakMap<number[], Int32Array>();
 
 /** Every tracked beat's place in its bar (0 the downbeat), counted from the downbeat before it. */
 export function barPositions(an: Analysis): Int32Array {
-  let pos = positions.get(an);
+  let pos = positions.get(an.beats);
   if (pos) return pos;
   const b = an.beats, downs = new Set<number>();
   for (const x of an.downbeats) {
@@ -48,16 +49,16 @@ export function barPositions(an: Analysis): Int32Array {
     if (downs.has(i)) last = i;
     pos[i] = last !== null ? (i - last) % 4 : i % 4;
   }
-  positions.set(an, pos);
+  positions.set(an.beats, pos);
   return pos;
 }
 
-const subGrids = new WeakMap<Analysis, Map<number, Float64Array>>();
+const subGrids = new WeakMap<number[], Map<number, Float64Array>>();
 
 /** Every 1/div beat of the tracked beats (sixteenths for div 4), following the music's own spacing. */
 function subGrid(an: Analysis, div = 4): Float64Array {
-  let cache = subGrids.get(an);
-  if (!cache) subGrids.set(an, (cache = new Map()));
+  let cache = subGrids.get(an.beats);
+  if (!cache) subGrids.set(an.beats, (cache = new Map()));
   let g = cache.get(div);
   if (g === undefined) {
     const b: ArrayLike<number> = an.beats.length >= 2 ? an.beats : arange(0, an.duration, beatLen(an));
@@ -210,8 +211,8 @@ function maxEnv(env: number[], a: number, b: number): number {
 function phaseLock(an: Analysis, window = 8, gain = 1.3): void {
   const env = an.pulseEnv;
   const b = an.beats;
-  if (!env || b.length < 2 * window) return;
-  const hop = an.pulseHop ?? 512 / 22050;
+  if (b.length < 2 * window) return;
+  const hop = an.pulseHop;
   const w = Math.max(1, Math.round(0.03 / hop));
   const score = (times: number[]) => times.map((x) => {
     const i = clip(Math.round(x / hop), 0, env.length - 1);
@@ -229,7 +230,6 @@ function phaseLock(an: Analysis, window = 8, gain = 1.3): void {
     const k = argmax(sc);
     if (k !== 0 && sc[k] > gain * sc[0]) for (let i = a; i < Math.min(b.length, a + half); i++) choice[i] = shifts[k];
   }
-  // majority smoothing over 3 windows
   const out = b.map((x, i) => x + choice[i] * gap[i]);
   const order = argsort(out);
   an.beats = order.map((i) => out[i]);
@@ -247,8 +247,8 @@ function phaseLock(an: Analysis, window = 8, gain = 1.3): void {
 function snapToPulse(an: Analysis, reach = 0.045): void {
   const env = an.pulseEnv;
   const b = an.beats;
-  if (!env || b.length < 4) return;
-  const hop = an.pulseHop ?? 512 / 22050;
+  if (b.length < 4) return;
+  const hop = an.pulseHop;
   const w = Math.max(1, Math.round(reach / hop));
   const out = [...b];
   b.forEach((t, k) => {

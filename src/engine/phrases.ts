@@ -89,8 +89,7 @@ export function segment(ev: Events): Phrase[] {
       nsteps++;
       if (top[i] - top[i - 1] > 0) ups++;
     }
-    if (m <= 1) nsteps = 1;       // np.diff of one element is replaced by zeros(1)
-    const up = nsteps ? ups / nsteps : 0.5;
+    const up = ups / Math.max(nsteps, 1);        // a one-note phrase doesn't rise
     const chordy = kind.slice(a, b).filter((k) => k >= 2).length / m;
     const dens = m / span;
     const hold = dur[b - 1];

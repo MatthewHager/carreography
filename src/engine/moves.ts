@@ -11,10 +11,11 @@
 // MOVES at the end is how the choreographer finds one by name.
 
 import type { Analysis, Phrase } from './analysis';
-import type { Car } from './car';
+import { type Car, centreTruck } from './car';
+import type { MoveName } from './catalog';
 import * as C from './channels';
 import { DRIVE, GROOVE, levelAt, PEAK, stepOf } from './level';
-import { arange, clip, cumsum, linspace, quantiles, runs, searchsorted, sum } from './np';
+import { arange, clip, cumsum, linspace, quantile, quantiles, runs, searchsorted, sum } from './np';
 import { barPositions, beatAt, eighthAt, snap } from './tempo';
 
 const BAR = C.FRONT_BAR.length;   // 60 LEDs
@@ -26,23 +27,13 @@ type Span = Pick<Phrase, 't0' | 't1'>;
 
 // --- the stage -----------------------------------------------------------------------------------
 
-/** The centrepiece: the Cybertruck nearest the middle of the line, or null without one. */
-export function centreTruck(cars: Car[]): Car | null {
-  const trucks = cars.filter((c) => c.isCt);
-  if (!trucks.length) return null;
-  const mid = (cars.length - 1) / 2;
-  let best: Car | null = null, bd = Infinity;
-  for (const c of trucks) {
-    const d = Math.abs(cars.indexOf(c) - mid);
-    if (d < bd) [best, bd] = [c, d];
-  }
-  return best;
-}
-
 /** Every (car, half) on the stage, crowd-left to right. */
 function slots(cars: Car[]): [Car, LR][] {
   return cars.flatMap((c) => [[c, 'L'], [c, 'R']] as [Car, LR][]);
 }
+
+/** Where a slot sits among slots(cars). */
+const slotIndex = (all: [Car, LR][], [car, side]: readonly [Car, LR, ...unknown[]]) => all.findIndex(([c, d]) => c === car && d === side);
 
 const CENTRE_SHARE = 4 / 3;   // the centrepiece's share of the pitch range against another car's
 
@@ -231,8 +222,7 @@ const keyboard: Move = (cars, an, ph) => {
     let span: [Car, LR][] = [[top[0], top[1]]];
     if (ev.kind[i] >= 2 && s >= DRIVE) {
       const low = slotFor(cars, ev.low[i], lo, hi);
-      const a = all.findIndex(([c, d]) => c === low[0] && d === low[1]);
-      const b = all.findIndex(([c, d]) => c === top[0] && d === top[1]);
+      const a = slotIndex(all, low), b = slotIndex(all, top);
       span = all.slice(Math.min(a, b), Math.max(a, b) + 1);
     }
     for (const [car, side] of span) {
@@ -318,8 +308,7 @@ const block: Move = (cars, an, ph) => {
   for (let i = ph.a; i < ph.b; i++) {
     const t = ev.t[i], s = levelAt(an, t), nxt = ev.t[i + 1] ?? Infinity, [lo, hi] = ranges[i - ph.a];
     const a = slotFor(cars, ev.low[i], lo, hi), b = slotFor(cars, ev.high[i], lo, hi);
-    const ia = all.findIndex(([c, d]) => c === a[0] && d === a[1]);
-    const ib = all.findIndex(([c, d]) => c === b[0] && d === b[1]);
+    const ia = slotIndex(all, a), ib = slotIndex(all, b);
     const big = ev.kind[i] === 3 || Math.abs(ib - ia) + 1 >= all.length - 1;
     const span = big ? all : all.slice(Math.min(ia, ib), Math.max(ia, ib) + 1);
     const dur = Math.max(ev.dur[i], 0.3);
@@ -359,7 +348,7 @@ const motif: Move = (cars, an, ph) => {
   const mid = cars[Math.floor(cars.length / 2)];
   orn.forEach((i, k) => slotHit(mid, k % 2 === 0 ? 'L' : 'R', ev.t[i], 0.1, levelAt(an, ev.t[i])));
   const [landCar, landSide] = slotFor(cars, ev.top[landI], an.pitchLo, an.pitchHi);
-  const target = all.findIndex(([c, d]) => c === landCar && d === landSide);
+  const target = slotIndex(all, [landCar, landSide]);
   const far = target >= all.length / 2 ? 0 : all.length - 1;
   const path = far < target ? all.slice(far, target + 1) : all.slice(target, far + 1).reverse();
   run.forEach((i, k) => {
@@ -382,7 +371,7 @@ const CHORD_S = 1.5;          // a chord struck this long after the last swells 
  * than standing lit. The trucks' bars fill from their centres as loud as the music is. */
 const swell: Move = (cars, an, ph) => {
   const mid = (cars.length - 1) / 2, ev = an.events, lv = an.level!, chords = [ph.t0];
-  const strong = ph.b > ph.a ? quantiles(ev.amp.slice(ph.a, ph.b), [0.8])[0] : Infinity;
+  const strong = ph.b > ph.a ? quantile(ev.amp.slice(ph.a, ph.b), 0.8) : Infinity;
   for (let i = ph.a; i < ph.b; i++) {
     if (ev.amp[i] >= strong && ev.t[i] - chords[chords.length - 1] >= CHORD_S && ph.t1 - ev.t[i] >= CHORD_S) {
       chords.push(ev.t[i]);
@@ -587,7 +576,7 @@ function melodyPath(an: Analysis): Float64Array {
   const ev = an.events, n = an.nFrames, step = an.step, pos = new Float64Array(n).fill(NaN);
   const range: [number, number][] = [];
   for (const ph of an.phrases ?? []) localRanges(an, ph).forEach((r, k) => (range[ph.a + k] = r));
-  const cut = ev.amp.length ? quantiles(ev.amp, [0.35])[0] : 0;
+  const cut = ev.amp.length ? quantile(ev.amp, 0.35) : 0;
   const kept = ev.t.flatMap((_, i) => (ev.amp[i] >= cut && range[i] ? [i] : []));
   kept.forEach((i, k) => {
     const end = Math.min(ev.t[i] + Math.max(ev.dur[i], 0.4), ev.t[kept[k + 1]] ?? Infinity);
@@ -676,7 +665,7 @@ export function allOn(cars: Car[], t: number, hold: number) {
 }
 
 /** Every move by its catalogue name (catalog.ts). */
-export const MOVES: Record<string, Move> = {
+export const MOVES: Record<MoveName, Move> = {
   keyboard, relay, mirror, antiphony, block, shimmer, motif, cadence, swell,
   march, lr_channel: lrChannel, checker, tug_of_war: tugOfWar, beam, converge, shockwave, glide, bloom,
 };

@@ -17,7 +17,7 @@
 import * as C from './channels';
 import { CALM, DRIVE, GROOVE, PEAK } from './level';
 import { u8 } from './np';
-import { lineupCars } from './vehicles';
+import { lineupCars, type Vehicle } from './vehicles';
 
 export const LIGHT_LEAD_S = 0.02;   // lights fire one frame before the sound so they read as on the beat
 const MIN_ON = 5, MIN_OFF = 3;   // frames: a lamp lit under 100 ms doesn't read, nor one dark under 60 ms
@@ -44,24 +44,33 @@ export class Car {
   readonly frames: Uint8Array;
   readonly closureCounts = new Map<number, number>();
 
+  readonly kind: Vehicle['kind'];
+  /** A 2025+ Model Y: the Model Y's lamps go where it has them (JUNIPER). */
+  readonly juniper: boolean;
+  /** A Model X: falcon doors (motors.ts). */
+  readonly falcon: boolean;
+  readonly nFrames: number;
+  readonly step: number;
+  /** Per frame, how long the music has been silent there (0 while it sounds): silence is dark. */
+  readonly hush: Uint8Array | null;
+  /** Per frame, the headlights the beat rings there (pulse.ownership: 1 the inner beams, 2 the outer, 3
+   * both): theirs alone, and the whole-stage moments', so the moves light around them (light). */
+  readonly beat: Uint8Array | null;
+
   constructor(
-    readonly kind: 'modely' | 'cybertruck',
+    vehicle: Pick<Vehicle, 'kind' | 'juniper' | 'falcon'>,
     readonly name: string,
     /** Place in the line, 0 on the crowd's left. A lineup's cars are always in this order. */
     readonly x: number,
-    readonly nFrames: number,
-    readonly step: number,
-    /** A 2025+ Model Y: the Model Y's lamps go where it has them (JUNIPER). */
-    readonly juniper: boolean,
-    /** A Model X: falcon doors (motors.ts). */
-    readonly falcon: boolean,
-    /** Per frame, how long the music has been silent there (0 while it sounds): silence is dark. */
-    readonly hush: Uint8Array | null = null,
-    /** Per frame, the headlights the beat rings there (pulse.ownership: 1 the inner beams, 2 the outer, 3
-     * both): theirs alone, and the whole-stage moments', so the moves light around them (light). */
-    readonly beat: Uint8Array | null = null,
+    grid: { nFrames: number; step: number; hush?: Uint8Array | null; beat?: Uint8Array | null },
   ) {
-    this.frames = new Uint8Array(nFrames * C.N_CHANNELS);
+    this.kind = vehicle.kind;
+    this.juniper = vehicle.juniper;
+    this.falcon = !!vehicle.falcon;
+    ({ nFrames: this.nFrames, step: this.step } = grid);
+    this.hush = grid.hush ?? null;
+    this.beat = grid.beat ?? null;
+    this.frames = new Uint8Array(this.nFrames * C.N_CHANNELS);
   }
 
   get isCt() {
@@ -333,6 +342,18 @@ export class Car {
  * headlights the beat's wherever `beat` says it rings. */
 export function makeLineup(layout: string, nFrames: number, step: number, hush: Uint8Array | null,
   beat: Uint8Array | null = null): Car[] {
-  return lineupCars(layout).map(([name, v], i) => new Car(v.kind, name, i, nFrames, step, v.juniper, !!v.falcon,
-    hush, beat));
+  return lineupCars(layout).map(([name, v], i) => new Car(v, name, i, { nFrames, step, hush, beat }));
+}
+
+/** The centrepiece: the Cybertruck nearest the middle of the line, or null without one. */
+export function centreTruck(cars: Car[]): Car | null {
+  const trucks = cars.filter((c) => c.isCt);
+  if (!trucks.length) return null;
+  const mid = (cars.length - 1) / 2;
+  let best: Car | null = null, bd = Infinity;
+  for (const c of trucks) {
+    const d = Math.abs(c.x - mid);
+    if (d < bd) [best, bd] = [c, d];
+  }
+  return best;
 }

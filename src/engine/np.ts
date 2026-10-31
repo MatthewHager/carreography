@@ -50,7 +50,6 @@ export function median(a: Arr): number {
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
 
-/** fp at each x, interpolated linearly between the points (xp ascending), held flat beyond them. */
 /** `num` evenly spaced values from start to stop, both included. */
 export function linspace(start: number, stop: number, num: number): Float64Array {
   const out = new Float64Array(Math.max(0, num));
@@ -92,9 +91,6 @@ export function clip(x: number, lo: number, hi: number): number {
   return Math.min(Math.max(x, lo), hi);
 }
 
-/** `a` convolved with the kernel `v`, centred, as long as the longer of the two. */
-/** Slope of the least-squares line through (0, y0), (1, y1), ... */
-/** Pearson correlation of two equally long series. */
 /** A 0..255 level as a byte (truncated). */
 export function u8(x: number): number {
   return x <= 0 ? 0 : x >= 255 ? 255 : Math.trunc(x);

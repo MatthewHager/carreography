@@ -137,7 +137,7 @@ for a moment (`Car.lightOver`). The pulse's hold on the inner beams is kept wher
   a downbeat where the level lands a step higher and holds, from a build or onto a drum kit, at most one
   per 100 s; through the build the pulse speeds up and spreads from the middle car out, the stage goes
   black for a beat (the show's one deliberate pull-back), and every lamp hits the drop together.
-- **Accents** (also `pulse.ts`) **and the end**: the whole stage for what stands out most (a strike out of
+- **Accents** (`moments.ts`, with the drops) **and the end**: the whole stage for what stands out most (a strike out of
   a breath that lands loud, an arrival chord where the level steps up), at most one per 40 s, 10 s apart
   (strikes out of silence 4 s, as the Toccata's opening calls are); everything on at the music's last
   strong hit, then a 2 s fade, or a slow fade where the song ends flowing.
@@ -180,7 +180,7 @@ within 3 s (`moves.localRanges`), so every stretch of a phrase uses every car.
 
 Every move lights the whole lineup. Two roles keep it working for any lineup:
 
-- **The centrepiece**: the Cybertruck nearest the middle (`moves.centreTruck`, `null` without one). Its
+- **The centrepiece**: the Cybertruck nearest the middle (`centreTruck` in `car.ts`, `null` without one). Its
   front bar is 60 separately driven LEDs, so it plays what lamps can't: the melody as a comet at each
   note's pitch under every move, fills and sweeps. It takes a wider share of the pitch range, so runs sweep
   visibly across it.

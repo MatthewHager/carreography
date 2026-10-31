@@ -37,12 +37,9 @@ export interface Feel {
 
 /**
  * How clearly the music beats here: the onset curve's strength on the beats over its mean (1 = no beat
- * to speak of; a steady band groove is 3 and up). Measured over [t0, t1] plus `reach` seconds either
- * side, so a two-beat phrase isn't judged on two samples.
+ * to speak of; a steady band groove is 3 and up), over [t0, t1].
  */
-export function clarity(an: Analysis, t0: number, t1: number, reach = 4.0): number {
-  t0 = Math.max(0.0, t0 - reach);
-  t1 = t1 + reach;
+function clarity(an: Analysis, t0: number, t1: number): number {
   const env = an.pulseEnv, hop = an.pulseHop;
   const b = an.beats.filter((x) => x >= t0 && x < t1);
   if (!env?.length || b.length < 3) return 1.0;
@@ -88,7 +85,7 @@ export function feel(an: Analysis, phrases?: Phrase[]): Feel[] {
     const beats = an.beats.filter((b) => b >= t0 && b < t1);
     const heard = an.heardBeats ? an.heardBeats.filter((b) => b >= t0 && b < t1) : beats;
     const steady = steadiness(heard, STEADY_TOL) >= STEADY;
-    return { t0, t1, letter, flow: !steady && clarity(an, t0, t1, 0) < FLOW_CLARITY, kit: false, steady };
+    return { t0, t1, letter, flow: !steady && clarity(an, t0, t1) < FLOW_CLARITY, kit: false, steady };
   });
   // a short stretch between two that agree goes their way: the style doesn't flip for a few bars (judged on
   // the stretches as heard, so one flip doesn't lead to the next)
@@ -138,12 +135,12 @@ function struck(an: Analysis, t: number): boolean {
   return n > 0 && peak >= STRUCK * (sum / n);
 }
 
-const struckMemo = new WeakMap<Analysis, Uint8Array>();
+const struckMemo = new WeakMap<number[], Uint8Array>();     // keyed on the beat list (see tempo.ts)
 
 /** Per tracked beat, whether the music strikes it (struck). */
 export function struckBeats(an: Analysis): Uint8Array {
-  let out = struckMemo.get(an);
-  if (!out) struckMemo.set(an, (out = Uint8Array.from(an.beats, (t) => (struck(an, t) ? 1 : 0))));
+  let out = struckMemo.get(an.beats);
+  if (!out) struckMemo.set(an.beats, (out = Uint8Array.from(an.beats, (t) => (struck(an, t) ? 1 : 0))));
   return out;
 }
 
@@ -162,7 +159,7 @@ export function struckShare(an: Analysis, t0: number, t1: number): number {
  * held chord the tracker carried on through). */
 export function followable(an: Analysis, t0: number, t1: number): boolean {
   const n = searchsorted(an.beats, t1) - searchsorted(an.beats, t0);
-  const beats = steadyAt(an, (t0 + t1) / 2) || clarity(an, t0, t1, 0) >= FLOW_CLARITY;
+  const beats = steadyAt(an, (t0 + t1) / 2) || clarity(an, t0, t1) >= FLOW_CLARITY;
   return beats && n >= (0.5 * (t1 - t0)) / beatLen(an) && struckShare(an, t0, t1) >= 0.5;
 }
 

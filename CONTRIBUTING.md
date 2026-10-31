@@ -34,7 +34,7 @@ gh release download examples --dir public/examples
 
 | Folder | What |
 |---|---|
-| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts` (with the breath where the music flows), `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, builds, drops and accents), `motors.ts` (the closures), `car.ts` (one car's frames, lamp groups and the 2025+ Model Y's lamps), `vehicles.ts` (the lineup letters), and the reading of the music (`feel.ts`, `phrases.ts`, `tempo.ts`). |
+| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts` (with the breath where the music flows), `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, playing the builds and drops), `moments.ts` (the drops, builds and accents), `motors.ts` (the closures), `car.ts` (one car's frames, lamp groups and the 2025+ Model Y's lamps), `vehicles.ts` (the lineup letters), and the reading of the music (`feel.ts`, `phrases.ts`, `tempo.ts`). |
 | `src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend). |
 | `src/viewer/` | The 3D preview (three.js), adapted from Tesla Lightshow Studio (AGPL-3.0): `core/` reads, writes and simulates show files, `car/appBody.ts` draws Tesla's app models. |
 | `src/app/` | The page: the 3D stage, the panels, the worker that makes a show (`show.worker.ts`), the WAV and the ZIP. |

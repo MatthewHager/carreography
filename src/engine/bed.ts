@@ -19,7 +19,7 @@ import type { Analysis } from './analysis';
 import * as C from './channels';
 import type { Car } from './car';
 import { flowsAt } from './feel';
-import { CALM, DRIVE, GROOVE, musicSpan, PEAK } from './level';
+import { CALM, DRIVE, GROOVE, levelAt, musicSpan, PEAK } from './level';
 import { clip, runs } from './np';
 import type { Scheme } from './schemes';
 
@@ -31,7 +31,7 @@ const VOICE = 0.4;            // ... and up to this share of it follows the voic
 const DULL = [110, 0, 200], BRIGHT = [255, 140, 20];
 const CABIN_LOW = 0.35;       // the cabins at the quietest: the screen lights the whole interior, so the colour
                               // reads from outside even in a pianissimo, and grows with the level from there
-const SURE = 0.5;             // an occasion's cabins take the harmony's colour once it is this clear
+const COLOUR_SURE = 0.5;             // an occasion's cabins take the harmony's colour once it is this clear
 
 /** Per frame, whether the level is at `at` or above where the music beats, held for DWELL_S so a lamp never
  * flickers. */
@@ -112,25 +112,24 @@ function cabins(cars: Car[], an: Analysis, B: Float64Array, scheme: Scheme): voi
       const s = lv[f], base = dull.map((d, i) => d + (bright[i] - d) * an.brightness[f]);
       // the spectrum blends the harmony into the sound's own colour by how sure it is; an occasion's colours
       // would blend into ones it doesn't have, so it takes one or the other
-      const colour = own ? (sure >= SURE ? colourOf(pc) : base)
+      const colour = own ? (sure >= COLOUR_SURE ? colourOf(pc) : base)
         : colourOf(pc).map((h, i) => h * sure + base[i] * (1 - sure));
       const scale = CABIN_LOW + (1 - CABIN_LOW) * (Number.isNaN(B[f]) ? s : (B[f] + s) / 2);
       for (const c of cars) c.rgb(f * step, Math.min(f + 5, b) * step, colour, scale);
     }
   }
-  const loud = (t: number) => lv[clip(Math.trunc(t / step), 0, lv.length - 1)];
   for (const d of an.downbeats) {
-    if (loud(d) >= DRIVE && !flowsAt(an, d)) for (const c of cars) c.rgb(d, d + 0.1, [255, 255, 255], 0.8);
+    if (levelAt(an, d) >= DRIVE && !flowsAt(an, d)) for (const c of cars) c.rgb(d, d + 0.1, [255, 255, 255], 0.8);
   }
   for (const h of an.hits) {
-    if (loud(h) >= GROOVE && !flowsAt(an, h)) for (const c of cars) c.rgb(h, h + 0.12, [255, 255, 255]);
+    if (levelAt(an, h) >= GROOVE && !flowsAt(an, h)) for (const c of cars) c.rgb(h, h + 0.12, [255, 255, 255]);
   }
 }
 
 // ---- The breath ---------------------------------------------------------------------------------
 // Music that flows gives no beat to hit, so the stage breathes with it instead. The breath is mostly the
 // swell of each phrase (rising from its start, falling into its end) and partly its loudness against the
-// BREATH_S either side; between phrases (a laugh, a drum, a held sound) the loudness alone. Lamps join in
+// PHRASE_AROUND_S either side; between phrases (a laugh, a drum, a held sound) the loudness alone. Lamps join in
 // layers as it rises and leave together as it falls; how many layers a phrase can reach grows with the
 // level (one when calm, four well into drive, at the peak a fifth: every headlight, the whole stage open
 // for the climax). The lamps that can ramp do so over 2 s; the fogs, markers and tails switch. Car lamps
@@ -145,7 +144,7 @@ function cabins(cars: Car[], an: Analysis, B: Float64Array, scheme: Scheme): voi
 const RES = 0.25;            // seconds per step of the layers
 const HYST = 0.2;            // a layer goes out this far (in layers) below its way in
 const MIN_DWELL = 0.75;      // seconds a layer stays once it changes
-const BREATH_S = 6;          // a phrase's loudness is measured against this much either side
+const PHRASE_AROUND_S = 6;          // a phrase's loudness is measured against this much either side
 const LOUD_S = 0.3;          // ... over this much around each moment
 const SWELL = 0.6;           // the breath's share that is the phrase's swell (the rest is its loudness)
 const SHAPE = 1.2;           // the swell a little narrower than a sine's hump, so it rises off the start
@@ -167,7 +166,7 @@ function breath(an: Analysis): Float64Array {
     const a = Math.trunc(ph.t0 / an.step), b = Math.min(n, Math.trunc(ph.t1 / an.step));
     for (let f = a; f < b; f++) swell[f] = Math.sin((Math.PI * (f - a)) / Math.max(1, b - a)) ** SHAPE;
   }
-  const out = new Float64Array(n).fill(NaN), reach = Math.round(BREATH_S / an.step), stride = 5;
+  const out = new Float64Array(n).fill(NaN), reach = Math.round(PHRASE_AROUND_S / an.step), stride = 5;
   for (let i = 0; i < n; i += stride) {
     if (!flows(i)) continue;
     let lo = Infinity, hi = -Infinity;

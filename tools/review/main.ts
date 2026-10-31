@@ -11,7 +11,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { STEP_MS } from '@/engine/channels';
 import { makeShow } from '@/engine/choreo';
-import { builds, drops } from '@/engine/pulse';
+import { builds, drops } from '@/engine/moments';
 import { SCHEMES, type SchemeId } from '@/engine/schemes';
 import { analyze } from '@/engine/listen/audio';
 import { trackBeats } from '@/engine/listen/beats';

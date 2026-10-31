@@ -52,7 +52,6 @@ export const WINDOWS = [L_FRONT_WINDOW, L_REAR_WINDOW, R_FRONT_WINDOW, R_REAR_WI
 export const MIRRORS = [L_MIRROR, R_MIRROR];
 
 // --- Light values (xLights effect brightness -> byte) ---
-export const OFF = 0;
 export const OFF_500 = 25, OFF_1000 = 51, OFF_2000 = 76;
 export const ON_500 = 178, ON_1000 = 204, ON_2000 = 229;
 export const ON = 255;

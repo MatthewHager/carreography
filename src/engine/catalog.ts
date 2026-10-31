@@ -13,14 +13,14 @@
 // Written for the classic lineup, Model Y | Cybertruck | Model Y: "the truck" is the Cybertruck nearest the
 // middle, "the Ys" every other car.
 
-export interface Move {
+export interface MoveEntry {
   readonly what: string;
   readonly grid: 'note' | 'beat' | 'bar' | 'self';
 }
 
-const mv = (what: string, grid: Move['grid']): Move => ({ what, grid });
+const mv = (what: string, grid: MoveEntry['grid']): MoveEntry => ({ what, grid });
 
-export const MOVES: Record<string, Move> = {
+export const MOVES = {
   keyboard: mv("notes play across the stage like a keyboard, low on the crowd's left and high on the right, "
     + "the melody along the truck's bar", 'note'),
   relay: mv('one light runs the stage note by note, through every lamp and along the bar, end to end and '
@@ -51,21 +51,24 @@ export const MOVES: Record<string, Move> = {
     + 'a beam it rests on swells in', 'note'),
   bloom: mv('the melody glides out from the middle as it rises, on the inner beams at both ends at once, two '
     + 'spots along the bar', 'note'),
-};
+} satisfies Record<string, MoveEntry>;
+
+/** A move's name in the catalogue: moves.ts has a function for each, and the compiler checks it. */
+export type MoveName = keyof typeof MOVES;
 
 /** A figure of a passage plays one move: one that follows the melody, or one that follows the beat (choreo.ts
  * chooses which, and the least used of the pool). */
-export const NOTE_MOVES = ['keyboard', 'mirror', 'antiphony', 'relay'];
-export const BEAT_MOVES = ['march', 'lr_channel', 'checker', 'beam', 'converge', 'tug_of_war', 'shockwave'];
+export const NOTE_MOVES: MoveName[] = ['keyboard', 'mirror', 'antiphony', 'relay'];
+export const BEAT_MOVES: MoveName[] = ['march', 'lr_channel', 'checker', 'beam', 'converge', 'tug_of_war', 'shockwave'];
 /** The beat moves that light only a car or two at a time: below the peak, so the peak is the biggest look. */
-export const SPARSE_MOVES = ['march', 'beam'];
+export const SPARSE_MOVES: MoveName[] = ['march', 'beam'];
 /** ... or the swell of a chord held with no beat to follow ... */
-export const HELD_MOVES = ['swell'];
+export const HELD_MOVES: MoveName[] = ['swell'];
 /** ... or, where the music flows, one that glides with the melody. */
-export const FLOW_MOVES = ['glide', 'bloom'];
+export const FLOW_MOVES: MoveName[] = ['glide', 'bloom'];
 
 /** The move a phrase's shape asks for whatever its passage plays. */
-export const FOR_GESTURE: Record<string, string> = { chords: 'block', cadence: 'cadence', trill: 'shimmer',
+export const FOR_GESTURE: Record<string, MoveName> = { chords: 'block', cadence: 'cadence', trill: 'shimmer',
   motif: 'motif' };
 
 /** MOVES.md at the repository root: the catalogue as a table to read (catalog.test.ts keeps it current). */
@@ -82,14 +85,14 @@ export function markdown(): string {
     '| move | what you see | plays | locks to |',
     '|---|---|---|---|',
   ];
-  for (const [name, m] of Object.entries(MOVES)) {
+  for (const [name, m] of Object.entries(MOVES) as [MoveName, MoveEntry][]) {
     rows.push(`| ${name} | ${m.what} | ${plays(name)} | ${m.grid} |`);
   }
   return rows.join('\n') + '\n';
 }
 
 /** When the choreographer plays a move, from the lists it chooses from. */
-function plays(name: string): string {
+function plays(name: MoveName): string {
   const shapes = Object.entries(FOR_GESTURE).filter(([, m]) => m === name).map(([g]) => g);
   if (shapes.length) return `every phrase shaped as ${shapes.join(', ')}`;
   if (NOTE_MOVES.includes(name)) return 'a figure that follows its melody';

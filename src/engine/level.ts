@@ -22,7 +22,7 @@
 //   4  peak     everything: whole cars, every lamp on the downbeat, the off-beats too, the lids dancing
 
 import type { Analysis } from './analysis';
-import { clip, quantile } from './np';
+import { clip, quantile, searchsorted } from './np';
 
 const STEPS = [0.2, 0.4, 0.6, 0.8];
 /** Where each step starts: the level from which the show is calm, in a groove, driving, at the peak. */
@@ -50,13 +50,7 @@ function activity(an: Analysis): Float32Array {
 
 /** Each value's rank among `pool` (sorted), 0..1. */
 function rankIn(pool: Float64Array, v: number): number {
-  let lo = 0, hi = pool.length;
-  while (lo < hi) {
-    const m = (lo + hi) >> 1;
-    if (pool[m] < v) lo = m + 1;
-    else hi = m;
-  }
-  return pool.length > 1 ? lo / (pool.length - 1) : 0.5;
+  return pool.length > 1 ? searchsorted(pool, v) / (pool.length - 1) : 0.5;
 }
 
 /** The level curve: see the module notes. */

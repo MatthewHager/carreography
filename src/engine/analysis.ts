@@ -1,6 +1,8 @@
 // What the listening side (listen/audio.ts) hands the choreographer: the song's beats, notes, loudness
 // and form, with per-frame curves on the show's 20 ms grid.
 
+import type { MoveName } from './catalog';
+
 /** Transcribed note events (a key press or a chord), one entry per onset group (texture.ts). */
 export interface Events {
   t: number[];
@@ -38,7 +40,7 @@ export interface Phrase {
   lo: number;           // the melody's lowest and highest pitch, but for strays (its 10th and 90th percentiles)
   hi: number;
   level?: number;
-  move?: string;
+  move?: MoveName;
 }
 
 /** The energy in four bands, per frame 0..1: a level meter's, rising at once and falling over about 0.1 s. */

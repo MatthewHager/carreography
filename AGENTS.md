@@ -31,9 +31,10 @@ gh release download examples --dir public/examples                      # the ex
   - `level.ts`: one level per frame from the loudness, its top kept for the peak; every layer sizes by it.
   - `bed.ts` (steady lamps, the trucks' bars, the cabins' colour in the scheme from `schemes.ts`, and the
     breath where the music flows),
-    `moves.ts` (every move as `(cars, an, ph) => void`, sized by the level, the `MOVES` table,
-    `centreTruck`), `catalog.ts` (the catalogue; `MOVES.md` is generated from it), `drums.ts`
-    (kick, snare, hats), `pulse.ts` (the beat, builds, drops and accents), `motors.ts` (closures),
+    `moves.ts` (every move as `(cars, an, ph) => void`, sized by the level, and the `MOVES` table),
+    `catalog.ts` (the catalogue; `MOVES.md` is generated from it), `drums.ts` (kick, snare, hats),
+    `pulse.ts` (the beat, playing the builds and landing the drops), `moments.ts` (which landings are
+    drops, the builds into them, and the accents), `motors.ts` (closures),
     `channels.ts` (Tesla's channel map and limits). Each layer lights lamps of
     its own: docs/HOW_IT_WORKS.md has the table.
   - `feel.ts` (flow or beat, kit), `phrases.ts`, `tempo.ts` (the beat map and its grid): reading the
@@ -58,7 +59,7 @@ gh release download examples --dir public/examples                      # the ex
   `Car.pixels` reverses the front bar. Use the group methods (`heads`, `accents`, `lamps`...); never
   write raw L/R channel numbers in a move.
 - **Any lineup of 1–5 cars.** Never index `cars[1]` as the truck or assume two Model Ys. Use
-  `centreTruck(cars)` from `moves.ts` (may be `null`) and treat every other car alike.
+  `centreTruck(cars)` from `car.ts` (may be `null`) and treat every other car alike.
 - **Tesla's motor limits** (`CLOSURE_LIMITS` in `channels.ts`): liftgate 6, each window 6, each mirror
   20, charge port 3, a Model X's doors 6 each. Dance only once a lid is fully open; about 30 s of dancing
   per closure per show (each motor's own thermal limit). `Car.closure()` refuses commands past the
@@ -75,8 +76,9 @@ gh release download examples --dir public/examples                      # the ex
 ## Adding things
 
 - **A move:** a function in `moves.ts` sized by the level, its name in the `MOVES` table at the end of
-  `moves.ts`, and an entry in `catalog.MOVES` (and `NOTE_MOVES`, `BEAT_MOVES`, `HELD_MOVES` or
-  `FLOW_MOVES`, and `SPARSE_MOVES` for a beat move that lights only a car or two). Dispatch is by name. Details in CONTRIBUTING.md.
+  `moves.ts`, and an entry in `catalog.MOVES` (the compiler checks the two agree), and in `NOTE_MOVES`,
+  `BEAT_MOVES`, `HELD_MOVES` or `FLOW_MOVES` (and `SPARSE_MOVES` for a beat move that lights only a car or
+  two). Dispatch is by name. Details in CONTRIBUTING.md.
 - **A car:** `vehicles.ts`, the `Car` lamp groups (and `Car.out` if the hardware differs), `motors.ts`
   travel times, the viewer profile (`viewer/core/vehicles.ts`) and app model (`viewer/car/appBody.ts`,
   `tools/export_car_models.py`). Details in CONTRIBUTING.md.

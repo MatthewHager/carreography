@@ -10,7 +10,7 @@ const STEP = 0.02, N = 200;
 /** A Model Y whose beat rings its inner beams over frames [a, b). */
 function ringing(a: number, b: number): Car {
   const beat = new Uint8Array(N).fill(1, a, b);
-  return new Car('modely', 'test', 0, N, STEP, false, false, null, beat);
+  return new Car({ kind: 'modely', juniper: false }, 'test', 0, { nFrames: N, step: STEP, beat });
 }
 
 const column = (c: Car, ch: number) => Array.from({ length: N }, (_, f) => c.get(f, ch));

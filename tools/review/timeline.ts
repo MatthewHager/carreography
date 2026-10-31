@@ -5,7 +5,7 @@
 import type { Analysis, Phrase } from '@/engine/analysis';
 import { STEP_MS } from '@/engine/channels';
 import { STEP_NAMES, stepOf } from '@/engine/level';
-import { builds, drops } from '@/engine/pulse';
+import { builds, drops } from '@/engine/moments';
 import { dim, mix, Picture, type Rgb } from './image';
 import type { CarView, Row } from './stage';
 

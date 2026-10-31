@@ -25,13 +25,12 @@
 // ends.
 
 import type { Analysis } from './analysis';
-import type { Car } from './car';
+import { type Car, centreTruck } from './car';
 import * as C from './channels';
 import { flowsAt } from './feel';
 import { CALM, DRIVE, GROOVE, levelAt, levelOver, PEAK, stepOf } from './level';
-import { centreTruck } from './moves';
 import { clip } from './np';
-import { builds, drops } from './pulse';
+import { builds, drops } from './moments';
 import { beatLen, onBeat } from './tempo';
 
 // the Cybertruck's frunk timed on the truck, Oct 2026; the rest from Tesla's README
@@ -162,7 +161,7 @@ function lids(plan: Plan, peak: [number, number] | null, big: number[]): number[
   }
   // a wave on a loud moment: each lid lifts for RISE_S and stops on its beat, the cars WAVE_S apart, the
   // centrepiece (or the middle car) on the moment, and closes again two beats later in the same order
-  const mid = centreTruck(cars) ? cars.indexOf(centreTruck(cars)!) : Math.floor(n / 2);
+  const mid = centreTruck(cars)?.x ?? Math.floor(n / 2);
   const left = (c: Car) => C.CLOSURE_LIMITS[C.LIFTGATE] - (c.closureCounts.get(C.LIFTGATE) ?? 0);
   for (const m of big.filter((t) => levelOver(an, t, t + 2) >= DRIVE)) {
     const stops = cars.map((_, i) => onBeat(an, m + (i - mid) * WAVE_S));
