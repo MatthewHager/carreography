@@ -5,7 +5,7 @@ import * as C from '@/engine/channels';
 import { CLOSURE_CLOSE, CLOSURE_DANCE, CLOSURE_LIMITS, CLOSURE_OPEN, CLOSURE_STOP, N_CHANNELS } from '@/engine/channels';
 import { bpm, meanOf, type Review, stepName } from './timeline';
 
-const STEP = 0.02;
+const STEP = C.STEP_MS / 1000;
 const NEAR = 3;                 // frames (60 ms) either side of a beat or a note that count as "on" it
 
 const clock = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;

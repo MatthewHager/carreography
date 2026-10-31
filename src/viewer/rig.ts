@@ -5,47 +5,14 @@
 
 import * as THREE from 'three';
 import type { Simulation } from './core/simulate';
-import type { VehicleProfile } from './core/vehicles';
-import {
-  CYBERTRUCK_2024, MODEL_3_2020, MODEL_3_2024, MODEL_S_2021, MODEL_X_2021, MODEL_Y_2020, MODEL_Y_2025, MODEL_Y_L,
-  MODEL_Y_STANDARD,
-} from './core/vehicles';
-import type { Builder, BuiltBody, GlowHandle } from './car/builder';
+import { PROFILES, type VehicleProfile } from './core/vehicles';
+import { paintColor, type Paint } from './paints';
+import type { Builder, BuiltBody, GlowHandle, PoolKind } from './car/builder';
 import { buildAppBody, type AppModelId } from './car/appBody';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GlowEntry } from './glow';
 
-/** Which channels each app model's car has, and how it treats them (core/vehicles.ts). */
-export const PROFILES: Record<AppModelId, VehicleProfile> = {
-  s_palladium: MODEL_S_2021,
-  model3_high: MODEL_3_2020,
-  poppyseed: MODEL_3_2024,
-  x_palladium: MODEL_X_2021,
-  y_high: MODEL_Y_2020,
-  bayberry: MODEL_Y_2025,
-  bayberry_e41: MODEL_Y_STANDARD,
-  bayberry_e80: MODEL_Y_L,
-  cybertruck: CYBERTRUCK_2024,
-};
 
-/** A paint from the Tesla app's paint table (paints.json): its colour as the app stores it. */
-export interface Paint {
-  name: string;
-  albedo: string;
-  metallic: number;
-  roughness: number;
-}
-
-/** The app keeps its paint colours very dark and brightens them with its studio lighting; this is the
- * factor tesla-model-extractor measured for its GLB export (`--paint-brightness`). */
-const PAINT_BRIGHTNESS = 8;
-
-/** A paint's colour: the app's colour brightened as the extractor does (in gamma space, keeping the hue). */
-export function paintColor(paint: Paint): THREE.Color {
-  const { r, g, b } = new THREE.Color(paint.albedo).getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace);
-  const k = Math.min(PAINT_BRIGHTNESS, 1 / Math.max(r, g, b, 1e-6));
-  return new THREE.Color().setRGB(r * k, g * k, b * k, THREE.SRGBColorSpace);
-}
 interface LightPart {
   ids: string[];
   material: THREE.MeshStandardMaterial;
@@ -70,6 +37,13 @@ interface Pool {
   material: THREE.MeshBasicMaterial;
   max: number;
 }
+
+/** Each kind of pool: its colour, size on the ground (m) and strength at full. */
+const POOLS: Record<PoolKind, { color: THREE.Color; length: number; width: number; strength: number }> = {
+  head: { color: new THREE.Color('#fff3dc'), length: 6.5, width: 3.2, strength: 0.3 },
+  reverse: { color: new THREE.Color('#ffffff'), length: 3.5, width: 2.8, strength: 0.25 },
+  tail: { color: new THREE.Color('#ff2020'), length: 2.6, width: 3.0, strength: 0.1875 },
+};
 
 const RGB = (base: string): [string, string, string] => [`${base}Red`, `${base}Green`, `${base}Blue`];
 
@@ -101,7 +75,7 @@ export class CarRig {
   readonly group = new THREE.Group();
   readonly profile: VehicleProfile;
   readonly glowEntries: GlowEntry[] = [];
-  bounds: BuiltBody = { halfLength: 2.4, height: 1.6, halfWidth: 1 };
+  bounds!: BuiltBody;     // set in build()
   private car = new THREE.Group();
   private lights: LightPart[] = [];
   /** The model's own paint (its colour, metalness, roughness), for setPaint(null). */
@@ -165,7 +139,7 @@ export class CarRig {
         (mesh.userData as { ledRange?: [number, number] }).ledRange = [from, to];
       },
       closure: (id, apply) => this.closures.push({ id, apply }),
-      beam: (ids, light, max) => this.addPool(ids, light, max),
+      pool: (ids, kind, from, to) => this.addPool(ids, kind, from, to),
       glow: (parent, position, size) => {
         const handle: GlowHandle = { color: new THREE.Color('#fff'), level: 0 };
         const entry: GlowEntry = { object: parent, local: position.clone(), size, color: new THREE.Color(0, 0, 0) };
@@ -183,47 +157,15 @@ export class CarRig {
     this.apply();
   }
 
-  /** Light pools on the ground instead of the studio's spot/point lights. */
-  private addPool(ids: string[], light: THREE.Light, max: number): void {
-    light.visible = false;
-    light.intensity = 0;
-    const from = light.position.clone();
-    const color = light.color.clone();
-    let center: THREE.Vector3;
-    let length: number;
-    let width: number;
-    let angle = 0;
-    let strength: number;
-    if (light instanceof THREE.SpotLight) {
-      light.target.visible = false;
-      const to = light.target.position.clone();
+  /** A pool of light on the ground (POOLS): the lamps cast no real light, too costly for an iPad. */
+  private addPool(ids: string[], kind: PoolKind, from: THREE.Vector3, to?: THREE.Vector3): void {
+    const { color, length, width, strength } = POOLS[kind];
+    let center = from.clone().setY(0), angle = 0;
+    if (to) {
       const dir = to.clone().sub(from).setY(0);
-      const d = dir.length() || 1;
-      dir.divideScalar(d);
+      dir.divideScalar(dir.length() || 1);
       angle = Math.atan2(-dir.z, dir.x);
-      if (light.distance > 20) {
-        // Main beams.
-        length = 6.5;
-        width = 3.2;
-        strength = 0.3;
-      } else if (light.distance > 11) {
-        // Fogs.
-        length = 4;
-        width = 3.4;
-        strength = 0.2;
-      } else {
-        // Reverse lights.
-        length = 3.5;
-        width = 2.8;
-        strength = 0.25;
-      }
-      center = from.clone().setY(0).addScaledVector(dir, length * 0.5 + 0.1);
-    } else {
-      // The red glow the tail/brake lights throw on the ground.
-      length = 2.6;
-      width = 3.0;
-      strength = 0.3;
-      center = from.clone().setY(0);
+      center = center.addScaledVector(dir, length * 0.5 + 0.1);
     }
     const material = new THREE.MeshBasicMaterial({
       map: poolTexture(),
@@ -240,7 +182,7 @@ export class CarRig {
     mesh.renderOrder = 2;
     mesh.visible = false;
     this.car.add(mesh);
-    this.pools.push({ ids, mesh, material, max: strength * Math.min(1, max / 40 + 0.5) });
+    this.pools.push({ ids, mesh, material, max: strength });
   }
 
   /**
@@ -533,9 +475,8 @@ function poolTexture(): THREE.Texture {
 }
 
 /**
- * Lights a mesh as separate LEDs: each fragment finds its LED by position
- * along local z and takes that LED's level, with a dark seam between LEDs.
- * (From the studio's CarScene.ts.)
+ * Lights a mesh as a strip of LEDs behind a diffuser: each fragment finds its place along local z and
+ * blends the levels of the LEDs either side of it. (After the studio's CarScene.ts.)
  */
 function ledStrip(material: THREE.MeshStandardMaterial, levels: Float32Array, from: number, to: number, color: THREE.Color, gain: number): void {
   material.emissive.copy(color);

@@ -4,6 +4,9 @@
 
 import type * as THREE from 'three';
 
+/** What a lamp throws on the ground: the main beams, the reverse lights, the tails' red glow. */
+export type PoolKind = 'head' | 'reverse' | 'tail';
+
 /** A glow sprite the builder places by hand (the charge port LED). */
 export interface GlowHandle {
   color: THREE.Color;
@@ -28,9 +31,9 @@ export interface Builder {
    * `to`; `pixels[i]` lists the channels that light LED i.
    */
   lightBar(mesh: THREE.Mesh, pixels: string[][], from: number, to: number, color: THREE.Color, gain?: number): void;
-  closure(id: string, apply: (position: number, dancing: boolean, timeS: number) => void, object?: THREE.Object3D): void;
-  /** A real light in the studio; here it becomes a light pool on the ground. */
-  beam(ids: string[], light: THREE.Light, max: number): void;
+  closure(id: string, apply: (position: number, dancing: boolean, timeS: number) => void): void;
+  /** A pool of light on the ground from a lamp at `from` (car frame), aimed toward `to` where it has an aim. */
+  pool(ids: string[], kind: PoolKind, from: THREE.Vector3, to?: THREE.Vector3): void;
   /** A free glow sprite at a point in `parent`'s space (meters after parent scale). */
   glow(parent: THREE.Object3D, position: THREE.Vector3, size: number): GlowHandle;
 }

@@ -5,6 +5,7 @@
 // each closure is (following approximate travel times). The 3D preview draws
 // from this.
 
+import { N_CHANNELS, STEP_MS } from '@/engine/channels';
 import { channel, CHANNELS_BY_ID } from './channels';
 import { decodeClosure, LIGHT_BYTES, RAMP_MS, type LightCommand } from './encoding';
 import type { FseqFile } from './fseq';
@@ -47,6 +48,11 @@ function decodeLight(byte: number): LightCommand {
 const DANCE_PERIOD_S = { window: 2, other: 4 };
 /** How far a dancing closure swings away from fully open (or down, for windows). */
 const DANCE_DEPTH = 0.35;
+
+/** A show's frames (N_CHANNELS a frame, STEP_MS apart) as `vehicle` plays them. */
+export function simulateShow(frames: Uint8Array, nFrames: number, vehicle: VehicleProfile): Simulation {
+  return simulate({ channelCount: N_CHANNELS, frameCount: nFrames, stepTimeMs: STEP_MS, data: frames }, vehicle);
+}
 
 export function simulate(show: Frames, vehicle: VehicleProfile): Simulation {
   const { frameCount, channelCount, data, stepTimeMs } = show;

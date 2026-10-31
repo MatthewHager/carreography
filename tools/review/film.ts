@@ -2,10 +2,11 @@
 
 import { loadModel } from '@/app/models';
 import { modelFor } from '@/app/show';
-import { N_CHANNELS, STEP_MS } from '@/engine/channels';
-import { simulate } from '@/viewer/core/simulate';
+import { STEP_MS } from '@/engine/channels';
+import { lineupCars } from '@/engine/vehicles';
+import { simulateShow } from '@/viewer/core/simulate';
 import { CarRig } from '@/viewer/rig';
-import { CAMERA_PRESETS, type CameraPreset, Viewer } from '@/viewer/viewer';
+import { type CameraPreset, Viewer } from '@/viewer/viewer';
 
 let rigs: CarRig[] = [];
 let time = 0;
@@ -21,18 +22,15 @@ const film = {
     const letters = [...lineup];
     const gltfs = await Promise.all(letters.map((l) => loadModel(modelFor(l))));
     if (gltfs.some((g) => !g)) throw new Error("Tesla's car models are missing: see public/models/tesla-app");
-    rigs = letters.map((l, i) => new CarRig(`Car${i + 1}`, { id: modelFor(l), gltf: gltfs[i]! }));
+    rigs = lineupCars(lineup).map(([folder, v], i) => new CarRig(folder, { id: v.body, gltf: gltfs[i]! }));
     viewer.setCars(rigs);
     // 'Stage': the crowd's view, close and low enough that the whole lineup fills the frame and the lot's
     // lamps stay out of it, so the cars read as one instrument (the review's own camera, not the app's)
     const stage: CameraPreset = { name: 'Stage', position: [4 + 2 * letters.length, 1.6, 0], target: [0, 1.5, 0] };
-    const at = CAMERA_PRESETS.findIndex((p) => p.name === 'Stage');
-    CAMERA_PRESETS.splice(at < 0 ? CAMERA_PRESETS.length : at, 1, stage);
-    viewer.flyTo(camera, true);
+    viewer.flyTo(camera === 'Stage' ? stage : camera, true);
     await Promise.all(rigs.map(async (rig, i) => {
       const data = new Uint8Array(await (await fetch(`/__film/${i}`)).arrayBuffer());
-      const show = { channelCount: N_CHANNELS, frameCount: nFrames, stepTimeMs: STEP_MS, data };
-      rig.setSimulation(simulate(show, rig.profile));
+      rig.setSimulation(simulateShow(data, nFrames, rig.profile));
     }));
     await painted();
   },

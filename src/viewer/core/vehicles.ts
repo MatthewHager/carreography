@@ -8,6 +8,8 @@
 // says otherwise. Variants after Tesla's last README update (Dec 2024), like the 2025 Model Y, are
 // marked unverified.
 
+import { LIFTGATE_CLOSE_S, LIFTGATE_OPEN_S } from '@/engine/motors';
+import type { AppModelId } from '@/engine/vehicles';
 import { CHANNELS_BY_ID, type ChannelKind } from './channels';
 
 type ChannelGroup = 'front' | 'rear' | 'closures' | 'interior';
@@ -263,8 +265,8 @@ export const MODEL_Y_STANDARD = profile({
 export const CYBERTRUCK_2024 = profile({
   id: 'cybertruck-2024',
   channel4LeadsRamps: false,
-  // The frunk (liftgate channel), timed on a 2024 Cybertruck: 10 s up, 4 s down.
-  closureSeconds: { liftgate: [10, 4] },
+  // The frunk (liftgate channel), timed on a 2024 Cybertruck.
+  closureSeconds: { liftgate: [LIFTGATE_OPEN_S.cybertruck!, LIFTGATE_CLOSE_S] },
   orGroups: [],
   rows: [
     ...sides('OuterMainBeam', 'front'),
@@ -293,3 +295,16 @@ export const CYBERTRUCK_2024 = profile({
     ...accentLights,
   ],
 });
+
+/** Which channels each app model's car has, and how it treats them (core/vehicles.ts). */
+export const PROFILES: Record<AppModelId, VehicleProfile> = {
+  s_palladium: MODEL_S_2021,
+  model3_high: MODEL_3_2020,
+  poppyseed: MODEL_3_2024,
+  x_palladium: MODEL_X_2021,
+  y_high: MODEL_Y_2020,
+  bayberry: MODEL_Y_2025,
+  bayberry_e41: MODEL_Y_STANDARD,
+  bayberry_e80: MODEL_Y_L,
+  cybertruck: CYBERTRUCK_2024,
+};

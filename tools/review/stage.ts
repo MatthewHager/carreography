@@ -2,12 +2,9 @@
 // (viewer/core/simulate.ts: Tesla's ramps, which lamps the car really has, closure travel), turned into
 // rows of brightness per lamp, crowd's left first.
 
-import { N_CHANNELS, STEP_MS } from '@/engine/channels';
 import { VEHICLES } from '@/engine/vehicles';
-import { simulate, type Simulation } from '@/viewer/core/simulate';
-import type { VehicleProfile } from '@/viewer/core/vehicles';
-import type { AppModelId } from '@/viewer/car/appBody';
-import { PROFILES } from '@/viewer/rig';
+import { simulateShow, type Simulation } from '@/viewer/core/simulate';
+import { PROFILES, type VehicleProfile } from '@/viewer/core/vehicles';
 import type { Rgb } from './image';
 
 
@@ -91,8 +88,8 @@ function barMean(pixels: Float32Array[]): Float32Array {
 
 /** One car's rows, from its show file's frames. */
 export function carView(name: string, letter: string, frames: Uint8Array, nFrames: number): CarView {
-  const profile = PROFILES[VEHICLES[letter].body as AppModelId];
-  const sim = simulate({ channelCount: N_CHANNELS, frameCount: nFrames, stepTimeMs: STEP_MS, data: frames }, profile);
+  const profile = PROFILES[VEHICLES[letter].body];
+  const sim = simulateShow(frames, nFrames, profile);
   const zeroed = new Set(profile.orGroups.filter((g) => !g.inputs.length).flatMap((g) => g.outputs));
   const inProfile = new Set(profile.channels.map((c) => c.id));
   const isPixel = (id: string) => /LightBar\d+$/.test(id);

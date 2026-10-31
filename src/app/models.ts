@@ -4,7 +4,7 @@
 
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FILES, parseAppModel, type AppModelId } from '@/viewer/car/appBody';
-import type { Paint } from '@/viewer/rig';
+import type { Paint } from '@/viewer/paints';
 
 const parsed = new Map<AppModelId, Promise<GLTF | undefined>>();
 let paints: Promise<Paint[]> | undefined;

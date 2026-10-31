@@ -2,8 +2,7 @@
 
 import { N_CHANNELS, STEP_MS } from '@/engine/channels';
 import type { SchemeId } from '@/engine/schemes';
-import { VEHICLES } from '@/engine/vehicles';
-import type { AppModelId } from '@/viewer/car/appBody';
+import { type AppModelId, VEHICLES } from '@/engine/vehicles';
 import { stringHeader, writeFseq } from '@/viewer/core/fseq';
 
 export interface ShowCar {
@@ -22,11 +21,10 @@ export interface Show {
 }
 
 export const STEP_S = STEP_MS / 1000;
-export const CHANNELS = N_CHANNELS;
 
 /** The Tesla app model the 3D view draws a lineup letter with. */
 export function modelFor(letter: string): AppModelId {
-  return VEHICLES[letter].body as AppModelId;
+  return VEHICLES[letter].body;
 }
 
 /** A file name Tesla's USB reader is happy with. */
@@ -39,7 +37,7 @@ export function showFile(frames: Uint8Array, nFrames: number, name: string): Uin
   let id = 0xcbf29ce484222325n;                       // FNV-1a
   for (let i = 0; i < frames.length; i += 64) id = ((id ^ BigInt(frames[i])) * 0x100000001b3n) & 0xffffffffffffffffn;
   return writeFseq({
-    channelCount: CHANNELS, frameCount: nFrames, stepTimeMs: STEP_MS, minorVersion: 0, uniqueId: id,
+    channelCount: N_CHANNELS, frameCount: nFrames, stepTimeMs: STEP_MS, minorVersion: 0, uniqueId: id,
     variableHeaders: [stringHeader('mf', `${name}.wav`), stringHeader('sp', 'Carreography')], data: frames,
   });
 }

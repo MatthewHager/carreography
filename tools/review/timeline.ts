@@ -3,6 +3,7 @@
 // loudness, beats, bass and treble hits, notes). One picture per stretch of the song, and an overview.
 
 import type { Analysis, Phrase } from '@/engine/analysis';
+import { STEP_MS } from '@/engine/channels';
 import { STEP_NAMES, stepOf } from '@/engine/level';
 import { builds, drops } from '@/engine/pulse';
 import { dim, mix, Picture, type Rgb } from './image';
@@ -16,7 +17,7 @@ export interface Review {
   cars: CarView[];
 }
 
-const STEP = 0.02;
+const STEP = STEP_MS / 1000;
 const GUTTER = 168, RIGHT = 12, PITCH = 10;
 const WHITE: Rgb = [255, 255, 255], TEXT: Rgb = [200, 200, 205], FAINT: Rgb = [120, 120, 130];
 const BG: Rgb = [14, 14, 18], ROW_BG: Rgb = [24, 24, 30], DANCING: Rgb = [255, 60, 220];

@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { CarRig } from '@/viewer/rig';
-import { simulate } from '@/viewer/core/simulate';
+import { simulateShow } from '@/viewer/core/simulate';
 import { Viewer } from '@/viewer/viewer';
 import { loadModel, paintsFor } from './models';
 import type { Player } from './player';
-import { CHANNELS, modelFor, STEP_S, type Show } from './show';
+import { lineupCars } from '@/engine/vehicles';
+import { modelFor, STEP_S, type Show } from './show';
 
 interface Props {
   lineup: string;
@@ -81,7 +82,7 @@ export function Stage({ lineup, paints, show, player, camera, clear, onMissing }
       const byId = new Map(ids.map((id, i) => [id, gltfs[i]!]));
       const resized = letters.length !== viewer.current.carCount;
       const first = !viewer.current.hasCars;
-      rigs.current = letters.map((l, i) => new CarRig(`Car${i + 1}`, { id: modelFor(l), gltf: byId.get(modelFor(l))! }));
+      rigs.current = lineupCars(lineup).map(([folder, v]) => new CarRig(folder, { id: v.body, gltf: byId.get(v.body)! }));
       viewer.current.setCars(rigs.current);
       if (resized) viewer.current.flyTo(camera, first);
       applyShow(rigs.current, showRef.current);
@@ -118,9 +119,7 @@ export function Stage({ lineup, paints, show, player, camera, clear, onMissing }
 function applyShow(rigs: CarRig[], show: Show | null) {
   rigs.forEach((rig, i) => {
     const car = show?.cars[i];
-    rig.setSimulation(car ? simulate({
-      channelCount: CHANNELS, frameCount: show!.nFrames, stepTimeMs: STEP_S * 1000, data: car.frames,
-    }, rig.profile) : undefined);
+    rig.setSimulation(car ? simulateShow(car.frames, show!.nFrames, rig.profile) : undefined);
   });
 }
 

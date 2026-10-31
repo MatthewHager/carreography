@@ -18,6 +18,11 @@
 // and X take the same channels (its README, "Light Channel Locations"), and the cars with a front
 // light bar write them where they have them (car.ts).
 
+/** The car models the Tesla app ships (tools/export_car_models.py), one per body the preview draws. */
+export type AppModelId =
+  | 's_palladium' | 'model3_high' | 'poppyseed' | 'x_palladium'
+  | 'y_high' | 'bayberry' | 'bayberry_e41' | 'bayberry_e80' | 'cybertruck';
+
 export const MAX_CARS = 5;
 
 export interface Vehicle {
@@ -26,7 +31,7 @@ export interface Vehicle {
   model: string;                 // used in folder names
   label: string;                 // for people
   juniper: boolean;              // the 2025+ Model Y's front light bar lamp map (car.ts)
-  body: string;                  // the 3D viewer's model from the Tesla app (viewer/car/appBody.ts)
+  body: AppModelId;              // the 3D viewer's model from the Tesla app (viewer/car/appBody.ts)
   falcon?: boolean;              // Model X falcon doors (motors.ts)
 }
 

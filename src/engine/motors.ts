@@ -37,7 +37,7 @@ import { beatLen, onBeat } from './tempo';
 // the Cybertruck's frunk timed on the truck, Oct 2026; the rest from Tesla's README
 export const LIFTGATE_OPEN_S: Record<string, number> = { modely: 14.0, cybertruck: 10.0 };
 export const LIFTGATE_CLOSE_S = 4.0, WINDOW_S = 4.0, PORT_S = 2.0, MIRROR_S = 2.0;
-const FALCON_OPEN_S = 20.0;
+export const FALCON_OPEN_S = 20.0;
 export const FALCON_CLOSE_S = 8.0;
 
 const RELAY_MAX_S = 4.0;           // the longest a car waits for the one before it (a lid's close)

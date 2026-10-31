@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MAX_CARS, PLACES, VEHICLES } from '@/engine/vehicles';
-import { paintColor, type Paint } from '@/viewer/rig';
+import { paintColor, type Paint } from '@/viewer/paints';
 import { loadPaints, paintLabel } from './models';
 import { modelFor } from './show';
 

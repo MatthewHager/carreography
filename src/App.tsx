@@ -10,7 +10,7 @@ import { DEFAULT_PAINT, LineupEditor } from '@/app/LineupEditor';
 import { exampleSong, showFromFile, SONG_EXTENSIONS, SONG_TYPES } from '@/app/pipeline';
 import { Player } from '@/app/player';
 import { PlayerBar } from '@/app/PlayerBar';
-import type { Show } from '@/app/show';
+import { STEP_S, type Show } from '@/app/show';
 import { SchemePicker } from '@/app/SchemePicker';
 import { SongDrop } from '@/app/SongDrop';
 import { Stage } from '@/app/Stage';
@@ -56,7 +56,7 @@ export default function App() {
   const made = show !== null && show.lineup === lineup && show.scheme === scheme ? show : null;
   const paints = useMemo(() => [...lineup].map((_, i) => cars.paints[i] ?? DEFAULT_PAINT), [lineup, cars.paints]);
 
-  useEffect(() => player.load(made?.audio, made ? made.nFrames * 0.02 : 0), [player, made]);
+  useEffect(() => player.load(made?.audio, made ? made.nFrames * STEP_S : 0), [player, made]);
 
   useEffect(() => {
     try {

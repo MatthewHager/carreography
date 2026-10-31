@@ -12,11 +12,19 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Builder, BuiltBody } from './builder';
-import { COLORS } from './kit';
+import type { AppModelId } from '@/engine/vehicles';
 
-export type AppModelId =
-  | 's_palladium' | 'model3_high' | 'poppyseed' | 'x_palladium'
-  | 'y_high' | 'bayberry' | 'bayberry_e41' | 'bayberry_e80' | 'cybertruck';
+export type { AppModelId };
+
+/** Lamp colours lit, and their lenses dark. */
+const COLORS = {
+  white: new THREE.Color('#fff4e0'),
+  amber: new THREE.Color('#ffa21a'),
+  red: new THREE.Color('#ff1a1a'),
+  lensFront: new THREE.Color('#25282d'),
+  lensRear: new THREE.Color('#3a0a0a'),
+  lensAmber: new THREE.Color('#3a2408'),
+};
 
 /** The file each model comes out of the Tesla app as (tesla-model-extractor). */
 export const FILES: Record<AppModelId, string> = {
@@ -479,15 +487,8 @@ export function buildAppBody(b: Builder, gltf: GLTF, id: AppModelId): BuiltBody 
     const h = head.reduce((a, c) => a.union(c));
     headBeams(b, { x: h.max.x + 0.15, y: (h.min.y + h.max.y) / 2, z: h.max.z * 0.8 });
   }
-  const glow = new THREE.PointLight('#ff2020', 0, 6, 1.6);
-  glow.position.set(body.min.x - 0.35, 0.7, 0);
-  b.car.add(glow);
-  b.beam(['brakeLights', 'leftTail', 'rightTail'], glow, 5);
-  const reverse = new THREE.SpotLight('#ffffff', 0, 10, 0.9, 0.8, 1.5);
-  reverse.position.set(body.min.x - 0.1, 0.9, 0);
-  reverse.target.position.set(body.min.x - 4.5, 0, 0);
-  b.car.add(reverse, reverse.target);
-  b.beam(['reverseLights'], reverse, 30);
+  b.pool(['brakeLights', 'leftTail', 'rightTail'], 'tail', new THREE.Vector3(body.min.x - 0.35, 0.7, 0));
+  b.pool(['reverseLights'], 'reverse', new THREE.Vector3(body.min.x - 0.1, 0.9, 0), new THREE.Vector3(body.min.x - 4.5, 0, 0));
   // The licence plate light: the plate itself glows (it moves with a liftgate it's mounted on);
   // without a plate mesh, a lit panel where the app marks the plate.
   const plates = [...named('Plate_US'), ...named('Plate_US2')].filter((m) => m.material instanceof THREE.MeshStandardMaterial);
@@ -567,7 +568,7 @@ function foldMirrors(b: Builder, root: THREE.Object3D, toCar: THREE.Matrix4, spe
     }
     // Unfolded at 1 (the closure's rest); folding swings the glass back toward the rear.
     const fold = THREE.MathUtils.degToRad(spec.deg);
-    b.closure(`${side}Mirror`, (p) => (pivot.rotation.y = (side === 'right' ? -1 : 1) * (1 - THREE.MathUtils.clamp(p, 0, 1)) * fold), pivot);
+    b.closure(`${side}Mirror`, (p) => (pivot.rotation.y = (side === 'right' ? -1 : 1) * (1 - THREE.MathUtils.clamp(p, 0, 1)) * fold));
   }
 }
 
@@ -600,11 +601,8 @@ function bakeTriangles(geo: THREE.BufferGeometry, m: THREE.Matrix4, keep: boolea
 function headBeams(b: Builder, at: { x: number; y: number; z: number }): void {
   for (const side of ['left', 'right'] as Side[]) {
     const s = side === 'right' ? 1 : -1;
-    const beam = new THREE.SpotLight('#fff3dc', 0, 28, 0.42, 0.65, 1.3);
-    beam.position.set(at.x, at.y, s * at.z);
-    beam.target.position.set(at.x + 12, 0, s * (at.z + 0.9));
-    b.car.add(beam, beam.target);
-    b.beam([`${side}OuterMainBeam`, `${side}InnerMainBeam`], beam, 160);
+    b.pool([`${side}OuterMainBeam`, `${side}InnerMainBeam`], 'head',
+      new THREE.Vector3(at.x, at.y, s * at.z), new THREE.Vector3(at.x + 12, 0, s * (at.z + 0.9)));
   }
 }
 

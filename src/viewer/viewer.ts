@@ -11,7 +11,6 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { buildLot, lotEnvironment, REAR_CURB, STALL_WIDTH } from './car/lot';
-import { shadowTexture } from './car/kit';
 import { GlowLayer } from './glow';
 import type { CarRig } from './rig';
 
@@ -38,47 +37,31 @@ const BLOOM_FROM = 0.95;
 
 /**
  * A lot lamp's reflection in the paint, the glass or the stainless is as bright as the lamp, and the bloom
- * would make it glow like one of the show's lights. So all the light a surface gets from the lot (its lamps,
- * the moon, the night sky, colour and reflection together) is held just under where the bloom starts: still
- * a crisp white gloss. The cars' own lamps, the scene's point and spot lights, are left out of it, so the
- * show's lights shine and glow as before. Once, for every material.
+ * would make it glow like one of the show's lights. So all the light a surface gets (the lot's lamps, the
+ * moon, the night sky, colour and reflection together) is held just under where the bloom starts: still a
+ * crisp white gloss. The show's own lights are emission, sprites and pools, never scene lights, so they are
+ * left as they are and glow. Once, for every material.
  */
 function reflectionsUnderBloom(): void {
   const chunk = THREE.ShaderChunk as unknown as Record<string, string>;
-  if (chunk.lights_fragment_begin!.includes('BLOOM_FROM')) return;
+  if (chunk.lights_fragment_end!.includes('BLOOM_FROM')) return;
   const cap = (BLOOM_FROM - 0.15).toFixed(2);
-  const lamps = '#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )';
-  const rest = '#if ( NUM_SUN_LIGHTS > 0 ) && defined( RE_Direct )';
-  chunk.lights_fragment_begin = chunk.lights_fragment_begin!
-    .replace(lamps, `// BLOOM_FROM: the cars' lamps (point and spot lights) are kept apart (viewer.ts)
-      vec3 sLampD = reflectedLight.directDiffuse, sLampS = reflectedLight.directSpecular, sLampC = vec3(0.0);
-      #ifdef USE_CLEARCOAT
-        sLampC = clearcoatSpecularDirect;
-      #endif
-      ${lamps}`)
-    .replace(rest, `sLampD = reflectedLight.directDiffuse - sLampD;
-      sLampS = reflectedLight.directSpecular - sLampS;
-      #ifdef USE_CLEARCOAT
-        sLampC = clearcoatSpecularDirect - sLampC;
-      #endif
-      ${rest}`);
   chunk.lights_fragment_end += `
     {
-      // the lot's light: everything but the cars' lamps, held under the bloom
-      vec3 sLotD = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse - sLampD;
-      vec3 sLotS = reflectedLight.directSpecular + reflectedLight.indirectSpecular - sLampS;
-      vec3 sLot = sLotD + sLotS;
+      // BLOOM_FROM: a lit surface stays under the bloom (viewer.ts)
+      vec3 sLit = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse
+        + reflectedLight.directSpecular + reflectedLight.indirectSpecular;
       #ifdef USE_CLEARCOAT
-        sLot += (clearcoatSpecularDirect - sLampC + clearcoatSpecularIndirect) * material.clearcoat;
+        sLit += (clearcoatSpecularDirect + clearcoatSpecularIndirect) * material.clearcoat;
       #endif
-      float sMost = max(sLot.r, max(sLot.g, sLot.b)), sKeep = sMost > ${cap} ? ${cap} / sMost : 1.0;
-      reflectedLight.directDiffuse = sLampD + (reflectedLight.directDiffuse - sLampD) * sKeep;
-      reflectedLight.directSpecular = sLampS + (reflectedLight.directSpecular - sLampS) * sKeep;
+      float sMost = max(sLit.r, max(sLit.g, sLit.b)), sKeep = sMost > ${cap} ? ${cap} / sMost : 1.0;
+      reflectedLight.directDiffuse *= sKeep;
+      reflectedLight.directSpecular *= sKeep;
       reflectedLight.indirectDiffuse *= sKeep;
       reflectedLight.indirectSpecular *= sKeep;
       #ifdef USE_CLEARCOAT
+        clearcoatSpecularDirect *= sKeep;
         clearcoatSpecularIndirect *= sKeep;
-        clearcoatSpecularDirect = sLampC + (clearcoatSpecularDirect - sLampC) * sKeep;
       #endif
     }
   `;
@@ -110,7 +93,7 @@ export class Viewer {
   /** Called every frame before rendering (the app updates the show time here). */
   onTick: (() => void) | undefined;
   private perf = { frames: 0, time: 0, armed: false, checked: false };
-  private preset = CAMERA_PRESETS[0]!.name;
+  private preset: CameraPreset = CAMERA_PRESETS[0]!;
   private clear: Rect | undefined;
   // The car names and sides over each car (?labels=1), to check the crowd's left and right.
   private readonly labelsOn = new URLSearchParams(location.search).get('labels') === '1';
@@ -224,10 +207,11 @@ export class Viewer {
     else this.camera.clearViewOffset();
   }
 
-  flyTo(name: string, instant = false): void {
-    const p = CAMERA_PRESETS.find((c) => c.name === name);
+  /** Flies to a preset, by name or one of the caller's own (the review's films use their own). */
+  flyTo(preset: string | CameraPreset, instant = false): void {
+    const p = typeof preset === 'string' ? CAMERA_PRESETS.find((c) => c.name === preset) : preset;
     if (!p) return;
-    this.preset = name;
+    this.preset = p;
     const to = this.fitted(p);
     const tTo = new THREE.Vector3(...p.target);
     if (instant) {
@@ -361,4 +345,21 @@ function carLabel(name: string): string {
   if (!m) return name.replace(/_/g, ' ');
   const words = (w: string) => w.replace(/([a-z])([A-Z])/g, '$1 $2');
   return `${m[1]} · ${words(m[2]!)} · ${words(m[3]!).toLowerCase()}`;
+}
+
+/** A soft oval shadow texture for under a car. */
+export function shadowTexture(): THREE.Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createRadialGradient(128, 64, 10, 128, 64, 128);
+  gradient.addColorStop(0, 'rgba(0,0,0,0.75)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.setTransform(1, 0, 0, 0.5, 0, 32);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 256, 256);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
