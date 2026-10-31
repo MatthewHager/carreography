@@ -7,19 +7,56 @@ import { FILES, parseAppModel, type AppModelId } from '@/viewer/car/appBody';
 import type { Paint } from '@/viewer/paints';
 
 const parsed = new Map<AppModelId, Promise<GLTF | undefined>>();
+/** How much of each model has arrived, 0..1 (1 once it is here, or failed). */
+const arrived = new Map<AppModelId, number>();
+const listeners = new Set<() => void>();
 let paints: Promise<Paint[]> | undefined;
 
-async function fetchModelFile(name: string): Promise<ArrayBuffer | undefined> {
+/** A file from models/tesla-app/, reporting the share of it that has arrived as it downloads. */
+async function fetchModelFile(name: string, onProgress?: (fraction: number) => void)
+  : Promise<ArrayBuffer | undefined> {
   const res = await fetch(`${import.meta.env.BASE_URL}models/tesla-app/${name}`).catch(() => undefined);
-  return res?.ok ? res.arrayBuffer() : undefined;
+  if (!res?.ok) return undefined;
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!onProgress || !total || !res.body) return res.arrayBuffer();
+  const out = new Uint8Array(total), reader = res.body.getReader();
+  let at = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (at + value.length > total) return undefined;     // not the file its length said
+    out.set(value, at);
+    at += value.length;
+    onProgress(at / total);
+  }
+  return at === total ? out.buffer : undefined;
+}
+
+function report(id: AppModelId, fraction: number) {
+  arrived.set(id, fraction);
+  for (const l of listeners) l();
 }
 
 /** The model, or undefined when it couldn't be loaded. */
 export function loadModel(id: AppModelId): Promise<GLTF | undefined> {
   if (!parsed.has(id)) {
-    parsed.set(id, fetchModelFile(FILES[id]).then((b) => (b ? parseAppModel(b) : undefined)).catch(() => undefined));
+    report(id, 0);
+    parsed.set(id, fetchModelFile(FILES[id], (f) => report(id, f))
+      .then((b) => (b ? parseAppModel(b) : undefined))
+      .catch(() => undefined)
+      .finally(() => report(id, 1)));
   }
   return parsed.get(id)!;
+}
+
+/** How much of these models has arrived, 0..1 (each counted alike), and a way to hear as it changes. */
+export function modelsArrived(ids: AppModelId[]): number {
+  return ids.length ? ids.reduce((s, id) => s + (arrived.get(id) ?? 0), 0) / ids.length : 1;
+}
+
+export function onModelProgress(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 /** The paints in the app's table (paints.json), with the duplicate names it keeps for older option

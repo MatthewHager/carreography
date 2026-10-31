@@ -1,10 +1,11 @@
 // The 3D view: the lineup on Tesla's own models, playing the show in time with the player.
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { Progress } from '@/components/ui/progress';
 import { CarRig } from '@/viewer/rig';
 import { simulateShow } from '@/viewer/core/simulate';
 import { Viewer } from '@/viewer/viewer';
-import { loadModel, paintsFor } from './models';
+import { loadModel, modelsArrived, onModelProgress, paintsFor } from './models';
 import type { Player } from './player';
 import { lineupCars } from '@/engine/vehicles';
 import { modelFor, STEP_S, type Show } from './show';
@@ -31,6 +32,10 @@ export function Stage({ lineup, paints, show, player, camera, clear, onMissing }
   const paintsRef = useRef(paints);
   paintsRef.current = paints;
   const [noGl, setNoGl] = useState(false);
+  // the cars on their way: how much of their models has arrived (null once they're on the lot), and where
+  // on the canvas the panels leave clear, to say so there
+  const [loading, setLoading] = useState<number | null>(0);
+  const [area, setArea] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
   useEffect(() => {
     const el = box.current!;
@@ -51,7 +56,9 @@ export function Stage({ lineup, paints, show, player, camera, clear, onMissing }
     const fit = () => {
       if (!clear.current) return;
       const r = clear.current.getBoundingClientRect(), b = el.getBoundingClientRect();
-      v.setClear({ x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height });
+      const rect = { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height };
+      v.setClear(rect);
+      setArea(rect);
     };
     const watch = new ResizeObserver(fit);
     watch.observe(el);
@@ -71,8 +78,15 @@ export function Stage({ lineup, paints, show, player, camera, clear, onMissing }
     let live = true;
     const letters = [...lineup];
     const ids = [...new Set(letters.map(modelFor))];
+    const progress = () => live && setLoading((l) => (l === null ? null : modelsArrived(ids)));
+    const stop = onModelProgress(progress);
+    // a lineup whose models are already here (a car swapped back) shows at once, with no bar
+    setLoading(modelsArrived(ids) < 1 ? modelsArrived(ids) : null);
     void Promise.all(ids.map(loadModel)).then((gltfs) => {
-      if (!live || !viewer.current) return;
+      stop();
+      if (!live) return;
+      setLoading(null);
+      if (!viewer.current) return;
       if (gltfs.some((g) => !g)) {
         onMissing();
         viewer.current.setCars([]);
@@ -90,6 +104,7 @@ export function Stage({ lineup, paints, show, player, camera, clear, onMissing }
     });
     return () => {
       live = false;
+      stop();
     };
     // the camera is applied by its own effect
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,7 +128,21 @@ export function Stage({ lineup, paints, show, player, camera, clear, onMissing }
       </div>
     );
   }
-  return <div ref={box} className="absolute inset-0 touch-none [&>canvas]:block [&>canvas]:size-full" />;
+  return (
+    <>
+      <div ref={box} className="absolute inset-0 touch-none [&>canvas]:block [&>canvas]:size-full" />
+      {loading !== null && area && (
+        <div role="status" className="pointer-events-none absolute flex items-center justify-center p-6"
+          style={{ left: area.x, top: area.y, width: area.w, height: area.h }}>
+          <div className="w-56 space-y-2 rounded-2xl bg-background/70 px-4 py-3 text-center text-sm backdrop-blur">
+            <p>{loading < 1 ? 'Loading the cars' : 'Parking the cars'}…</p>
+            <Progress value={loading * 100} />
+            <p className="text-xs text-muted-foreground">Tesla's own 3D models</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function applyShow(rigs: CarRig[], show: Show | null) {
