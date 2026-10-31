@@ -18,6 +18,7 @@ import { DEFAULT_SCHEME, type SchemeId } from '@/engine/schemes';
 import { parseLineup } from '@/engine/vehicles';
 
 const SAVED = 'carreography.cars';
+const FEEDBACK = 'https://github.com/MatthewHager/carreography/issues/new/choose';
 
 /** The cars from last time (this browser keeps them), with the link's ?lineup= first when it has one. */
 function savedCars(): { lineup: string; paints: string[] } {
@@ -159,6 +160,8 @@ export default function App() {
               onChange={(l, p) => setCars({ lineup: l, paints: p })} />
           </section>
           <p className="text-xs text-muted-foreground">
+            <a href={FEEDBACK} target="_blank" rel="noreferrer"
+              className="underline underline-offset-2 hover:text-foreground">Send feedback or report a bug</a>.
             Not affiliated with Tesla.{' '}
             <a href="https://github.com/MatthewHager/carreography" target="_blank" rel="noreferrer"
               className="underline underline-offset-2 hover:text-foreground">Source code</a> (AGPL-3.0).
