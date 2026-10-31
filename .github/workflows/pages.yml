@@ -1,7 +1,7 @@
 # The site: matthewhager.github.io/carreography/, built on every push to main.
 # The analysis models (tools/export_models.py), Tesla's car models and the example song come from the
-# repository's "models", "car-models" and "examples" releases, so they never enter the git history.
-# GitHub only hosts Pages for public repositories on the free plan, so it waits until then.
+# repository's "models", "car-models" and "examples" releases (npm run assets), so they never enter the git
+# history.
 name: pages
 on:
   push:
@@ -19,23 +19,19 @@ concurrency:
 
 jobs:
   build:
-    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npx vitest run
       - name: Download the analysis models, Tesla's car models and the example song
-        run: |
-          gh release download models --dir public/models --pattern "*.onnx"
-          gh release download car-models --dir public/models/tesla-app
-          gh release download examples --dir public/examples
+        run: npm run assets
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

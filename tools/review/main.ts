@@ -74,7 +74,7 @@ async function listen(y: Float32Array, cacheDir: string, fresh: boolean): Promis
   const beatModel = model('beat_this-final0-fp16w.onnx'), noteModel = model('basic_pitch-nmp.onnx');
   for (const m of [beatModel, noteModel]) {
     if (!existsSync(m)) {
-      throw new Error(`${m} is missing: gh release download models --dir public/models --pattern "*.onnx"`);
+      throw new Error(`${m} is missing: npm run assets`);
     }
   }
   const hash = createHash('sha256').update(new Uint8Array(y.buffer, y.byteOffset, y.byteLength))

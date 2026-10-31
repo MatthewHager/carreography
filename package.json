@@ -2,17 +2,41 @@
   "name": "carreography",
   "private": true,
   "version": "0.1.0",
-  "description": "A light show for 1 to 5 Teslas, choreographed from your song in the browser, with a 3D preview.",
+  "description": "Synchronized Tesla light shows for 1-5 cars from any song, made in your browser, with a 3D preview.",
+  "keywords": [
+    "tesla",
+    "light-show",
+    "fseq",
+    "cybertruck",
+    "model-y",
+    "music-visualization",
+    "beat-tracking",
+    "onnxruntime-web",
+    "threejs"
+  ],
+  "homepage": "https://matthewhager.github.io/carreography/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MatthewHager/carreography.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MatthewHager/carreography/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "lint": "oxlint",
+    "lint": "oxlint src tools",
     "preview": "vite preview",
-    "review": "node tools/review/review.mjs"
+    "review": "node tools/review/review.mjs",
+    "check": "tsc -b && tsc -p tools/review && oxlint src tools && vitest run",
+    "assets": "node tools/assets.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

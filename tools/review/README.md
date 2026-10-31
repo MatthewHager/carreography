@@ -2,7 +2,8 @@
 
 See and hear a show without the page: one command makes a song's show in Node with the page's own code,
 then draws it, sums it up in words and, if asked, films the 3D preview with the sound. It's for whoever
-works on the choreography, people and coding agents alike.
+works on the choreography, people and coding agents alike. It needs the listening models in `public/models`
+(`npm run assets`, once).
 
 ```bash
 npm run review -- song.wav --lineup YCY                  # pictures and a summary
@@ -12,7 +13,7 @@ npm run review -- song.mp3 --lineup YCY --from 60 --to 90 --video
 | Option | What |
 |---|---|
 | `--lineup YCY` | the cars, crowd's left to right (default `YCY`) |
-| `--colours NAME` | the cabins' colour scheme (`engine/schemes.ts`): `party` (the default), `halloween`, `christmas`, `july4`, `valentines` |
+| `--colours NAME` | the cabins' colour scheme (`src/engine/schemes.ts`): `party` (the default), `halloween`, `christmas`, `july4`, `valentines` |
 | `--from S --to S` | the stretch to draw and film; the show is always made for the whole song |
 | `--stretch S` | seconds per timeline picture (default 30) |
 | `--out DIR` | where to write (default `review-out/<song>_<lineup>/` at the top of the checkout) |

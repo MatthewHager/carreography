@@ -8,14 +8,11 @@ hosted on GitHub Pages. Humans: see [CONTRIBUTING.md](CONTRIBUTING.md). This fil
 
 ```bash
 npm install                           # once
+npm run assets                        # once: models and the example song from the releases into public/
 npm run dev                           # http://localhost:5173/carreography/ (npm run dev -- --port N if 5173 is taken)
-npx vitest run                        # the tests
-npx tsc -b && npx oxlint src          # type check and lint
+npm run check                         # what CI runs: tsc (app and tools/review), oxlint, vitest
 npm run build                         # the site, in dist/
 npm run review -- SONG --lineup YCY   # the show for a song, drawn and summed up (tools/review/README.md)
-gh release download models --dir public/models --pattern "*.onnx"      # the listening models
-gh release download car-models --dir public/models/tesla-app           # Tesla's car models
-gh release download examples --dir public/examples                      # the example song
 ```
 
 ## Where things are

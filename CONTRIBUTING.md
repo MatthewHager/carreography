@@ -7,25 +7,20 @@ written for it.
 
 ## Develop
 
-The repository is the app: Vite, React and TypeScript, with shadcn/ui and three.js. You need Node.js 24.
+The repository is the app: Vite, React and TypeScript, with shadcn/ui and three.js. You need Node.js 24
+(`.nvmrc`).
 
 ```bash
 npm install
+npm run assets       # once: the listening models, Tesla's car models and the example song (~200 MB)
 npm run dev          # http://localhost:5173/carreography/
-npx vitest run       # the tests
-npx tsc -b           # the type check
-npx oxlint src       # lint
+npm run check        # what CI runs: type check, lint and tests
 npm run build        # the site, in dist/
 ```
 
-The listening models, Tesla's car models and the example song aren't in the repository. Download them
-from the releases once (with the [GitHub CLI](https://cli.github.com/)), as the site build does:
-
-```bash
-gh release download models --dir public/models --pattern "*.onnx"
-gh release download car-models --dir public/models/tesla-app
-gh release download examples --dir public/examples
-```
+The models and the example song aren't in the repository: `npm run assets` downloads them from the
+repository's public releases into `public/`, as the site build does (no GitHub sign-in needed). The review
+tool and regenerating the test fixtures need them too.
 
 **Never commit recordings, Tesla's files or anything in `cache/`.** Keep songs for trying shows in
 `songs/`, which git ignores. The tests make up their own signals.
@@ -34,7 +29,7 @@ gh release download examples --dir public/examples
 
 | Folder | What |
 |---|---|
-| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts` (with the breath where the music flows), `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, playing the builds and drops), `moments.ts` (the drops, builds and accents), `motors.ts` (the closures), `car.ts` (one car's frames, lamp groups and the 2025+ Model Y's lamps), `vehicles.ts` (the lineup letters), and the reading of the music (`feel.ts`, `phrases.ts`, `tempo.ts`). |
+| `src/engine/` | The choreographer: no DOM, runs in a worker, and in Node for the tests. `choreo.ts` (the pipeline and the passages), `level.ts` (how big the show is), `bed.ts` (with the breath where the music flows), `moves.ts` (every move), `catalog.ts` (the move catalogue), `drums.ts`, `pulse.ts` (the beat, playing the builds and drops), `moments.ts` (the drops, builds and accents), `motors.ts` (the closures), `car.ts` (one car's frames, lamp groups and the 2025+ Model Y's lamps), `vehicles.ts` (the lineup letters), `schemes.ts` (the cabins' colour schemes), `channels.ts` (Tesla's channel map and limits), and the reading of the music (`feel.ts`, `phrases.ts`, `tempo.ts`). |
 | `src/engine/listen/` | The listening: decoding helpers and resampling, the librosa subset, beat-this and basic-pitch on ONNX Runtime Web (`infer.ts` picks the backend). |
 | `src/viewer/` | The 3D preview (three.js), adapted from Tesla Lightshow Studio (AGPL-3.0): `core/` reads, writes and simulates show files, `car/appBody.ts` draws Tesla's app models. |
 | `src/app/` | The page: the 3D stage, the panels, the worker that makes a show (`show.worker.ts`), the WAV and the ZIP. |
@@ -122,9 +117,8 @@ starts with, `hall-of-the-mountain-king.mp3`: a public-domain recording (docs/SO
 MP3.
 
 `.github/workflows/pages.yml` builds the site on every push to `main`: it runs the tests, downloads the
-releases into `public/`, builds, and deploys `dist` to GitHub Pages at
-matthewhager.github.io/carreography/ (Vite's `base` is `/carreography/`). GitHub serves Pages from a
-free account's repository only once it's public.
+releases into `public/` (`npm run assets`), builds, and deploys `dist` to GitHub Pages at
+matthewhager.github.io/carreography/ (Vite's `base` is `/carreography/`).
 
 ## Car reports
 

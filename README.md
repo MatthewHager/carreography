@@ -1,27 +1,34 @@
 # Carreography
 
-A light show for one to five Teslas, made from your song in your browser. You line up the cars as the
-crowd will see them, drop in a song, and Carreography listens to it (the beat, the notes, the loudness,
-the drums, the harmony and the shape of the song) and choreographs
-every car's lights and motors to the music. The lineup plays as one instrument that grows with the song:
-a pianissimo is a lamp at a time, notes run across the cars like a keyboard, the beat thumps through every
-headlight, each drum has lamps of its own, builds speed up into a beat of black before the drop hits every
-lamp at once, and the liftgates, frunks, windows, mirrors and charge ports move on the big moments. You watch it on Tesla's own
-3D models before it goes anywhere near a car.
+**Synchronized Tesla light shows for one to five cars, from any song, made in your browser.**
 
-![Three cars mid-show in the 3D preview](docs/images/preview.jpg)
+**[Make a show → matthewhager.github.io/carreography](https://matthewhager.github.io/carreography/)**
 
-**[matthewhager.github.io/carreography](https://matthewhager.github.io/carreography/)**
+[![ci](https://github.com/MatthewHager/carreography/actions/workflows/ci.yml/badge.svg)](https://github.com/MatthewHager/carreography/actions/workflows/ci.yml)
+[![pages](https://github.com/MatthewHager/carreography/actions/workflows/pages.yml/badge.svg)](https://matthewhager.github.io/carreography/)
+[![licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue)](LICENSE)
+
+![Two Model Ys and a Cybertruck mid-show in the 3D preview](docs/images/preview.jpg)
+
+Line up your cars as the crowd will see them, drop in a song, and Carreography listens to it (the beat,
+the notes, the loudness, the drums, the harmony and the shape of the song) and choreographs every car's
+lights and motors to the music. The lineup plays as one instrument that grows with the song: a quiet
+passage is a lamp at a time, the melody runs across the cars, the beat thumps through the headlights, each
+drum has lamps of its own, a build speeds up into a beat of black before the drop hits every lamp at once,
+and the liftgates, frunks, windows, mirrors and charge ports move on the big moments, within Tesla's limits.
+You watch it on Tesla's own 3D models before it goes anywhere near a car.
+
+No account, no settings, nothing to install. The song never leaves your device.
 
 ## Make a show
 
 1. **Pick the cars**, from the crowd's left to right, and a paint for each.
 2. **Drop in a song**: MP3, WAV, FLAC or M4A. Or keep the example, Hall of the Mountain King.
-3. **Pick the colours** for the cabin lights: Party, the whole spectrum as a visualizer has it, or an
-   occasion's own (Halloween, Christmas, the Fourth of July, Valentine's Day). The music picks the colour bar
-   by bar either way.
-4. **Make the show.** It takes from about ten seconds to a minute or so, depending on the song, the
-   browser and the device. Then watch it in 3D.
+3. **Pick the colours** for the cabin lights: Party, the whole spectrum as a music visualizer has it, or an
+   occasion's own (Halloween, Christmas, the Fourth of July, Valentine's Day). The music picks the colour
+   bar by bar either way.
+4. **Make the show.** It takes from about ten seconds to a minute, depending on the song and the device.
+   Then watch it in 3D.
 5. **Download the ZIP.** It has a folder for each car, named after its place (`Car1_ModelY_Left`), with
    that car's `LightShow` folder inside. The files differ from car to car.
 6. **Put each car's `LightShow` folder on its own USB drive**, at the top level of a drive formatted
@@ -29,8 +36,8 @@ lamp at once, and the liftgates, frunks, windows, mirrors and charge ports move 
 7. **Plug the drive into the car** and open **Toybox → Light Show**. To play several cars together,
    schedule the same start time on each of them in the Tesla app.
 
-Keep people clear of the cars: liftgates, frunks, mirrors, windows and a Model X's doors move during the
-show. The music plays from the cabin speakers, so the windows go down and stay down; close them
+**Keep people clear of the cars**: liftgates, frunks, mirrors, windows and a Model X's doors move during
+the show. The music plays from the cabin speakers, so the windows go down and stay down; close them
 afterwards.
 
 ## Cars
@@ -46,33 +53,48 @@ Every car Tesla supports for light shows that has a model in the Tesla app:
 | Cybertruck | |
 
 Tesla hasn't documented the 2025+ Model Y's lamps; its light bar follows what owners found by testing on
-their cars ([how it works](docs/HOW_IT_WORKS.md#the-2025-model-ys-lamps)).
+their cars ([how it works](docs/HOW_IT_WORKS.md#the-2025-model-ys-lamps)). If a show plays differently on
+your car than in the preview, a [car report](https://github.com/MatthewHager/carreography/issues/new/choose)
+helps everyone.
 
 ## Browsers
 
 A recent Chrome, Edge, Firefox or Safari makes shows, on a computer, an iPad or an iPhone, in about
-10–40 s for a 2½-minute song. The listening runs on the GPU where it can and falls back by itself. Times,
-memory and the details are in [How it works](docs/HOW_IT_WORKS.md#browsers).
+10–40 s for a 2½-minute song. The listening runs on the GPU where it can and falls back by itself. The
+first visit downloads the listening models and the cars' 3D models (about 80 MB for two Model Ys and a
+Cybertruck); the browser keeps them. Details in [How it works](docs/HOW_IT_WORKS.md#browsers).
 
 ## Privacy
 
-The song never leaves your device: the listening, the choreography and the preview all run in the page,
-and nothing about it is sent anywhere. The site downloads the listening models and Tesla's car models once, and the
-browser keeps them.
+Everything happens in the page: the listening, the choreography and the preview. The song and anything
+about it stay on your device; the site has no server and no analytics.
 
-## More
+## How it works
 
-- [How it works](docs/HOW_IT_WORKS.md): how a song becomes a show.
+Two neural networks running in the browser hear the music: [Beat This!](https://github.com/CPJKU/beat_this)
+finds the beats and downbeats, Spotify's [basic-pitch](https://github.com/spotify/basic-pitch) the notes.
+A choreographer then reads the song's level, sections, phrases, drums and harmony and draws the show in
+layers, each lighting lamps of its own: a steady bed, a move per phrase from a catalogue of 18, the drums,
+the beat, the big moments and the motors. The same song and lineup always give the same files, byte for
+byte.
+
+- [How it works](docs/HOW_IT_WORKS.md): how a song becomes a show, step by step.
 - [The moves](MOVES.md): every move, what it looks like and when it's used.
-- [Contributing](CONTRIBUTING.md): developing the app, adding a move or a car.
 - [Sources and credits](docs/SOURCES.md).
 
-Use recordings you have the right to use. The show files are yours.
+## Contributing
+
+Issues and pull requests are welcome: a new move, a car that behaves differently from the preview, a
+browser that struggles. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup (`npm install`, `npm run assets`,
+`npm run dev`) and how to add a move or a car; [AGENTS.md](AGENTS.md) is the short version for coding
+agents. Security issues: see [SECURITY.md](SECURITY.md).
 
 ## Licence
 
 [AGPL-3.0](LICENSE), because the 3D preview is adapted from
 [Tesla Lightshow Studio](https://github.com/nathanjgrace/tesla-lightshow-studio) by Nathan Grace
-(AGPL-3.0). The car models are Tesla's, from the Tesla app.
+(AGPL-3.0). The show files you make are yours; use recordings you have the right to use.
 
-Not affiliated with Tesla. Light shows move real parts of real cars: watch the space around them.
+Not affiliated with or endorsed by Tesla. Tesla, Model S, Model 3, Model X, Model Y and Cybertruck are
+trademarks of Tesla, Inc.; the 3D car models are Tesla's, from the Tesla app, and are not covered by this
+project's licence. Light shows move real parts of real cars: watch the space around them.

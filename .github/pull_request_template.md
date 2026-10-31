@@ -2,6 +2,7 @@
 
 ## How I checked it
 
-- [ ] `npx tsc -b`, `npx oxlint src` and `npx vitest run` pass
+- [ ] `npm run check` passes (type check, lint, tests: what CI runs)
+- [ ] Shows: unchanged (made a song's show before and after with `npm run review` and compared `show/*.fseq`),
+      or changed on purpose (say which songs and lineups you watched, and what got better)
 - [ ] Watched it in the 3D preview (lineups: )
-- [ ] Shows change on purpose / the bridge test still passes / I don't have `cache/bridge` (say which)

@@ -1,8 +1,11 @@
-# The app's type check, lint and tests, on every push and pull request.
+# The app's type check, lint and tests (npm run check), on every push and pull request.
 name: ci
 on:
   push:
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   app:
@@ -11,9 +14,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npx tsc -b && npx tsc -p tools/review
-      - run: npx oxlint src tools
-      - run: npx vitest run
+      - run: npm run check
