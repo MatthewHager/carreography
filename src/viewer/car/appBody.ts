@@ -680,12 +680,30 @@ function carFrameMesh(src: THREE.Mesh, positions: number[], car: THREE.Object3D,
   return mesh;
 }
 
-/** The app's clear coat and glass are perfect mirrors; real ones spread a reflection a little. */
+/**
+ * The app's clear coat and glass are perfect mirrors; real ones spread a reflection a little. And its windows
+ * are layers of see-through glass (the inside, the tint, the reflection) drawn back to front by each mesh's
+ * centre: a layer that also hid what came after it would hide the others, one view the outer glass, the next
+ * the inner, so the glass seemed to vanish or sink as the camera turned. Glass never hides glass, and always
+ * shows over the black glass it lies on.
+ */
 function clearCoat(m: THREE.Material): void {
   if (!(m instanceof THREE.MeshStandardMaterial)) return;
   if (m instanceof THREE.MeshPhysicalMaterial && m.clearcoat > 0) m.clearcoatRoughness = Math.max(m.clearcoatRoughness, GLOSS);
   if (m.transparent) m.roughness = Math.max(m.roughness, GLOSS);
+  if (m.transparent && /glass/i.test(m.name)) {
+    m.depthWrite = false;
+    // the glass layers lie on the body's own black glass: drawn a hair nearer, they always show over it
+    m.polygonOffset = true;
+    m.polygonOffsetFactor = -1;
+    m.polygonOffsetUnits = -4;
+    // the app's glass mirrors its studio sky; ours reflects the night over the lot, so the glass reads as a
+    // surface, and tinted glass is near-black from outside at night, never a view into the cabin
+    m.envMapIntensity = GLASS_REFLECTS;
+    if (/tint/i.test(m.name)) m.opacity = Math.max(m.opacity, TINT_OPACITY);
+  }
 }
+const GLASS_REFLECTS = 2.5, TINT_OPACITY = 0.97;
 const GLOSS = 0.12;
 
 function lensMaterial(lens: THREE.Color): THREE.MeshStandardMaterial {
