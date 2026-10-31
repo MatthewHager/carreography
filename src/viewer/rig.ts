@@ -271,7 +271,7 @@ export class CarRig {
         a.nrm.addScaledVector(normal, area);
         a.w += area;
       });
-      // LED spacing sets the sprite size, so neighbours stay distinct.
+      // Wide enough that neighbouring LEDs' glows run together through the diffuser.
       const pitch = (Math.abs(to - from) / n) * scale;
       bar.glows = acc.map((a) => {
         if (a.w <= 0) return undefined;
@@ -282,7 +282,7 @@ export class CarRig {
           object: bar.mesh,
           local: center,
           normal,
-          size: THREE.MathUtils.clamp(pitch * 2.6, 0.06, 0.16),
+          size: THREE.MathUtils.clamp(pitch * 4, 0.08, 0.22),
           color: new THREE.Color(0, 0, 0),
         };
         this.glowEntries.push(entry);
@@ -552,10 +552,12 @@ function ledStrip(material: THREE.MeshStandardMaterial, levels: Float32Array, fr
       .replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
-        float ledT = clamp( ( vLedZ - ledRange.x ) / ( ledRange.y - ledRange.x ), 0.0, 0.99999 ) * ${levels.length}.0;
-        float ledF = fract( ledT );
-        float ledSeam = smoothstep( 0.0, 0.16, ledF ) * smoothstep( 1.0, 0.84, ledF );
-        totalEmissiveRadiance *= ledLevels[ int( ledT ) ] * mix( 0.12, 1.0, ledSeam );`,
+        // the LEDs sit behind a diffuser, so the bar reads as one strip of light: each point blends the
+        // LEDs either side of it, with no dark seam between them
+        float ledT = clamp( ( vLedZ - ledRange.x ) / ( ledRange.y - ledRange.x ), 0.0, 0.99999 ) * ${levels.length}.0 - 0.5;
+        int ledA = clamp( int( floor( ledT ) ), 0, ${levels.length - 1} );
+        int ledB = clamp( ledA + 1, 0, ${levels.length - 1} );
+        totalEmissiveRadiance *= mix( ledLevels[ ledA ], ledLevels[ ledB ], smoothstep( 0.0, 1.0, fract( ledT ) ) );`,
       );
   };
   material.needsUpdate = true;
