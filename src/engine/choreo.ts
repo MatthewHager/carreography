@@ -228,11 +228,14 @@ function playPassages(cars: Car[], an: Analysis) {
  * and the figure before didn't just play it (material repeated back to back changes its figure rather than
  * playing one move for half a minute), else the least used of the family, and of those the one the figure's
  * register points to, so songs and figures don't all walk the catalogue in the same order. No sparse move
- * at the peak. */
+ * at the peak, and no bar-long sweep where a drum kit keeps time. */
 export function chooseMove(an: Analysis, fam: Family, g0: number, g1: number, replay: CAT.MoveName | undefined,
   prev: CAT.MoveName | null, used: Map<CAT.MoveName, number>): CAT.MoveName {
-  const peak = stepOf(levelOver(an, g0, g1)) === 4;
-  const allowed = (m: CAT.MoveName) => !(peak && CAT.SPARSE_MOVES.includes(m));
+  const peak = stepOf(levelOver(an, g0, g1)) === 4, kit = kitAt(an, (g0 + g1) / 2);
+  // no sparse move at the peak; and where a drum kit keeps time the figure marks every beat, never a sweep
+  // a bar long, so a groove's side cars don't sit dark between its strokes
+  const allowed = (m: CAT.MoveName) =>
+    !(peak && CAT.SPARSE_MOVES.includes(m)) && !(kit && CAT.MOVES[m].grid === 'bar');
   const fits = (m: CAT.MoveName) => {
     const f = familyOf(m);
     return (f === 'held') === (fam === 'held') && (f === 'flow') === (fam === 'flow') && allowed(m)

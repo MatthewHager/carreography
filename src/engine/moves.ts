@@ -33,7 +33,8 @@ function slots(cars: Car[]): [Car, LR][] {
 }
 
 /** Where a slot sits among slots(cars). */
-const slotIndex = (all: [Car, LR][], [car, side]: readonly [Car, LR, ...unknown[]]) => all.findIndex(([c, d]) => c === car && d === side);
+const slotIndex = (all: [Car, LR][], [car, side]: readonly [Car, LR, ...unknown[]]) =>
+  all.findIndex(([c, d]) => c === car && d === side);
 
 const CENTRE_SHARE = 4 / 3;   // the centrepiece's share of the pitch range against another car's
 
@@ -398,19 +399,29 @@ const cadence: Move = (cars, an, ph) => {
   for (let i = ph.a; i < ph.b; i++) allOn(cars, ev.t[i], clip(ev.dur[i], 0.3, 1.5));
 };
 
-const ON_GRID_S = 0.05;     // a note this close to an eighth of the beat map is on it
+const ON_GRID_S = 0.05;     // a note this close to a beat (or an eighth) of the beat map is on it
+
+/** The tracked beat nearest t. */
+function nearestBeat(an: Analysis, t: number): number {
+  const b = an.beats, i = searchsorted(b, t);
+  if (i <= 0) return b[0] ?? t;
+  if (i >= b.length) return b[b.length - 1];
+  return t - b[i - 1] <= b[i] - t ? b[i - 1] : b[i];
+}
 
 /** The melody along every truck's bar: a comet at each note's pitch, faint when the music is quiet, so the
  * truck carries the tune under whatever the move does (a beat move, or a note move whose notes are on other
- * cars). Under a beat move only the notes on the eighths, one an eighth, so the bar keeps the figure's time. */
-export function barMelody(cars: Car[], an: Analysis, ph: Phrase, eighths = false) {
+ * cars). Under a beat move only the notes on the beat, one a beat, so the centrepiece keeps the figure's
+ * time with the cars beside it instead of flickering twice as fast; at the peak, the notes on the eighths. */
+export function barMelody(cars: Car[], an: Analysis, ph: Phrase, onGrid = false) {
   const trucks = cars.filter((c) => c.isCt), ev = an.events;
   if (!trucks.length) return;
   const ranges = localRanges(an, ph);
   let last = -1;
   for (let i = ph.a; i < ph.b; i++) {
-    const t = ev.t[i], s = levelAt(an, t), at = posOf(ev.top[i], ...ranges[i - ph.a]), g = eighthAt(an, t);
-    if (eighths) {
+    const t = ev.t[i], s = levelAt(an, t), at = posOf(ev.top[i], ...ranges[i - ph.a]);
+    const g = stepOf(s) === 4 ? eighthAt(an, t) : nearestBeat(an, t);
+    if (onGrid) {
       if (Math.abs(g - t) > ON_GRID_S || g === last) continue;
       last = g;
     }
@@ -518,14 +529,19 @@ const converge: Move = (cars, an, ph) => {
   const all = ringsOf(cars), n = all.length, rings = Math.ceil(n / 2);
   const beats = grid(an, ph);
   beats.forEach((b, k) => {
-    const s = levelAt(an, b), half8 = beatAt(an, b) / 2, end = b + holdFor(next(beats, k, 2 * half8) - b, s);
-    for (let r = 0; r < rings; r++) {                     // r = 0: the two ends; the middle on the "and"
-      const t = b + (half8 * r) / Math.max(1, rings - 1);
+    const s = levelAt(an, b), peak = stepOf(s) === 4;
+    // below the peak the light takes a whole beat to meet, in on one beat and met on the next, so the
+    // middle car lands on a beat with the pulse instead of flashing again on the "and" between
+    if (!peak && k % 2) return;
+    const meet = beatAt(an, b) / (peak ? 2 : 1);
+    const end = b + holdFor(next(beats, k + (peak ? 0 : 1), meet) - b, s);
+    for (let r = 0; r < rings; r++) {                     // r = 0: the two ends; the middle when they meet
+      const t = b + (meet * r) / Math.max(1, rings - 1);
       for (const j of new Set([r, n - 1 - r])) ring(all[j], t, Math.max(end, t + 0.12), s);
     }
     for (const car of cars.filter((c) => c.isCt)) {
-      const m = frames(car, b, half8);
-      barFill(car, b, half8, linspace(0, 1, m), false);
+      const m = frames(car, b, meet);
+      barFill(car, b, meet, linspace(0, 1, m), false);
     }
   });
 };

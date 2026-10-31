@@ -41,6 +41,7 @@ export const FALCON_CLOSE_S = 8.0;
 
 const RELAY_MAX_S = 4.0;           // the longest a car waits for the one before it (a lid's close)
 const SPACING_S = 24;              // big moments for the motors at least this far apart
+const FALLBACK = -0.3;             // a driving downbeat ranks below any moment that stands out (moments)
 const LID_DANCE_S: [number, number] = [4.0, 20.0];   // a lid's dance on the peak, at least and at most
 const OPEN_MARGIN_S = 0.8;         // a lid or door only dances once fully open: land a little early
 const RISE_S = 5.0, WAVE_S = 2.0;  // a part-way lift, and the cars of a wave this far apart
@@ -116,15 +117,18 @@ function thePeak(an: Analysis): [number, number] | null {
   return top < 0 ? null : [onBeat(an, top), top + holds(an, top, 3)];
 }
 
-/** The other big moments, biggest first: each build's landing and drop (pulse.ts), each arrival chord, and
- * each loud section's start and strike (an.hits) in lively music, sized by the level they reach, at least
- * SPACING_S apart and from the peak, clear of the song's ends. */
+/** The other big moments, biggest first: each build's landing and drop (moments.ts), each arrival chord,
+ * each loud section's start and strike (an.hits) in lively music, then any driving downbeat, sized by the
+ * level they reach, at least SPACING_S apart and from the peak, clear of the song's ends. */
 function moments(an: Analysis, peak: [number, number] | null): number[] {
   const cands: [number, number][] = [...builds(an).map(([, land]): [number, number] => [land, 0.5]),
     ...drops(an).map((d): [number, number] => [d, 0.3])];
   for (let i = 0; i < an.events.t.length; i++) if (an.events.arrival[i]) cands.push([an.events.t[i], 0.2]);
   for (const s of an.sections) if (levelOver(an, s.t0, s.t1) >= DRIVE) cands.push([s.t0, 0]);
   for (const h of an.hits) if (levelAt(an, h) >= DRIVE) cands.push([h, 0]);
+  // after everything else, a driving downbeat: a long loud stretch where nothing stands out still gets its
+  // moments, SPACING_S apart, rather than a minute and a half of loud music with every motor still
+  for (const d of an.downbeats) if (levelAt(an, d) >= DRIVE) cands.push([d, FALLBACK]);
   const out: number[] = peak ? [peak[0]] : [];
   const sized = cands.filter(([t]) => t > ROOM_S[0] && t < an.duration - ROOM_S[1]
     && levelOver(an, t, t + 2) >= GROOVE && !flowsAt(an, t) && (!peak || t < peak[0] || t > peak[1] + 4))
